@@ -1,6 +1,0 @@
-bibtexparser
-dataclasses; python_version < '3.7'
-langid
-openpyxl
-tabulate
-PyYAML
