@@ -1,0 +1,96 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    @apply bg-white text-navy font-sans;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer components {
+  .nav-item {
+    @apply flex items-center gap-1.5 px-3 py-4 text-sm font-medium text-gray-600
+           hover:text-navy transition-colors relative cursor-pointer whitespace-nowrap;
+  }
+  .nav-item.active {
+    @apply text-navy;
+  }
+  .nav-item.active::after {
+    content: '';
+    @apply absolute bottom-0 left-0 right-0 h-0.5 bg-info;
+  }
+  .stat-label {
+    @apply text-xs font-semibold uppercase tracking-widest text-navy-muted;
+  }
+  .stat-value {
+    @apply text-3xl font-bold text-navy;
+  }
+  .phase-badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium;
+  }
+  .decision-I {
+    @apply bg-green-50 text-include border border-green-200;
+  }
+  .decision-E {
+    @apply bg-red-50 text-exclude border border-red-200;
+  }
+  .decision-U {
+    @apply bg-orange-50 text-uncertain border border-orange-200;
+  }
+  .btn {
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium
+           rounded-md transition-colors cursor-pointer border;
+  }
+  .btn-primary {
+    @apply btn bg-info text-white border-info hover:bg-navy;
+  }
+  .btn-secondary {
+    @apply btn bg-white text-navy-muted border-border hover:border-navy-muted hover:text-navy;
+  }
+  .btn-danger {
+    @apply btn bg-white text-exclude border-red-200 hover:bg-red-50;
+  }
+  .btn-include {
+    @apply btn bg-green-50 text-include border-green-200 hover:bg-green-100;
+  }
+  .btn-exclude {
+    @apply btn bg-red-50 text-exclude border-red-200 hover:bg-red-100;
+  }
+  .btn-uncertain {
+    @apply btn bg-orange-50 text-uncertain border-orange-200 hover:bg-orange-100;
+  }
+  .input {
+    @apply w-full border border-border rounded-md px-3 py-2 text-sm
+           text-navy placeholder-gray-400 focus:outline-none focus:border-info
+           focus:ring-1 focus:ring-info bg-white;
+  }
+  .textarea {
+    @apply input resize-none;
+  }
+  .select {
+    @apply input appearance-none;
+  }
+  .card {
+    @apply bg-white rounded-card border border-border shadow-card p-5;
+  }
+  .section-title {
+    @apply text-xs font-semibold uppercase tracking-widest text-navy-muted mb-4;
+  }
+  .left-accent-include {
+    @apply border-l-4 border-include;
+  }
+  .left-accent-exclude {
+    @apply border-l-4 border-exclude;
+  }
+  .left-accent-uncertain {
+    @apply border-l-4 border-uncertain;
+  }
+  .left-accent-info {
+    @apply border-l-4 border-info;
+  }
+}
