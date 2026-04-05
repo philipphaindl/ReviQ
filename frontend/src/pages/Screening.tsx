@@ -19,7 +19,7 @@ export default function Screening() {
   const [view, setView] = useState<ScreeningView>('papers')
 
   if (!projectId) {
-    return <EmptyState icon="🔍" message="No active project. Select one from the Overview." />
+    return <EmptyState icon="—" message="No active project. Select one from the Overview." />
   }
 
   return (
@@ -155,7 +155,7 @@ function PapersView({ pid }: { pid: number }) {
 
       {/* Paper list */}
       {filteredPapers.length === 0 ? (
-        <EmptyState icon="📄" message="No papers match the current filter. Import BibTeX files first." />
+        <EmptyState icon="—" message="No papers match the current filter. Import BibTeX files first." />
       ) : (
         <div className="space-y-2">
           {filteredPapers.map(paper => (

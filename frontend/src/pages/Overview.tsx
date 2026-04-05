@@ -106,7 +106,7 @@ export default function Overview() {
         />
         {projects.length === 0 ? (
           <EmptyState
-            icon="📚"
+            icon="—"
             message="No projects yet. Create your first SLR project to get started."
             action={
               <button className="btn-primary" onClick={() => setShowCreate(true)}>
@@ -148,35 +148,6 @@ export default function Overview() {
         )}
       </Card>
 
-      {/* Workflow guide */}
-      <Card>
-        <CardHeader title="SLR Workflow" />
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {[
-            { step: '0', icon: '⚙️', path: '/setup', label: 'Setup', desc: 'Configure project, reviewers, I/E criteria, QA schema' },
-            { step: '1', icon: '📥', path: '/import', label: 'Import', desc: 'Upload BibTeX files, run deduplication' },
-            { step: '2', icon: '🔍', path: '/screening', label: 'Screening', desc: 'Title/abstract decisions, Kappa, conflict resolution' },
-            { step: '3', icon: '📄', path: '/eligibility', label: 'Eligibility', desc: 'Full-text assessment of screening-included papers' },
-            { step: '4', icon: '❄️', path: '/snowballing', label: 'Snowballing', desc: 'Forward/backward citation snowballing' },
-            { step: '5', icon: '⭐', path: '/quality', label: 'Quality', desc: 'Score included papers on QA criteria' },
-            { step: '6', icon: '📝', path: '/extraction', label: 'Extraction', desc: 'Structured data extraction per paper' },
-            { step: '7', icon: '📊', path: '/results', label: 'Results', desc: 'PRISMA diagram, charts, export' },
-          ].map(item => (
-            <button
-              key={item.step}
-              onClick={() => navigate(item.path)}
-              className="text-left p-3 rounded-md border border-border hover:border-info hover:shadow-card-hover transition-all"
-            >
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs font-bold text-gray-400">Phase {item.step}</span>
-                <span>{item.icon}</span>
-                <span className="text-sm font-medium text-navy">{item.label}</span>
-              </div>
-              <p className="text-xs text-gray-500">{item.desc}</p>
-            </button>
-          ))}
-        </div>
-      </Card>
 
       {/* Create project modal */}
       {showCreate && (

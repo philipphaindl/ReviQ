@@ -13,6 +13,7 @@ export default function Search() {
   const bibInputRef = useRef<HTMLInputElement>(null)
   const decisionsInputRef = useRef<HTMLInputElement>(null)
   const [dbName, setDbName] = useState('')
+  const [dbNameError, setDbNameError] = useState(false)
   const [importResult, setImportResult] = useState<any>(null)
   const [importDecResult, setImportDecResult] = useState<any>(null)
   const [showDuplicates, setShowDuplicates] = useState(false)
@@ -142,14 +143,17 @@ export default function Search() {
         <div className="space-y-4 max-w-lg">
           <div>
             <label className="block text-xs font-semibold text-navy-muted uppercase tracking-wider mb-1.5">
-              Database Name
+              Database Name <span className="text-exclude normal-case font-normal">*required</span>
             </label>
             <input
-              className="input"
+              className={`input ${dbNameError ? 'border-exclude ring-1 ring-exclude' : ''}`}
               placeholder="e.g. scopus, ieee, acm, dblp"
               value={dbName}
-              onChange={e => setDbName(e.target.value)}
+              onChange={e => { setDbName(e.target.value); if (e.target.value) setDbNameError(false) }}
             />
+            {dbNameError && (
+              <p className="text-xs text-exclude mt-1">Enter a database name before selecting a file.</p>
+            )}
           </div>
           <div>
             <label className="block text-xs font-semibold text-navy-muted uppercase tracking-wider mb-1.5">
@@ -162,16 +166,23 @@ export default function Search() {
               className="hidden"
               onChange={e => {
                 const file = e.target.files?.[0]
-                if (file && dbName) importMutation.mutate({ file })
+                if (file && dbName) {
+                  importMutation.mutate({ file })
+                } else if (file && !dbName) {
+                  setDbNameError(true)
+                }
                 e.target.value = ''
               }}
             />
             <button
               className="btn-primary"
-              disabled={!dbName || importMutation.isPending}
-              onClick={() => bibInputRef.current?.click()}
+              disabled={importMutation.isPending}
+              onClick={() => {
+                if (!dbName) { setDbNameError(true); return }
+                bibInputRef.current?.click()
+              }}
             >
-              {importMutation.isPending ? 'Importing…' : '📂 Choose .bib File'}
+              {importMutation.isPending ? 'Importing…' : 'Choose .bib File'}
             </button>
           </div>
 

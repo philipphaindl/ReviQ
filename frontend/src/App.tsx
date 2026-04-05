@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { createContext, useContext, useState } from 'react'
 import NavBar from './components/layout/NavBar'
+import Sidebar from './components/layout/Sidebar'
 import Overview from './pages/Overview'
 import Settings from './pages/Settings'
 import Search from './pages/Search'
@@ -40,20 +41,23 @@ export default function App() {
       <BrowserRouter>
         <div className="min-h-screen bg-white flex flex-col">
           <NavBar />
-          <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-6">
-            <Routes>
-              <Route path="/" element={<Overview />} />
-              <Route path="/setup" element={<Settings />} />
-              <Route path="/import" element={<Search />} />
-              <Route path="/screening" element={<Screening />} />
-              <Route path="/eligibility" element={<EligibilityStub />} />
-              <Route path="/snowballing" element={<SnowballingStub />} />
-              <Route path="/quality" element={<QualityStub />} />
-              <Route path="/extraction" element={<ExtractionStub />} />
-              <Route path="/results" element={<ResultsStub />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </main>
+          <div className="flex flex-1">
+            <Sidebar />
+            <main className="flex-1 px-8 py-6 overflow-y-auto">
+              <Routes>
+                <Route path="/" element={<Overview />} />
+                <Route path="/setup" element={<Settings />} />
+                <Route path="/import" element={<Search />} />
+                <Route path="/screening" element={<Screening />} />
+                <Route path="/eligibility" element={<EligibilityStub />} />
+                <Route path="/snowballing" element={<SnowballingStub />} />
+                <Route path="/quality" element={<QualityStub />} />
+                <Route path="/extraction" element={<ExtractionStub />} />
+                <Route path="/results" element={<ResultsStub />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </main>
+          </div>
         </div>
       </BrowserRouter>
     </ProjectContext.Provider>

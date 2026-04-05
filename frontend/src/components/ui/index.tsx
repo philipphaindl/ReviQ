@@ -75,16 +75,21 @@ export function DecisionBadge({ decision }: { decision: string }) {
 export function Modal({
   title,
   onClose,
+  onEnter,
   children,
   width = 'max-w-lg',
 }: {
   title: string
   onClose: () => void
+  onEnter?: () => void
   children: ReactNode
   width?: string
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && onEnter) { e.preventDefault(); onEnter() } }}
+    >
       <div
         className="absolute inset-0 bg-black/30 backdrop-blur-[1px]"
         onClick={onClose}
