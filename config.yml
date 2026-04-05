@@ -1,0 +1,32 @@
+base_dir: /Users/lbhaindlp/Documents/Sources/Research/Tools/slr_review_protocol
+iterations:
+  -
+    dir: "iteration-01"
+    keywords: 
+      - Large Language Models
+      - penetration testing
+    quality-score-treshold: 2.0
+    libraries:
+      - 
+        name: ieee
+        query: '"("Large Language Model" AND "Prompt Injection Attack" AND "Jailbreak Attack" AND "AI-generated Phishing" AND "LLM-assisted Hacking")'
+        filter: "Computer Science"
+      - 
+        name: scopus
+        query: '"("Large Language Model" AND "Prompt Injection Attack" AND "Jailbreak Attack" AND "AI-generated Phishing" AND "LLM-assisted Hacking")'
+        filter: "Other fissslter"        
+  -
+    dir: "iteration-02"
+    keywords: 
+      - Large Language Models
+      - penetration testing
+    quality-score-treshold: 2.0
+    libraries:
+      - 
+        name: ieee
+        query: '"Large Language Models AND "penetration testing"'
+        filter: "Computer Science"
+      - 
+        name: acm
+        query: '"Large Langdddddduage Models AND "penetration testing"'
+        filter: "Other fissslter"
