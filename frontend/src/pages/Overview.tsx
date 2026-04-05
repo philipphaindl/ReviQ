@@ -48,9 +48,7 @@ export default function Overview() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-navy">ReviQ</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            Systematic Literature Review Workbench · Kitchenham &amp; Charters (2007)
-          </p>
+          <p className="text-sm text-gray-500 mt-0.5">Systematic Literature Review Workbench</p>
         </div>
         <button className="btn-primary" onClick={() => setShowCreate(true)}>
           + New Project
@@ -124,15 +122,17 @@ export default function Overview() {
                     {p.lead_researcher} · {p.methodology} · {new Date(p.created_at).toLocaleDateString()}
                   </p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center">
                   {p.id === projectId ? (
-                    <span className="phase-badge bg-blue-50 text-info border border-blue-200">Active</span>
+                    <span className="phase-badge bg-blue-50 text-info border border-blue-200 font-semibold">
+                      Active
+                    </span>
                   ) : (
                     <button
-                      className="btn-secondary text-xs"
+                      className="btn-primary text-xs"
                       onClick={() => setProjectId(p.id)}
                     >
-                      Switch
+                      Switch to this project
                     </button>
                   )}
                   <button

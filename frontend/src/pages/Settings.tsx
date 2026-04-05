@@ -144,10 +144,11 @@ function ReviewersTab({ pid }: { pid: number }) {
   const { data: reviewers = [] } = useQuery({ queryKey: ['reviewers', pid], queryFn: () => getReviewers(pid) })
   const [modal, setModal] = useState(false)
   const [form, setForm] = useState({ name: '', email: '', role: 'R2' })
+  const [submitted, setSubmitted] = useState(false)
 
   const addMutation = useMutation({
     mutationFn: () => addReviewer(pid, form),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['reviewers', pid] }); setModal(false); setForm({ name: '', email: '', role: 'R2' }) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['reviewers', pid] }); setModal(false); setForm({ name: '', email: '', role: 'R2' }); setSubmitted(false) },
   })
   const deleteMutation = useMutation({
     mutationFn: (rid: number) => deleteReviewer(pid, rid),
@@ -156,7 +157,7 @@ function ReviewersTab({ pid }: { pid: number }) {
 
   const usedRoles = reviewers.map(r => r.role)
   const availableRoles = ROLES.filter(r => !usedRoles.includes(r))
-  const submit = () => form.name && addMutation.mutate()
+  const submit = () => { setSubmitted(true); if (form.name) addMutation.mutate() }
 
   return (
     <div className="max-w-xl">
@@ -164,7 +165,7 @@ function ReviewersTab({ pid }: { pid: number }) {
         <CardHeader
           title="Reviewers (max 5)"
           action={reviewers.length < 5
-            ? <button className="btn-secondary text-xs" onClick={() => setModal(true)}>+ Add</button>
+            ? <button className="btn-secondary text-xs" onClick={() => { setSubmitted(false); setModal(true) }}>+ Add</button>
             : null}
         />
         {reviewers.length === 0 ? (
@@ -191,8 +192,9 @@ function ReviewersTab({ pid }: { pid: number }) {
 
       {modal && (
         <Modal title="Add Reviewer" onClose={() => setModal(false)} onEnter={submit}>
-          <FormField label="Name">
-            <input className="input" value={form.name} autoFocus
+          <FormField label="Name" required error={submitted && !form.name ? 'Name is required' : undefined}>
+            <input className={`input ${submitted && !form.name ? 'border-exclude ring-1 ring-exclude' : ''}`}
+              value={form.name} autoFocus
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
           </FormField>
           <FormField label="Email (display only)">
@@ -206,7 +208,7 @@ function ReviewersTab({ pid }: { pid: number }) {
             </select>
           </FormField>
           <button className="btn-primary w-full justify-center mt-2"
-            disabled={!form.name || addMutation.isPending} onClick={submit}>
+            disabled={addMutation.isPending} onClick={submit}>
             {addMutation.isPending ? 'Adding…' : 'Add Reviewer'}
           </button>
         </Modal>
@@ -232,16 +234,15 @@ function CriteriaTab({ pid }: { pid: number }) {
 
   const [modal, setModal] = useState<CriterionModalState>(null)
   const [form, setForm] = useState({ label: '', description: '', phase: 'screening' })
+  const [submitted, setSubmitted] = useState(false)
 
   const openAdd = (type: 'add-i' | 'add-e') => {
-    setForm({ label: '', description: '', phase: 'screening' })
-    setModal({ type })
+    setForm({ label: '', description: '', phase: 'screening' }); setSubmitted(false); setModal({ type })
   }
   const openEdit = (type: 'edit-i' | 'edit-e', c: any) => {
-    setForm({ label: c.label, description: c.description, phase: c.phase })
-    setModal({ type, id: c.id })
+    setForm({ label: c.label, description: c.description, phase: c.phase }); setSubmitted(false); setModal({ type, id: c.id })
   }
-  const close = () => setModal(null)
+  const close = () => { setModal(null); setSubmitted(false) }
 
   const addI = useMutation({
     mutationFn: () => addInclusionCriterion(pid, form),
@@ -266,6 +267,7 @@ function CriteriaTab({ pid }: { pid: number }) {
   const isInclusion = modal?.type === 'add-i' || modal?.type === 'edit-i'
   const isPending = addI.isPending || addE.isPending || editI.isPending || editE.isPending
   const submit = () => {
+    setSubmitted(true)
     if (!form.label || !form.description) return
     if (modal?.type === 'add-i') addI.mutate()
     else if (modal?.type === 'add-e') addE.mutate()
@@ -305,12 +307,14 @@ function CriteriaTab({ pid }: { pid: number }) {
           onClose={close}
           onEnter={submit}
         >
-          <FormField label="Label (e.g. I1 or E3)">
-            <input className="input" placeholder="I1" value={form.label} autoFocus
+          <FormField label="Label" required error={submitted && !form.label ? 'Label is required (e.g. I1, E3)' : undefined}>
+            <input className={`input ${submitted && !form.label ? 'border-exclude ring-1 ring-exclude' : ''}`}
+              placeholder="I1" value={form.label} autoFocus
               onChange={e => setForm(f => ({ ...f, label: e.target.value }))} />
           </FormField>
-          <FormField label="Description">
-            <textarea className="textarea" rows={3} value={form.description}
+          <FormField label="Description" required error={submitted && !form.description ? 'Description is required' : undefined}>
+            <textarea className={`textarea ${submitted && !form.description ? 'border-exclude ring-1 ring-exclude' : ''}`}
+              rows={3} value={form.description}
               onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
           </FormField>
           <FormField label="Phase">
@@ -321,7 +325,7 @@ function CriteriaTab({ pid }: { pid: number }) {
             </select>
           </FormField>
           <button className="btn-primary w-full justify-center mt-2"
-            disabled={!form.label || !form.description || isPending} onClick={submit}>
+            disabled={isPending} onClick={submit}>
             {isAdd ? 'Add Criterion' : 'Save Changes'}
           </button>
         </Modal>
@@ -359,12 +363,13 @@ function QATab({ pid }: { pid: number }) {
   const { data: criteria = [] } = useQuery({ queryKey: ['qa', pid], queryFn: () => getQACriteria(pid) })
   const [modal, setModal] = useState<QAModalState>(null)
   const [form, setForm] = useState({ label: '', description: '', max_score: 1.0 })
+  const [submitted, setSubmitted] = useState(false)
 
   const totalMax = criteria.reduce((sum, c) => sum + c.max_score, 0)
 
-  const openAdd = () => { setForm({ label: '', description: '', max_score: 1.0 }); setModal({ mode: 'add' }) }
-  const openEdit = (c: any) => { setForm({ label: c.label, description: c.description, max_score: c.max_score }); setModal({ mode: 'edit', id: c.id }) }
-  const close = () => setModal(null)
+  const openAdd = () => { setForm({ label: '', description: '', max_score: 1.0 }); setSubmitted(false); setModal({ mode: 'add' }) }
+  const openEdit = (c: any) => { setForm({ label: c.label, description: c.description, max_score: c.max_score }); setSubmitted(false); setModal({ mode: 'edit', id: c.id }) }
+  const close = () => { setModal(null); setSubmitted(false) }
 
   const addMutation = useMutation({
     mutationFn: () => addQACriterion(pid, form),
@@ -381,6 +386,7 @@ function QATab({ pid }: { pid: number }) {
 
   const isPending = addMutation.isPending || editMutation.isPending
   const submit = () => {
+    setSubmitted(true)
     if (!form.label || !form.description) return
     modal?.mode === 'add' ? addMutation.mutate() : editMutation.mutate()
   }
@@ -412,12 +418,14 @@ function QATab({ pid }: { pid: number }) {
       {modal && (
         <Modal title={modal.mode === 'add' ? 'Add QA Criterion' : 'Edit QA Criterion'}
           onClose={close} onEnter={submit}>
-          <FormField label="Label (e.g. QA1)">
-            <input className="input" placeholder="QA1" value={form.label} autoFocus
+          <FormField label="Label" required error={submitted && !form.label ? 'Label is required (e.g. QA1)' : undefined}>
+            <input className={`input ${submitted && !form.label ? 'border-exclude ring-1 ring-exclude' : ''}`}
+              placeholder="QA1" value={form.label} autoFocus
               onChange={e => setForm(f => ({ ...f, label: e.target.value }))} />
           </FormField>
-          <FormField label="Description / Question">
-            <textarea className="textarea" rows={3} value={form.description}
+          <FormField label="Description / Question" required error={submitted && !form.description ? 'Description is required' : undefined}>
+            <textarea className={`textarea ${submitted && !form.description ? 'border-exclude ring-1 ring-exclude' : ''}`}
+              rows={3} value={form.description}
               onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
           </FormField>
           <FormField label="Max Score">
@@ -428,7 +436,7 @@ function QATab({ pid }: { pid: number }) {
             </select>
           </FormField>
           <button className="btn-primary w-full justify-center mt-2"
-            disabled={!form.label || !form.description || isPending} onClick={submit}>
+            disabled={isPending} onClick={submit}>
             {modal.mode === 'add' ? 'Add Criterion' : 'Save Changes'}
           </button>
         </Modal>
@@ -448,6 +456,7 @@ const TAXONOMY_TYPES = [
 function TaxonomiesTab({ pid }: { pid: number }) {
   const qc = useQueryClient()
   const [activeType, setActiveType] = useState(TAXONOMY_TYPES[0].key)
+  const [addModal, setAddModal] = useState(false)
   const [newValue, setNewValue] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editValue, setEditValue] = useState('')
@@ -458,12 +467,11 @@ function TaxonomiesTab({ pid }: { pid: number }) {
   })
 
   const addMutation = useMutation({
-    mutationFn: () => addTaxonomyEntry(pid, activeType, newValue),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['taxonomy', pid, activeType] }); setNewValue('') },
+    mutationFn: () => addTaxonomyEntry(pid, activeType, newValue.trim()),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['taxonomy', pid, activeType] }); setNewValue(''); setAddModal(false) },
   })
   const editMutation = useMutation({
     mutationFn: ({ id, value }: { id: number; value: string }) =>
-      // Taxonomy update: delete + re-add (the API only has delete; we simulate edit)
       deleteTaxonomyEntry(pid, id).then(() => addTaxonomyEntry(pid, activeType, value)),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['taxonomy', pid, activeType] }); setEditingId(null) },
   })
@@ -475,6 +483,8 @@ function TaxonomiesTab({ pid }: { pid: number }) {
   const startEdit = (id: number, value: string) => { setEditingId(id); setEditValue(value) }
   const confirmEdit = (id: number) => editValue.trim() && editMutation.mutate({ id, value: editValue.trim() })
   const cancelEdit = () => setEditingId(null)
+  const openAdd = () => { setNewValue(''); setAddModal(true) }
+  const submitAdd = () => newValue.trim() && addMutation.mutate()
 
   return (
     <div className="max-w-xl">
@@ -488,11 +498,14 @@ function TaxonomiesTab({ pid }: { pid: number }) {
       </div>
 
       <Card>
-        <CardHeader title={TAXONOMY_TYPES.find(t => t.key === activeType)?.label ?? ''} />
+        <CardHeader
+          title={TAXONOMY_TYPES.find(t => t.key === activeType)?.label ?? ''}
+          action={<button className="btn-secondary text-xs" onClick={openAdd}>+ Add</button>}
+        />
         {entries.length === 0
-          ? <p className="text-xs text-gray-400 py-2 mb-4">No entries yet. Add below.</p>
+          ? <EmptyState icon="—" message="No entries yet." />
           : (
-            <div className="divide-y divide-border mb-4">
+            <div className="divide-y divide-border">
               {entries.map(e => (
                 <div key={e.id} className="py-2 flex items-center gap-2">
                   {editingId === e.id ? (
@@ -515,14 +528,24 @@ function TaxonomiesTab({ pid }: { pid: number }) {
               ))}
             </div>
           )}
-        <div className="flex gap-2">
-          <input className="input" placeholder="New entry" value={newValue}
-            onChange={e => setNewValue(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && newValue.trim() && addMutation.mutate()} />
-          <button className="btn-primary shrink-0" disabled={!newValue.trim() || addMutation.isPending}
-            onClick={() => addMutation.mutate()}>Add</button>
-        </div>
       </Card>
+
+      {addModal && (
+        <Modal
+          title={`Add ${TAXONOMY_TYPES.find(t => t.key === activeType)?.label ?? 'Entry'}`}
+          onClose={() => setAddModal(false)}
+          onEnter={submitAdd}
+        >
+          <FormField label="Value">
+            <input className="input" placeholder="e.g. Empirical Study" value={newValue} autoFocus
+              onChange={e => setNewValue(e.target.value)} />
+          </FormField>
+          <button className="btn-primary w-full justify-center mt-2"
+            disabled={!newValue.trim() || addMutation.isPending} onClick={submitAdd}>
+            Add Entry
+          </button>
+        </Modal>
+      )}
     </div>
   )
 }

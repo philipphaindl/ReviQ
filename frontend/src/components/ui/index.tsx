@@ -116,18 +116,24 @@ export function FormField({
   label,
   children,
   hint,
+  error,
+  required,
 }: {
   label: string
   children: ReactNode
   hint?: string
+  error?: string
+  required?: boolean
 }) {
   return (
     <div className="mb-4">
       <label className="block text-xs font-semibold text-navy-muted uppercase tracking-wider mb-1.5">
         {label}
+        {required && <span className="text-exclude normal-case font-normal ml-1">*</span>}
       </label>
       {children}
-      {hint && <p className="text-xs text-gray-400 mt-1">{hint}</p>}
+      {error && <p className="text-xs text-exclude mt-1">{error}</p>}
+      {!error && hint && <p className="text-xs text-gray-400 mt-1">{hint}</p>}
     </div>
   )
 }
