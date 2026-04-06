@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useProject } from '../../App'
 import { useQuery } from '@tanstack/react-query'
+import { useEffect } from 'react'
 import { getProject, getReviewers } from '../../api/client'
 
 export default function NavBar() {
@@ -19,9 +20,15 @@ export default function NavBar() {
     enabled: !!projectId,
   })
 
-  // Auto-select R1 if no reviewer chosen yet
-  const activeReviewerId = reviewerId ?? reviewers.find(r => r.role === 'R1')?.id ?? reviewers[0]?.id ?? null
-  const activeReviewer = reviewers.find(r => r.id === activeReviewerId)
+  // Auto-persist R1 into context when no reviewer is selected yet
+  useEffect(() => {
+    if (reviewerId === null && reviewers.length > 0) {
+      const r1 = reviewers.find(r => r.role === 'R1') ?? reviewers[0]
+      setReviewerId(r1.id)
+    }
+  }, [reviewers, reviewerId, setReviewerId])
+
+  const activeReviewer = reviewers.find(r => r.id === reviewerId) ?? reviewers.find(r => r.role === 'R1') ?? reviewers[0]
 
   return (
     <nav className="bg-white border-b border-border sticky top-0 z-50 h-12 flex items-center px-6 gap-4">
@@ -47,29 +54,38 @@ export default function NavBar() {
 
       <div className="flex-1" />
 
-      {/* Reviewer role selector */}
-      {reviewers.length > 0 && (
+      {/* Reviewer role selector — always visible when project is active */}
+      {projectId && (
         <div className="flex items-center gap-2 shrink-0">
-          <span className="text-xs text-gray-400 hidden sm:block">Reviewing as:</span>
-          <select
-            className="text-xs border border-border rounded-md px-2 py-1 text-navy bg-white font-medium"
-            value={activeReviewerId ?? ''}
-            onChange={e => setReviewerId(parseInt(e.target.value))}
-          >
-            {reviewers.map(r => (
-              <option key={r.id} value={r.id}>
-                {r.role} – {r.name}
-              </option>
-            ))}
-          </select>
-          {activeReviewer && (
-            <span className={`text-xs font-bold px-2 py-0.5 rounded border ${
-              activeReviewer.role === 'R1'
-                ? 'bg-blue-50 text-info border-blue-200'
-                : 'bg-gray-50 text-gray-600 border-gray-200'
-            }`}>
-              {activeReviewer.role}
-            </span>
+          <span className="text-xs text-gray-400 hidden sm:block">Reviewer:</span>
+          {reviewers.length === 0 ? (
+            <button
+              className="text-xs text-gray-400 border border-dashed border-gray-300 rounded-md px-3 py-1 hover:border-info hover:text-info transition-colors"
+              onClick={() => navigate('/setup')}
+            >
+              Add reviewers in Setup →
+            </button>
+          ) : (
+            <>
+              <select
+                className="text-xs border border-border rounded-md px-2 py-1 text-navy bg-white font-medium"
+                value={activeReviewer?.id ?? ''}
+                onChange={e => setReviewerId(parseInt(e.target.value))}
+              >
+                {reviewers.map(r => (
+                  <option key={r.id} value={r.id}>{r.role} – {r.name}</option>
+                ))}
+              </select>
+              {activeReviewer && (
+                <span className={`text-xs font-bold px-2 py-0.5 rounded border ${
+                  activeReviewer.role === 'R1'
+                    ? 'bg-blue-50 text-info border-blue-200'
+                    : 'bg-gray-50 text-gray-600 border-gray-200'
+                }`}>
+                  {activeReviewer.role}
+                </span>
+              )}
+            </>
           )}
         </div>
       )}

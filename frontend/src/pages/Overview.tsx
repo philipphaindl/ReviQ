@@ -64,7 +64,7 @@ export default function Overview() {
           {/* Row 1: 6 stat boxes */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <StatCard label="Retrieved"          value={stats.total_retrieved} />
-            <StatCard label="Unique"             value={stats.total_unique}    color="info" />
+            <StatCard label="Unique"             value={stats.total_unique} />
             <StatCard label="Duplicates"         value={stats.total_duplicates} color="uncertain" />
             <StatCard label="Open Conflicts"     value={stats.open_conflicts}  color={stats.open_conflicts > 0 ? 'exclude' : 'navy'} />
             <StatCard

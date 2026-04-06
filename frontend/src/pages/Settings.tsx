@@ -501,15 +501,29 @@ type TaxonomyModal =
 function TaxonomiesTab({ pid }: { pid: number }) {
   const qc = useQueryClient()
 
-  // Load taxonomy types from the backend (= distinct taxonomy_type strings)
+  // Track which built-in default categories have been explicitly deleted, per project
+  const lsKey = `reviq_deleted_taxonomies_${pid}`
+  const [deletedDefaults, setDeletedDefaults] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(lsKey) ?? '[]')) } catch { return new Set() }
+  })
+  const markDeleted = (key: string) => {
+    setDeletedDefaults(prev => {
+      const next = new Set(prev)
+      next.add(key)
+      localStorage.setItem(lsKey, JSON.stringify([...next]))
+      return next
+    })
+  }
+
+  // Load taxonomy types from the backend (= distinct taxonomy_type strings that have entries)
   const { data: backendTypes = [] } = useQuery({
     queryKey: ['taxonomy-types', pid],
     queryFn: () => getTaxonomyTypes(pid),
   })
 
-  // Merge defaults + backend-only types, deduplicated
+  // Merge: defaults (minus deleted) + backend-only types, deduplicated
   const allTypes = [
-    ...DEFAULT_TAXONOMY_TYPES,
+    ...DEFAULT_TAXONOMY_TYPES.filter(d => !deletedDefaults.has(d.key)),
     ...backendTypes
       .filter(k => !DEFAULT_TAXONOMY_TYPES.some(d => d.key === k))
       .map(k => ({ key: k, label: k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) })),
@@ -542,10 +556,13 @@ function TaxonomiesTab({ pid }: { pid: number }) {
   })
   const deleteCatMutation = useMutation({
     mutationFn: (key: string) => deleteTaxonomyType(pid, key),
-    onSuccess: () => {
+    onSuccess: (_data, key) => {
+      // If it's a built-in default, remember it was deleted so it doesn't reappear
+      if (DEFAULT_TAXONOMY_TYPES.some(d => d.key === key)) markDeleted(key)
       qc.invalidateQueries({ queryKey: ['taxonomy-types', pid] })
       qc.invalidateQueries({ queryKey: ['taxonomy', pid] })
-      setActiveKey(DEFAULT_TAXONOMY_TYPES[0].key)
+      const remaining = allTypes.filter(t => t.key !== key)
+      setActiveKey(remaining[0]?.key ?? '')
       setModal(null)
     },
   })
