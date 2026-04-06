@@ -183,32 +183,20 @@ const LANG_NAMES: Record<string, string> = {
 }
 
 function PaperRow({ paper, onDecide }: { paper: Paper; onDecide: () => void }) {
-  const [expanded, setExpanded] = useState(false)
   const dec = paper.final_decision?.decision
   const accentClass = dec === 'I' ? 'left-accent-include' : dec === 'E' ? 'left-accent-exclude' : dec === 'U' ? 'left-accent-uncertain' : 'left-accent-info'
   const langName = paper.language && paper.language !== 'en' ? (LANG_NAMES[paper.language] ?? paper.language.toUpperCase()) : null
 
   return (
-    <div className={`card pl-4 ${accentClass} cursor-pointer hover:shadow-card-hover transition-shadow`}>
-      <div className="flex items-start gap-3">
-        <div className="flex-1 min-w-0" onClick={() => setExpanded(v => !v)}>
-          <div className="flex items-start gap-2 flex-wrap">
-            {dec ? <DecisionBadge decision={dec} /> : <Badge label="Undecided" variant="neutral" />}
-            {langName && <Badge label={`Non-English: ${langName}`} variant="uncertain" />}
-            <span className="text-xs text-gray-400">{paper.source} · {paper.year}</span>
-          </div>
-          <h3 className="text-sm font-medium text-navy mt-1 leading-snug">{paper.title}</h3>
-          {paper.authors && <p className="text-xs text-gray-400 mt-0.5 truncate">{paper.authors}</p>}
-          {expanded && paper.abstract && (
-            <p className="text-xs text-gray-600 mt-2 leading-relaxed border-t border-border pt-2">{paper.abstract}</p>
-          )}
-          {expanded && paper.keywords && (
-            <p className="text-xs text-gray-400 mt-1"><span className="font-medium">Keywords:</span> {paper.keywords}</p>
-          )}
+    <div className={`card pl-4 ${accentClass} cursor-pointer hover:shadow-card-hover transition-shadow`} onClick={onDecide}>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-start gap-2 flex-wrap">
+          {dec ? <DecisionBadge decision={dec} /> : <Badge label="Undecided" variant="neutral" />}
+          {langName && <Badge label={`Non-English: ${langName}`} variant="uncertain" />}
+          <span className="text-xs text-gray-400">{paper.source} · {paper.year}</span>
         </div>
-        <button className="btn-primary text-xs shrink-0" onClick={onDecide}>
-          {dec ? 'Update' : 'Decide'}
-        </button>
+        <h3 className="text-sm font-medium text-navy mt-1 leading-snug">{paper.title}</h3>
+        {paper.authors && <p className="text-xs text-gray-400 mt-0.5 truncate">{paper.authors}</p>}
       </div>
     </div>
   )
@@ -232,18 +220,44 @@ function DecisionModal({
   error?: string
 }) {
   const [decision, setDecision] = useState('')
+  // For Uncertain: track which criterion direction the user picks ('I' | 'E' | '')
+  const [uncertainDir, setUncertainDir] = useState<'I' | 'E' | ''>('')
   const [criterion, setCriterion] = useState('')
   const [rationale, setRationale] = useState('')
   const [submitted, setSubmitted] = useState(false)
 
-  const criteria = decision === 'I' ? inclusionCriteria : (decision === 'E' || decision === 'U') ? exclusionCriteria : []
-  const criteriaRequired = criteria.length > 0
-  const canSubmit = decision && (!criteriaRequired || criterion)
+  // Which criteria list to show
+  const criteria = decision === 'I'
+    ? inclusionCriteria
+    : decision === 'E'
+      ? exclusionCriteria
+      : decision === 'U'
+        ? (uncertainDir === 'I' ? inclusionCriteria : uncertainDir === 'E' ? exclusionCriteria : [])
+        : []
+
+  const criteriaRequired = decision !== 'U'
+    ? criteria.length > 0
+    : uncertainDir !== '' && criteria.length > 0
+
+  const rationaleRequired = decision === 'U'
+
+  const handleDecision = (d: string) => {
+    setDecision(d)
+    setCriterion('')
+    setUncertainDir('')
+    setSubmitted(false)
+  }
+
+  const handleUncertainDir = (dir: 'I' | 'E') => {
+    setUncertainDir(dir)
+    setCriterion('')
+  }
 
   const handleSubmit = () => {
     setSubmitted(true)
     if (!decision) return
     if (criteriaRequired && !criterion) return
+    if (rationaleRequired && !rationale.trim()) return
     onSubmit(decision, criterion, rationale)
   }
 
@@ -273,7 +287,7 @@ function DecisionModal({
         <div className="flex gap-2">
           {(['I', 'E', 'U'] as const).map(d => (
             <button key={d}
-              onClick={() => { setDecision(d); setCriterion(''); setSubmitted(false) }}
+              onClick={() => handleDecision(d)}
               className={`flex-1 py-2.5 text-sm font-semibold rounded-md border transition-all ${
                 decision === d
                   ? d === 'I' ? 'bg-include text-white border-include'
@@ -287,10 +301,28 @@ function DecisionModal({
         </div>
       </FormField>
 
+      {/* Uncertain: pick criterion direction (I or E, not both) */}
+      {decision === 'U' && (
+        <FormField label="Leaning Toward" required error={submitted && !uncertainDir ? 'Select a direction' : undefined}>
+          <div className="flex gap-2">
+            {(['I', 'E'] as const).map(dir => (
+              <button key={dir} onClick={() => handleUncertainDir(dir)}
+                className={`flex-1 py-2 text-sm font-semibold rounded-md border transition-all ${
+                  uncertainDir === dir
+                    ? dir === 'I' ? 'bg-include text-white border-include' : 'bg-exclude text-white border-exclude'
+                    : dir === 'I' ? 'btn-include' : 'btn-exclude'
+                }`}>
+                {dir === 'I' ? 'Inclusion' : 'Exclusion'}
+              </button>
+            ))}
+          </div>
+        </FormField>
+      )}
+
       {/* Criterion dropdown — required when criteria are configured */}
-      {decision && criteria.length > 0 && (
+      {criteria.length > 0 && (
         <FormField
-          label={decision === 'I' ? 'Inclusion Criterion' : 'Exclusion Criterion'}
+          label={decision === 'I' || uncertainDir === 'I' ? 'Inclusion Criterion' : 'Exclusion Criterion'}
           required
           error={submitted && criteriaRequired && !criterion ? 'Select a criterion' : undefined}
         >
@@ -307,12 +339,18 @@ function DecisionModal({
         </FormField>
       )}
 
-      {/* Rationale */}
+      {/* Rationale — mandatory for Uncertain, optional otherwise */}
       {decision && (
-        <FormField label={`Rationale ${decision === 'I' ? '(optional)' : '(recommended)'}`}>
-          <textarea className="textarea" rows={2} value={rationale}
+        <FormField
+          label="Comment"
+          required={rationaleRequired}
+          error={submitted && rationaleRequired && !rationale.trim() ? 'A comment is required for uncertain decisions' : undefined}
+        >
+          <textarea
+            className={`textarea ${submitted && rationaleRequired && !rationale.trim() ? 'border-exclude ring-1 ring-exclude' : ''}`}
+            rows={2} value={rationale}
             onChange={e => setRationale(e.target.value)}
-            placeholder="Brief justification for this decision…" />
+            placeholder={decision === 'U' ? 'Explain why this paper is uncertain…' : 'Brief justification (optional)…'} />
         </FormField>
       )}
 

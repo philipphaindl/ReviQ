@@ -48,7 +48,7 @@ export default function NavBar() {
       {project && (
         <>
           <span className="text-border shrink-0">|</span>
-          <span className="text-xs text-navy-muted truncate max-w-[200px] shrink-0">{project.title}</span>
+          <span className="text-sm font-bold text-navy truncate max-w-[240px] shrink-0">{project.title}</span>
         </>
       )}
 
