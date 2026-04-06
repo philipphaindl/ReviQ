@@ -43,6 +43,10 @@ export const deleteQACriterion = (pid: number, qid: number) => api.delete(`/proj
 
 // ── Taxonomies ────────────────────────────────────────────────────────────────
 
+export const getTaxonomyTypes = (pid: number) => api.get<string[]>(`/projects/${pid}/taxonomy-types`).then(r => r.data)
+export const renameTaxonomyType = (pid: number, type: string, newType: string) => api.put(`/projects/${pid}/taxonomy-types/${encodeURIComponent(type)}`, { new_type: newType }).then(r => r.data)
+export const deleteTaxonomyType = (pid: number, type: string) => api.delete(`/projects/${pid}/taxonomy-types/${encodeURIComponent(type)}`)
+
 export const getTaxonomy = (pid: number, type: string) => api.get<TaxonomyEntry[]>(`/projects/${pid}/taxonomies/${type}`).then(r => r.data)
 export const addTaxonomyEntry = (pid: number, type: string, value: string) => api.post<TaxonomyEntry>(`/projects/${pid}/taxonomies/${type}`, { value }).then(r => r.data)
 export const deleteTaxonomyEntry = (pid: number, eid: number) => api.delete(`/projects/${pid}/taxonomies/${eid}`)

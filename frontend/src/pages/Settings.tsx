@@ -7,10 +7,11 @@ import {
   getInclusionCriteria, addInclusionCriterion, updateInclusionCriterion, deleteInclusionCriterion,
   getExclusionCriteria, addExclusionCriterion, updateExclusionCriterion, deleteExclusionCriterion,
   getQACriteria, addQACriterion, updateQACriterion, deleteQACriterion,
-  getTaxonomy, addTaxonomyEntry, deleteTaxonomyEntry,
+  getTaxonomyTypes, getTaxonomy, addTaxonomyEntry, deleteTaxonomyEntry, renameTaxonomyType, deleteTaxonomyType,
   getSearchStrings, addSearchString, updateSearchString, deleteSearchString,
 } from '../api/client'
-import { Card, CardHeader, Modal, FormField, EmptyState } from '../components/ui'
+import { Card, CardHeader, Modal, FormField, EmptyState, ConfirmDialog } from '../components/ui'
+import { DATABASES, DatabaseBadge } from '../components/databases'
 
 type Tab = 'project' | 'reviewers' | 'criteria' | 'qa' | 'taxonomies' | 'search'
 
@@ -145,6 +146,7 @@ function ReviewersTab({ pid }: { pid: number }) {
   const [modal, setModal] = useState(false)
   const [form, setForm] = useState({ name: '', email: '', role: 'R2' })
   const [submitted, setSubmitted] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState<number | null>(null)
 
   const addMutation = useMutation({
     mutationFn: () => addReviewer(pid, form),
@@ -182,13 +184,21 @@ function ReviewersTab({ pid }: { pid: number }) {
                   {r.email && <p className="text-xs text-gray-400">{r.email}</p>}
                 </div>
                 {r.role !== 'R1' && (
-                  <button className="btn-danger text-xs px-2 py-1" onClick={() => deleteMutation.mutate(r.id)}>Remove</button>
+                  <button className="btn-danger text-xs px-2 py-1" onClick={() => setConfirmDelete(r.id)}>Remove</button>
                 )}
               </div>
             ))}
           </div>
         )}
       </Card>
+
+      {confirmDelete !== null && (
+        <ConfirmDialog
+          message="Remove this reviewer? Their decisions will remain but they will no longer appear in the reviewer list."
+          onConfirm={() => { deleteMutation.mutate(confirmDelete); setConfirmDelete(null) }}
+          onCancel={() => setConfirmDelete(null)}
+        />
+      )}
 
       {modal && (
         <Modal title="Add Reviewer" onClose={() => setModal(false)} onEnter={submit}>
@@ -235,6 +245,7 @@ function CriteriaTab({ pid }: { pid: number }) {
   const [modal, setModal] = useState<CriterionModalState>(null)
   const [form, setForm] = useState({ label: '', description: '', phase: 'screening' })
   const [submitted, setSubmitted] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState<{ type: 'i' | 'e'; id: number } | null>(null)
 
   const openAdd = (type: 'add-i' | 'add-e') => {
     setForm({ label: '', description: '', phase: 'screening' }); setSubmitted(false); setModal({ type })
@@ -284,7 +295,7 @@ function CriteriaTab({ pid }: { pid: number }) {
           ? <EmptyState icon="—" message="No inclusion criteria defined." />
           : inclusions.map(c => (
             <CriterionRow key={c.id} label={c.label} description={c.description} badge={`Phase: ${c.phase}`}
-              onEdit={() => openEdit('edit-i', c)} onDelete={() => delI.mutate(c.id)} />
+              onEdit={() => openEdit('edit-i', c)} onDelete={() => setConfirmDelete({ type: 'i', id: c.id })} />
           ))}
       </Card>
 
@@ -295,9 +306,20 @@ function CriteriaTab({ pid }: { pid: number }) {
           ? <EmptyState icon="—" message="No exclusion criteria defined." />
           : exclusions.map(c => (
             <CriterionRow key={c.id} label={c.label} description={c.description} badge={`Phase: ${c.phase}`}
-              onEdit={() => openEdit('edit-e', c)} onDelete={() => delE.mutate(c.id)} />
+              onEdit={() => openEdit('edit-e', c)} onDelete={() => setConfirmDelete({ type: 'e', id: c.id })} />
           ))}
       </Card>
+
+      {confirmDelete !== null && (
+        <ConfirmDialog
+          message="Delete this criterion? This cannot be undone."
+          onConfirm={() => {
+            confirmDelete.type === 'i' ? delI.mutate(confirmDelete.id) : delE.mutate(confirmDelete.id)
+            setConfirmDelete(null)
+          }}
+          onCancel={() => setConfirmDelete(null)}
+        />
+      )}
 
       {modal && (
         <Modal
@@ -364,6 +386,7 @@ function QATab({ pid }: { pid: number }) {
   const [modal, setModal] = useState<QAModalState>(null)
   const [form, setForm] = useState({ label: '', description: '', max_score: 1.0 })
   const [submitted, setSubmitted] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState<number | null>(null)
 
   const totalMax = criteria.reduce((sum, c) => sum + c.max_score, 0)
 
@@ -409,11 +432,19 @@ function QATab({ pid }: { pid: number }) {
               </div>
               <div className="flex gap-1 shrink-0">
                 <button className="btn-secondary text-xs px-2 py-1" onClick={() => openEdit(c)}>Edit</button>
-                <button className="btn-danger text-xs px-2 py-1" onClick={() => delMutation.mutate(c.id)}>Remove</button>
+                <button className="btn-danger text-xs px-2 py-1" onClick={() => setConfirmDelete(c.id)}>Remove</button>
               </div>
             </div>
           ))}
       </Card>
+
+      {confirmDelete !== null && (
+        <ConfirmDialog
+          message="Delete this QA criterion? This cannot be undone."
+          onConfirm={() => { delMutation.mutate(confirmDelete); setConfirmDelete(null) }}
+          onCancel={() => setConfirmDelete(null)}
+        />
+      )}
 
       {modal && (
         <Modal title={modal.mode === 'add' ? 'Add QA Criterion' : 'Edit QA Criterion'}
@@ -447,60 +478,153 @@ function QATab({ pid }: { pid: number }) {
 
 // ── Taxonomies Tab ────────────────────────────────────────────────────────────
 
-const TAXONOMY_TYPES = [
-  { key: 'research_type',    label: 'Research Type'    },
+const DEFAULT_TAXONOMY_TYPES = [
+  { key: 'research_type',     label: 'Research Type'     },
   { key: 'contribution_type', label: 'Contribution Type' },
-  { key: 'usage_scenario',   label: 'Usage Scenario'   },
+  { key: 'usage_scenario',    label: 'Usage Scenario'    },
 ]
+
+type TaxonomyModal =
+  | { kind: 'add-category' }
+  | { kind: 'edit-category'; key: string; label: string }
+  | { kind: 'confirm-delete-category'; key: string }
+  | { kind: 'add-entry' }
+  | { kind: 'confirm-delete-entry'; id: number }
 
 function TaxonomiesTab({ pid }: { pid: number }) {
   const qc = useQueryClient()
-  const [activeType, setActiveType] = useState(TAXONOMY_TYPES[0].key)
-  const [addModal, setAddModal] = useState(false)
-  const [newValue, setNewValue] = useState('')
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const [editValue, setEditValue] = useState('')
+
+  // Load taxonomy types from the backend (= distinct taxonomy_type strings)
+  const { data: backendTypes = [] } = useQuery({
+    queryKey: ['taxonomy-types', pid],
+    queryFn: () => getTaxonomyTypes(pid),
+  })
+
+  // Merge defaults + backend-only types, deduplicated
+  const allTypes = [
+    ...DEFAULT_TAXONOMY_TYPES,
+    ...backendTypes
+      .filter(k => !DEFAULT_TAXONOMY_TYPES.some(d => d.key === k))
+      .map(k => ({ key: k, label: k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) })),
+  ]
+
+  const [activeKey, setActiveKey] = useState(DEFAULT_TAXONOMY_TYPES[0].key)
+  const activeLabel = allTypes.find(t => t.key === activeKey)?.label ?? activeKey
+
+  const [modal, setModal] = useState<TaxonomyModal | null>(null)
+  const [catForm, setCatForm] = useState({ key: '', label: '' })
+  const [catSubmitted, setCatSubmitted] = useState(false)
+  const [entryValue, setEntryValue] = useState('')
+  const [entrySubmitted, setEntrySubmitted] = useState(false)
+  const [editingEntryId, setEditingEntryId] = useState<number | null>(null)
+  const [editEntryValue, setEditEntryValue] = useState('')
 
   const { data: entries = [] } = useQuery({
-    queryKey: ['taxonomy', pid, activeType],
-    queryFn: () => getTaxonomy(pid, activeType),
+    queryKey: ['taxonomy', pid, activeKey],
+    queryFn: () => getTaxonomy(pid, activeKey),
   })
 
-  const addMutation = useMutation({
-    mutationFn: () => addTaxonomyEntry(pid, activeType, newValue.trim()),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['taxonomy', pid, activeType] }); setNewValue(''); setAddModal(false) },
+  // Category mutations
+  const renameCatMutation = useMutation({
+    mutationFn: ({ oldKey, newKey }: { oldKey: string; newKey: string }) => renameTaxonomyType(pid, oldKey, newKey),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['taxonomy-types', pid] })
+      qc.invalidateQueries({ queryKey: ['taxonomy', pid] })
+      setModal(null)
+    },
   })
-  const editMutation = useMutation({
+  const deleteCatMutation = useMutation({
+    mutationFn: (key: string) => deleteTaxonomyType(pid, key),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['taxonomy-types', pid] })
+      qc.invalidateQueries({ queryKey: ['taxonomy', pid] })
+      setActiveKey(DEFAULT_TAXONOMY_TYPES[0].key)
+      setModal(null)
+    },
+  })
+
+  // Entry mutations
+  const addEntryMutation = useMutation({
+    mutationFn: () => addTaxonomyEntry(pid, activeKey, entryValue.trim()),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['taxonomy', pid, activeKey] })
+      qc.invalidateQueries({ queryKey: ['taxonomy-types', pid] })
+      setEntryValue('')
+      setEntrySubmitted(false)
+      setModal(null)
+    },
+  })
+  const editEntryMutation = useMutation({
     mutationFn: ({ id, value }: { id: number; value: string }) =>
-      deleteTaxonomyEntry(pid, id).then(() => addTaxonomyEntry(pid, activeType, value)),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['taxonomy', pid, activeType] }); setEditingId(null) },
+      deleteTaxonomyEntry(pid, id).then(() => addTaxonomyEntry(pid, activeKey, value)),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['taxonomy', pid, activeKey] }); setEditingEntryId(null) },
   })
-  const delMutation = useMutation({
+  const delEntryMutation = useMutation({
     mutationFn: (id: number) => deleteTaxonomyEntry(pid, id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['taxonomy', pid, activeType] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['taxonomy', pid, activeKey] }),
   })
 
-  const startEdit = (id: number, value: string) => { setEditingId(id); setEditValue(value) }
-  const confirmEdit = (id: number) => editValue.trim() && editMutation.mutate({ id, value: editValue.trim() })
-  const cancelEdit = () => setEditingId(null)
-  const openAdd = () => { setNewValue(''); setAddModal(true) }
-  const submitAdd = () => newValue.trim() && addMutation.mutate()
+  const submitAddCategory = () => {
+    setCatSubmitted(true)
+    if (!catForm.key.trim() || !catForm.label.trim()) return
+    // New category is created implicitly by adding first entry
+    // Just switch to that type; user then adds entries
+    const newKey = catForm.key.trim().toLowerCase().replace(/\s+/g, '_')
+    setActiveKey(newKey)
+    setModal(null)
+    setCatSubmitted(false)
+  }
+
+  const submitEditCategory = (oldKey: string) => {
+    setCatSubmitted(true)
+    if (!catForm.label.trim()) return
+    const newKey = catForm.key.trim().toLowerCase().replace(/\s+/g, '_')
+    renameCatMutation.mutate({ oldKey, newKey })
+  }
+
+  const submitAddEntry = () => {
+    setEntrySubmitted(true)
+    if (!entryValue.trim()) return
+    addEntryMutation.mutate()
+  }
 
   return (
-    <div className="max-w-xl">
-      <div className="flex gap-2 mb-4">
-        {TAXONOMY_TYPES.map(t => (
-          <button key={t.key} onClick={() => setActiveType(t.key)}
-            className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-colors ${activeType === t.key ? 'bg-info text-white border-info' : 'bg-white text-navy-muted border-border hover:border-navy-muted'}`}>
-            {t.label}
-          </button>
-        ))}
-      </div>
-
+    <div className="max-w-xl space-y-3">
+      {/* Category selector + management */}
       <Card>
         <CardHeader
-          title={TAXONOMY_TYPES.find(t => t.key === activeType)?.label ?? ''}
-          action={<button className="btn-secondary text-xs" onClick={openAdd}>+ Add</button>}
+          title="Taxonomy Categories"
+          action={
+            <button className="btn-secondary text-xs" onClick={() => { setCatForm({ key: '', label: '' }); setCatSubmitted(false); setModal({ kind: 'add-category' }) }}>
+              + New Category
+            </button>
+          }
+        />
+        <div className="divide-y divide-border">
+          {allTypes.map(t => (
+            <div key={t.key} className={`flex items-center justify-between py-2 px-1 rounded cursor-pointer transition-colors ${activeKey === t.key ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+              onClick={() => setActiveKey(t.key)}>
+              <span className={`text-sm font-medium ${activeKey === t.key ? 'text-info' : 'text-navy'}`}>{t.label}</span>
+              <div className="flex gap-1" onClick={e => e.stopPropagation()}>
+                <button className="btn-secondary text-xs px-2 py-0.5"
+                  onClick={() => { setCatForm({ key: t.key, label: t.label }); setCatSubmitted(false); setModal({ kind: 'edit-category', key: t.key, label: t.label }) }}>
+                  Edit
+                </button>
+                <button className="btn-danger text-xs px-2 py-0.5"
+                  onClick={() => setModal({ kind: 'confirm-delete-category', key: t.key })}>
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Entries for active category */}
+      <Card>
+        <CardHeader
+          title={`Entries — ${activeLabel}`}
+          action={<button className="btn-secondary text-xs" onClick={() => { setEntryValue(''); setEntrySubmitted(false); setModal({ kind: 'add-entry' }) }}>+ Add</button>}
         />
         {entries.length === 0
           ? <EmptyState icon="—" message="No entries yet." />
@@ -508,20 +632,24 @@ function TaxonomiesTab({ pid }: { pid: number }) {
             <div className="divide-y divide-border">
               {entries.map(e => (
                 <div key={e.id} className="py-2 flex items-center gap-2">
-                  {editingId === e.id ? (
+                  {editingEntryId === e.id ? (
                     <>
-                      <input className="input flex-1" value={editValue} autoFocus
-                        onChange={ev => setEditValue(ev.target.value)}
-                        onKeyDown={ev => { if (ev.key === 'Enter') confirmEdit(e.id); if (ev.key === 'Escape') cancelEdit() }} />
+                      <input className="input flex-1 text-sm" value={editEntryValue} autoFocus
+                        onChange={ev => setEditEntryValue(ev.target.value)}
+                        onKeyDown={ev => {
+                          if (ev.key === 'Enter' && editEntryValue.trim()) editEntryMutation.mutate({ id: e.id, value: editEntryValue.trim() })
+                          if (ev.key === 'Escape') setEditingEntryId(null)
+                        }} />
                       <button className="btn-primary text-xs px-2 py-1 shrink-0"
-                        disabled={editMutation.isPending} onClick={() => confirmEdit(e.id)}>Save</button>
-                      <button className="btn-secondary text-xs px-2 py-1 shrink-0" onClick={cancelEdit}>Cancel</button>
+                        disabled={editEntryMutation.isPending}
+                        onClick={() => editEntryValue.trim() && editEntryMutation.mutate({ id: e.id, value: editEntryValue.trim() })}>Save</button>
+                      <button className="btn-secondary text-xs px-2 py-1 shrink-0" onClick={() => setEditingEntryId(null)}>Cancel</button>
                     </>
                   ) : (
                     <>
                       <span className="text-sm text-navy flex-1">{e.value}</span>
-                      <button className="btn-secondary text-xs px-2 py-1 shrink-0" onClick={() => startEdit(e.id, e.value)}>Edit</button>
-                      <button className="btn-danger text-xs px-2 py-1 shrink-0" onClick={() => delMutation.mutate(e.id)}>Remove</button>
+                      <button className="btn-secondary text-xs px-2 py-1 shrink-0" onClick={() => { setEditingEntryId(e.id); setEditEntryValue(e.value) }}>Edit</button>
+                      <button className="btn-danger text-xs px-2 py-1 shrink-0" onClick={() => setModal({ kind: 'confirm-delete-entry', id: e.id })}>Remove</button>
                     </>
                   )}
                 </div>
@@ -530,21 +658,68 @@ function TaxonomiesTab({ pid }: { pid: number }) {
           )}
       </Card>
 
-      {addModal && (
-        <Modal
-          title={`Add ${TAXONOMY_TYPES.find(t => t.key === activeType)?.label ?? 'Entry'}`}
-          onClose={() => setAddModal(false)}
-          onEnter={submitAdd}
-        >
-          <FormField label="Value">
-            <input className="input" placeholder="e.g. Empirical Study" value={newValue} autoFocus
-              onChange={e => setNewValue(e.target.value)} />
+      {/* Modals */}
+      {modal?.kind === 'add-category' && (
+        <Modal title="New Taxonomy Category" onClose={() => setModal(null)} onEnter={submitAddCategory}>
+          <FormField label="Key (internal, e.g. venue_type)" required error={catSubmitted && !catForm.key.trim() ? 'Key is required' : undefined}>
+            <input className={`input ${catSubmitted && !catForm.key.trim() ? 'border-exclude ring-1 ring-exclude' : ''}`}
+              placeholder="venue_type" value={catForm.key} autoFocus
+              onChange={e => setCatForm(f => ({ ...f, key: e.target.value }))} />
+          </FormField>
+          <FormField label="Display Name" required error={catSubmitted && !catForm.label.trim() ? 'Display name is required' : undefined}>
+            <input className={`input ${catSubmitted && !catForm.label.trim() ? 'border-exclude ring-1 ring-exclude' : ''}`}
+              placeholder="Venue Type" value={catForm.label}
+              onChange={e => setCatForm(f => ({ ...f, label: e.target.value }))} />
+          </FormField>
+          <button className="btn-primary w-full justify-center mt-2" onClick={submitAddCategory}>
+            Create Category
+          </button>
+        </Modal>
+      )}
+
+      {modal?.kind === 'edit-category' && (
+        <Modal title="Edit Taxonomy Category" onClose={() => setModal(null)} onEnter={() => submitEditCategory(modal.key)}>
+          <FormField label="Display Name" required error={catSubmitted && !catForm.label.trim() ? 'Display name is required' : undefined}>
+            <input className={`input ${catSubmitted && !catForm.label.trim() ? 'border-exclude ring-1 ring-exclude' : ''}`}
+              value={catForm.label} autoFocus
+              onChange={e => setCatForm(f => ({ ...f, label: e.target.value }))} />
           </FormField>
           <button className="btn-primary w-full justify-center mt-2"
-            disabled={!newValue.trim() || addMutation.isPending} onClick={submitAdd}>
+            disabled={renameCatMutation.isPending} onClick={() => submitEditCategory(modal.key)}>
+            Save Changes
+          </button>
+        </Modal>
+      )}
+
+      {modal?.kind === 'confirm-delete-category' && (
+        <ConfirmDialog
+          message={`Delete the entire "${allTypes.find(t => t.key === modal.key)?.label ?? modal.key}" category and all its entries? This cannot be undone.`}
+          confirmLabel="Delete Category"
+          onConfirm={() => deleteCatMutation.mutate(modal.key)}
+          onCancel={() => setModal(null)}
+        />
+      )}
+
+      {modal?.kind === 'add-entry' && (
+        <Modal title={`Add Entry to "${activeLabel}"`} onClose={() => setModal(null)} onEnter={submitAddEntry}>
+          <FormField label="Value" required error={entrySubmitted && !entryValue.trim() ? 'Value is required' : undefined}>
+            <input className={`input ${entrySubmitted && !entryValue.trim() ? 'border-exclude ring-1 ring-exclude' : ''}`}
+              placeholder="e.g. Empirical Study" value={entryValue} autoFocus
+              onChange={e => setEntryValue(e.target.value)} />
+          </FormField>
+          <button className="btn-primary w-full justify-center mt-2"
+            disabled={addEntryMutation.isPending} onClick={submitAddEntry}>
             Add Entry
           </button>
         </Modal>
+      )}
+
+      {modal?.kind === 'confirm-delete-entry' && (
+        <ConfirmDialog
+          message="Remove this taxonomy entry? This cannot be undone."
+          onConfirm={() => { delEntryMutation.mutate(modal.id); setModal(null) }}
+          onCancel={() => setModal(null)}
+        />
       )}
     </div>
   )
@@ -556,41 +731,52 @@ function SearchStringsTab({ pid }: { pid: number }) {
   const qc = useQueryClient()
   const { data: strings = [] } = useQuery({ queryKey: ['search-strings', pid], queryFn: () => getSearchStrings(pid) })
   const [modal, setModal] = useState<{ mode: 'add' | 'edit'; id?: number } | null>(null)
-  const [form, setForm] = useState({ db_name: '', query_string: '', filter_settings: '', search_date: '' })
+  const [form, setForm] = useState({ db_name: DATABASES[0].key, query_string: '', filter_settings: '', search_date: '' })
+  const [submitted, setSubmitted] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState<number | null>(null)
 
   const addMutation = useMutation({
     mutationFn: () => addSearchString(pid, form),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['search-strings', pid] }); setModal(null) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['search-strings', pid] }); setModal(null); setSubmitted(false) },
   })
   const updateMutation = useMutation({
     mutationFn: () => updateSearchString(pid, modal!.id!, form),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['search-strings', pid] }); setModal(null) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['search-strings', pid] }); setModal(null); setSubmitted(false) },
   })
   const delMutation = useMutation({
     mutationFn: (id: number) => deleteSearchString(pid, id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['search-strings', pid] }),
   })
 
+  const openAdd = () => { setForm({ db_name: DATABASES[0].key, query_string: '', filter_settings: '', search_date: '' }); setSubmitted(false); setModal({ mode: 'add' }) }
   const openEdit = (s: any) => {
     setForm({ db_name: s.db_name, query_string: s.query_string ?? '', filter_settings: s.filter_settings ?? '', search_date: s.search_date ?? '' })
+    setSubmitted(false)
     setModal({ mode: 'edit', id: s.id })
   }
-  const submit = () => form.db_name && (modal?.mode === 'add' ? addMutation.mutate() : updateMutation.mutate())
+  const submit = () => {
+    setSubmitted(true)
+    if (!form.db_name) return
+    modal?.mode === 'add' ? addMutation.mutate() : updateMutation.mutate()
+  }
 
   return (
     <div className="max-w-2xl">
       <Card>
         <CardHeader title="Database Search Strings"
-          action={<button className="btn-secondary text-xs" onClick={() => { setForm({ db_name: '', query_string: '', filter_settings: '', search_date: '' }); setModal({ mode: 'add' }) }}>+ Add</button>} />
+          action={<button className="btn-secondary text-xs" onClick={openAdd}>+ Add</button>} />
         {strings.length === 0
           ? <EmptyState icon="—" message="No search strings defined." />
           : strings.map(s => (
             <div key={s.id} className="py-3 border-b border-border last:border-0">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-semibold text-navy uppercase tracking-wider">{s.db_name}</span>
+                <div className="flex items-center gap-2">
+                  <DatabaseBadge dbKey={s.db_name} />
+                  <span className="text-sm font-semibold text-navy">{DATABASES.find(d => d.key === s.db_name)?.label ?? s.db_name}</span>
+                </div>
                 <div className="flex gap-1">
                   <button className="btn-secondary text-xs px-2 py-1" onClick={() => openEdit(s)}>Edit</button>
-                  <button className="btn-danger text-xs px-2 py-1" onClick={() => delMutation.mutate(s.id)}>Remove</button>
+                  <button className="btn-danger text-xs px-2 py-1" onClick={() => setConfirmDelete(s.id)}>Remove</button>
                 </div>
               </div>
               {s.query_string && <p className="text-xs font-mono text-gray-600 bg-gray-50 p-2 rounded break-all">{s.query_string}</p>}
@@ -602,12 +788,22 @@ function SearchStringsTab({ pid }: { pid: number }) {
           ))}
       </Card>
 
+      {confirmDelete !== null && (
+        <ConfirmDialog
+          message="Remove this search string entry? This cannot be undone."
+          onConfirm={() => { delMutation.mutate(confirmDelete); setConfirmDelete(null) }}
+          onCancel={() => setConfirmDelete(null)}
+        />
+      )}
+
       {modal && (
         <Modal title={modal.mode === 'add' ? 'Add Search String' : 'Edit Search String'}
           onClose={() => setModal(null)} onEnter={submit} width="max-w-2xl">
-          <FormField label="Database Name">
-            <input className="input" placeholder="e.g. scopus, ieee, acm, dblp" value={form.db_name} autoFocus
-              onChange={e => setForm(f => ({ ...f, db_name: e.target.value }))} />
+          <FormField label="Database" required error={submitted && !form.db_name ? 'Select a database' : undefined}>
+            <select className="select" value={form.db_name}
+              onChange={e => setForm(f => ({ ...f, db_name: e.target.value }))}>
+              {DATABASES.map(d => <option key={d.key} value={d.key}>{d.label}</option>)}
+            </select>
           </FormField>
           <FormField label="Query String">
             <textarea className="textarea font-mono text-xs" rows={5} value={form.query_string}
@@ -622,7 +818,7 @@ function SearchStringsTab({ pid }: { pid: number }) {
               onChange={e => setForm(f => ({ ...f, search_date: e.target.value }))} />
           </FormField>
           <button className="btn-primary w-full justify-center mt-2"
-            disabled={!form.db_name || addMutation.isPending || updateMutation.isPending} onClick={submit}>
+            disabled={addMutation.isPending || updateMutation.isPending} onClick={submit}>
             {modal.mode === 'add' ? 'Add' : 'Save Changes'}
           </button>
         </Modal>

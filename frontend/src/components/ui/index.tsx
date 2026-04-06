@@ -182,6 +182,30 @@ export function CriterionRow({
   )
 }
 
+// ── Confirm Dialog ────────────────────────────────────────────────────────────
+
+export function ConfirmDialog({
+  message,
+  onConfirm,
+  onCancel,
+  confirmLabel = 'Delete',
+}: {
+  message: string
+  onConfirm: () => void
+  onCancel: () => void
+  confirmLabel?: string
+}) {
+  return (
+    <Modal title="Confirm" onClose={onCancel} onEnter={onConfirm}>
+      <p className="text-sm text-navy mb-5">{message}</p>
+      <div className="flex gap-2 justify-end">
+        <button className="btn-secondary" onClick={onCancel}>Cancel</button>
+        <button className="btn-danger" onClick={onConfirm}>{confirmLabel}</button>
+      </div>
+    </Modal>
+  )
+}
+
 // ── Phase coming-soon ─────────────────────────────────────────────────────────
 
 export function PhaseComingSoon({

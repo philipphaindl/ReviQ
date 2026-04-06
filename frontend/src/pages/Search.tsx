@@ -5,6 +5,7 @@ import {
   importBibFile, getImportStats, getDuplicates, overrideDedup, importReviewerDecisions,
 } from '../api/client'
 import { Card, CardHeader, StatCard, EmptyState } from '../components/ui'
+import { DATABASES, DatabaseBadge } from '../components/databases'
 import type { Paper } from '../api/types'
 
 export default function Search() {
@@ -12,7 +13,7 @@ export default function Search() {
   const qc = useQueryClient()
   const bibInputRef = useRef<HTMLInputElement>(null)
   const decisionsInputRef = useRef<HTMLInputElement>(null)
-  const [dbName, setDbName] = useState('')
+  const [dbName, setDbName] = useState(DATABASES[0].key)
   const [dbNameError, setDbNameError] = useState(false)
   const [importResult, setImportResult] = useState<any>(null)
   const [importDecResult, setImportDecResult] = useState<any>(null)
@@ -95,7 +96,12 @@ export default function Search() {
             <tbody className="divide-y divide-border">
               {sources.map(([source, counts]) => (
                 <tr key={source}>
-                  <td className="py-2 font-medium text-navy uppercase">{source}</td>
+                  <td className="py-2">
+                    <div className="flex items-center gap-2">
+                      <DatabaseBadge dbKey={source} size="sm" />
+                      <span className="font-medium text-navy">{DATABASES.find(d => d.key === source)?.label ?? source}</span>
+                    </div>
+                  </td>
                   <td className="py-2 text-right text-gray-600">{counts.total}</td>
                   <td className="py-2 text-right text-include font-medium">{counts.original}</td>
                   <td className="py-2 text-right text-uncertain">{counts.duplicate}</td>
@@ -143,16 +149,17 @@ export default function Search() {
         <div className="space-y-4 max-w-lg">
           <div>
             <label className="block text-xs font-semibold text-navy-muted uppercase tracking-wider mb-1.5">
-              Database Name <span className="text-exclude normal-case font-normal">*required</span>
+              Database <span className="text-exclude normal-case font-normal">* required</span>
             </label>
-            <input
-              className={`input ${dbNameError ? 'border-exclude ring-1 ring-exclude' : ''}`}
-              placeholder="e.g. scopus, ieee, acm, dblp"
+            <select
+              className={`select ${dbNameError ? 'border-exclude ring-1 ring-exclude' : ''}`}
               value={dbName}
-              onChange={e => { setDbName(e.target.value); if (e.target.value) setDbNameError(false) }}
-            />
+              onChange={e => { setDbName(e.target.value); setDbNameError(false) }}
+            >
+              {DATABASES.map(d => <option key={d.key} value={d.key}>{d.label}</option>)}
+            </select>
             {dbNameError && (
-              <p className="text-xs text-exclude mt-1">Enter a database name before selecting a file.</p>
+              <p className="text-xs text-exclude mt-1">Select a database before choosing a file.</p>
             )}
           </div>
           <div>

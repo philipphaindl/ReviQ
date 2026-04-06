@@ -310,6 +310,49 @@ def delete_taxonomy(project_id: int, entry_id: int, session: Session = Depends(g
     session.commit()
 
 
+@router.get("/projects/{project_id}/taxonomy-types")
+def list_taxonomy_types(project_id: int, session: Session = Depends(get_session)):
+    _require_project(project_id, session)
+    rows = session.exec(
+        select(TaxonomyEntry.taxonomy_type)
+        .where(TaxonomyEntry.project_id == project_id)
+        .distinct()
+    ).all()
+    return list(rows)
+
+
+class TaxonomyTypeRename(BaseModel):
+    new_type: str
+
+
+@router.put("/projects/{project_id}/taxonomy-types/{taxonomy_type}")
+def rename_taxonomy_type(project_id: int, taxonomy_type: str, body: TaxonomyTypeRename, session: Session = Depends(get_session)):
+    _require_project(project_id, session)
+    entries = session.exec(
+        select(TaxonomyEntry)
+        .where(TaxonomyEntry.project_id == project_id)
+        .where(TaxonomyEntry.taxonomy_type == taxonomy_type)
+    ).all()
+    for e in entries:
+        e.taxonomy_type = body.new_type
+        session.add(e)
+    session.commit()
+    return {"renamed": len(entries)}
+
+
+@router.delete("/projects/{project_id}/taxonomy-types/{taxonomy_type}", status_code=204)
+def delete_taxonomy_type(project_id: int, taxonomy_type: str, session: Session = Depends(get_session)):
+    _require_project(project_id, session)
+    entries = session.exec(
+        select(TaxonomyEntry)
+        .where(TaxonomyEntry.project_id == project_id)
+        .where(TaxonomyEntry.taxonomy_type == taxonomy_type)
+    ).all()
+    for e in entries:
+        session.delete(e)
+    session.commit()
+
+
 # ── Database Search Strings ───────────────────────────────────────────────────
 
 class SearchStringCreate(BaseModel):
