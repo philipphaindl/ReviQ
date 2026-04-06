@@ -83,9 +83,9 @@ export default function Overview() {
 
           {/* Row 2: database logos */}
           {usedDbs.length > 0 && (
-            <div className="card py-3 px-4 flex items-center gap-3 flex-wrap">
-              <span className="text-xs font-semibold text-navy-muted uppercase tracking-wider">Databases</span>
-              <div className="flex gap-2 flex-wrap">
+            <div className="card py-4 px-5 flex items-center gap-5 flex-wrap">
+              <span className="text-xs font-semibold text-navy-muted uppercase tracking-wider shrink-0">Databases</span>
+              <div className="flex items-center gap-6 flex-wrap">
                 {knownDbs.map(k => <DatabaseBadge key={k} dbKey={k} size="lg" />)}
                 {unknownDbs.map(k => <DatabaseBadge key={k} dbKey={k} size="lg" />)}
               </div>

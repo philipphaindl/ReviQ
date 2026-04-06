@@ -10,7 +10,7 @@ import {
   Card, CardHeader, StatCard, Modal, FormField,
   DecisionBadge, EmptyState, Badge,
 } from '../components/ui'
-import type { Paper, ConflictLog, KappaResult } from '../api/types'
+import type { Paper, ConflictLog } from '../api/types'
 
 type ScreeningView = 'papers' | 'conflicts' | 'kappa'
 
@@ -53,9 +53,9 @@ export default function Screening() {
 
 function PapersView({ pid }: { pid: number }) {
   const qc = useQueryClient()
+  const { reviewerId: globalReviewerId, setReviewerId: setGlobalReviewerId } = useProject()
   const [filter, setFilter] = useState<'all' | 'undecided' | 'I' | 'E' | 'U'>('all')
   const [selectedPaper, setSelectedPaper] = useState<Paper | null>(null)
-  const [reviewerId, setReviewerId] = useState<number | null>(null)
 
   const { data: papers = [] } = useQuery({
     queryKey: ['papers', pid, 'screening'],
@@ -74,8 +74,8 @@ function PapersView({ pid }: { pid: number }) {
     queryFn: () => getExclusionCriteria(pid),
   })
 
-  // Set default reviewer to R1
-  const activeReviewerId = reviewerId ?? reviewers.find(r => r.role === 'R1')?.id ?? reviewers[0]?.id
+  // Use global reviewer (set in NavBar), fall back to R1
+  const activeReviewerId = globalReviewerId ?? reviewers.find(r => r.role === 'R1')?.id ?? reviewers[0]?.id
 
   const decisionMutation = useMutation({
     mutationFn: (data: any) => addDecision(pid, selectedPaper!.id, data),
@@ -115,22 +115,6 @@ function PapersView({ pid }: { pid: number }) {
 
       {/* Toolbar */}
       <div className="flex items-center gap-3 flex-wrap">
-        {/* Reviewer selector */}
-        {reviewers.length > 0 && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-400">Screening as:</span>
-            <select
-              className="text-sm border border-border rounded-md px-2 py-1 text-navy"
-              value={activeReviewerId ?? ''}
-              onChange={e => setReviewerId(parseInt(e.target.value))}
-            >
-              {reviewers.map(r => (
-                <option key={r.id} value={r.id}>{r.role} – {r.name}</option>
-              ))}
-            </select>
-          </div>
-        )}
-
         {/* Filter buttons */}
         <div className="flex gap-1 ml-auto">
           {(['all', 'undecided', 'I', 'E', 'U'] as const).map(f => (
@@ -174,7 +158,6 @@ function PapersView({ pid }: { pid: number }) {
           paper={selectedPaper}
           inclusionCriteria={inclusions.filter(c => c.phase === 'screening')}
           exclusionCriteria={exclusions.filter(c => c.phase === 'screening')}
-          reviewerId={activeReviewerId!}
           onSubmit={(decision, criterion, rationale) => {
             decisionMutation.mutate({
               reviewer_id: activeReviewerId!,
@@ -186,16 +169,24 @@ function PapersView({ pid }: { pid: number }) {
           }}
           onClose={() => setSelectedPaper(null)}
           isPending={decisionMutation.isPending}
+          error={decisionMutation.isError ? 'Could not save decision. Make sure a reviewer is selected in the top bar.' : undefined}
         />
       )}
     </div>
   )
 }
 
+const LANG_NAMES: Record<string, string> = {
+  de: 'German', fr: 'French', es: 'Spanish', zh: 'Chinese', ja: 'Japanese',
+  pt: 'Portuguese', it: 'Italian', ru: 'Russian', ko: 'Korean', nl: 'Dutch',
+  pl: 'Polish', ar: 'Arabic', tr: 'Turkish', sv: 'Swedish', cs: 'Czech',
+}
+
 function PaperRow({ paper, onDecide }: { paper: Paper; onDecide: () => void }) {
   const [expanded, setExpanded] = useState(false)
   const dec = paper.final_decision?.decision
   const accentClass = dec === 'I' ? 'left-accent-include' : dec === 'E' ? 'left-accent-exclude' : dec === 'U' ? 'left-accent-uncertain' : 'left-accent-info'
+  const langName = paper.language && paper.language !== 'en' ? (LANG_NAMES[paper.language] ?? paper.language.toUpperCase()) : null
 
   return (
     <div className={`card pl-4 ${accentClass} cursor-pointer hover:shadow-card-hover transition-shadow`}>
@@ -203,7 +194,7 @@ function PaperRow({ paper, onDecide }: { paper: Paper; onDecide: () => void }) {
         <div className="flex-1 min-w-0" onClick={() => setExpanded(v => !v)}>
           <div className="flex items-start gap-2 flex-wrap">
             {dec ? <DecisionBadge decision={dec} /> : <Badge label="Undecided" variant="neutral" />}
-            {paper.language && paper.language !== 'en' && <Badge label={`⚠️ ${paper.language}`} variant="uncertain" />}
+            {langName && <Badge label={`Non-English: ${langName}`} variant="uncertain" />}
             <span className="text-xs text-gray-400">{paper.source} · {paper.year}</span>
           </div>
           <h3 className="text-sm font-medium text-navy mt-1 leading-snug">{paper.title}</h3>
@@ -227,42 +218,62 @@ function DecisionModal({
   paper,
   inclusionCriteria,
   exclusionCriteria,
-  reviewerId,
   onSubmit,
   onClose,
   isPending,
+  error,
 }: {
   paper: Paper
   inclusionCriteria: any[]
   exclusionCriteria: any[]
-  reviewerId: number
   onSubmit: (decision: string, criterion: string, rationale: string) => void
   onClose: () => void
   isPending: boolean
+  error?: string
 }) {
   const [decision, setDecision] = useState('')
   const [criterion, setCriterion] = useState('')
   const [rationale, setRationale] = useState('')
+  const [submitted, setSubmitted] = useState(false)
 
-  const criteria = decision === 'I' ? inclusionCriteria : decision === 'E' || decision === 'U' ? exclusionCriteria : []
+  const criteria = decision === 'I' ? inclusionCriteria : (decision === 'E' || decision === 'U') ? exclusionCriteria : []
+  const criteriaRequired = criteria.length > 0
+  const canSubmit = decision && (!criteriaRequired || criterion)
+
+  const handleSubmit = () => {
+    setSubmitted(true)
+    if (!decision) return
+    if (criteriaRequired && !criterion) return
+    onSubmit(decision, criterion, rationale)
+  }
 
   return (
-    <Modal title="Screening Decision" onClose={onClose} width="max-w-2xl">
-      {/* Paper info */}
-      <div className="bg-card rounded-md p-3 mb-4">
-        <p className="text-sm font-semibold text-navy mb-1">{paper.title}</p>
-        <p className="text-xs text-gray-400 mb-2">{paper.authors} · {paper.year} · {paper.source}</p>
-        {paper.abstract && (
-          <p className="text-xs text-gray-600 leading-relaxed max-h-32 overflow-y-auto">{paper.abstract}</p>
+    <Modal title="Screening Decision" onClose={onClose} width="max-w-2xl" onEnter={handleSubmit}>
+      {/* Paper info + abstract */}
+      <div className="bg-card rounded-md p-4 mb-4 border border-border">
+        <p className="text-sm font-semibold text-navy mb-1 leading-snug">{paper.title}</p>
+        <p className="text-xs text-gray-400 mb-3">{paper.authors} · {paper.year} · {paper.source}</p>
+        {paper.abstract ? (
+          <div className="border-t border-border pt-3">
+            <p className="text-xs font-semibold text-navy-muted uppercase tracking-wider mb-1.5">Abstract</p>
+            <p className="text-xs text-gray-600 leading-relaxed overflow-y-auto max-h-64">{paper.abstract}</p>
+          </div>
+        ) : (
+          <p className="text-xs text-gray-400 italic border-t border-border pt-3">No abstract available.</p>
+        )}
+        {paper.keywords && (
+          <p className="text-xs text-gray-400 mt-2 border-t border-border pt-2">
+            <span className="font-medium">Keywords:</span> {paper.keywords}
+          </p>
         )}
       </div>
 
-      {/* Decision buttons — keyboard: I / E / U */}
-      <FormField label="Decision">
+      {/* Decision buttons */}
+      <FormField label="Decision" required error={submitted && !decision ? 'Select a decision' : undefined}>
         <div className="flex gap-2">
           {(['I', 'E', 'U'] as const).map(d => (
             <button key={d}
-              onClick={() => { setDecision(d); setCriterion('') }}
+              onClick={() => { setDecision(d); setCriterion(''); setSubmitted(false) }}
               className={`flex-1 py-2.5 text-sm font-semibold rounded-md border transition-all ${
                 decision === d
                   ? d === 'I' ? 'bg-include text-white border-include'
@@ -276,10 +287,18 @@ function DecisionModal({
         </div>
       </FormField>
 
-      {/* Criterion dropdown */}
+      {/* Criterion dropdown — required when criteria are configured */}
       {decision && criteria.length > 0 && (
-        <FormField label={decision === 'I' ? 'Inclusion Criterion' : 'Exclusion / Reason Criterion'}>
-          <select className="select" value={criterion} onChange={e => setCriterion(e.target.value)}>
+        <FormField
+          label={decision === 'I' ? 'Inclusion Criterion' : 'Exclusion Criterion'}
+          required
+          error={submitted && criteriaRequired && !criterion ? 'Select a criterion' : undefined}
+        >
+          <select
+            className={`select ${submitted && criteriaRequired && !criterion ? 'border-exclude ring-1 ring-exclude' : ''}`}
+            value={criterion}
+            onChange={e => setCriterion(e.target.value)}
+          >
             <option value="">— Select criterion —</option>
             {criteria.map(c => (
               <option key={c.id} value={c.label}>{c.label}: {c.description}</option>
@@ -291,20 +310,22 @@ function DecisionModal({
       {/* Rationale */}
       {decision && (
         <FormField label={`Rationale ${decision === 'I' ? '(optional)' : '(recommended)'}`}>
-          <textarea className="textarea" rows={3} value={rationale}
+          <textarea className="textarea" rows={2} value={rationale}
             onChange={e => setRationale(e.target.value)}
             placeholder="Brief justification for this decision…" />
         </FormField>
       )}
 
+      {error && <p className="text-xs text-exclude mb-2">{error}</p>}
+
       <div className="flex gap-2 mt-2">
         <button className="btn-secondary flex-1 justify-center" onClick={onClose}>Cancel</button>
         <button
-          className={`flex-1 justify-center btn ${
-            decision === 'I' ? 'btn-include' : decision === 'E' ? 'btn-exclude' : 'btn-uncertain'
+          className={`flex-1 justify-center ${
+            !decision ? 'btn-primary' : decision === 'I' ? 'btn-include' : decision === 'E' ? 'btn-exclude' : 'btn-uncertain'
           }`}
-          disabled={!decision || isPending}
-          onClick={() => onSubmit(decision, criterion, rationale)}
+          disabled={isPending}
+          onClick={handleSubmit}
         >
           {isPending ? 'Saving…' : 'Confirm Decision'}
         </button>

@@ -1,11 +1,11 @@
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useProject } from '../../App'
 import { useQuery } from '@tanstack/react-query'
-import { getProject } from '../../api/client'
+import { getProject, getReviewers } from '../../api/client'
 
 export default function NavBar() {
   const navigate = useNavigate()
-  const { projectId } = useProject()
+  const { projectId, reviewerId, setReviewerId } = useProject()
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
@@ -13,12 +13,22 @@ export default function NavBar() {
     enabled: !!projectId,
   })
 
+  const { data: reviewers = [] } = useQuery({
+    queryKey: ['reviewers', projectId],
+    queryFn: () => getReviewers(projectId!),
+    enabled: !!projectId,
+  })
+
+  // Auto-select R1 if no reviewer chosen yet
+  const activeReviewerId = reviewerId ?? reviewers.find(r => r.role === 'R1')?.id ?? reviewers[0]?.id ?? null
+  const activeReviewer = reviewers.find(r => r.id === activeReviewerId)
+
   return (
     <nav className="bg-white border-b border-border sticky top-0 z-50 h-12 flex items-center px-6 gap-4">
       {/* Logo */}
       <button
         onClick={() => navigate('/')}
-        className="flex items-center gap-2 font-bold text-navy text-base tracking-tight hover:opacity-80 transition-opacity"
+        className="flex items-center gap-2 font-bold text-navy text-base tracking-tight hover:opacity-80 transition-opacity shrink-0"
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
@@ -30,9 +40,38 @@ export default function NavBar() {
       {/* Project name */}
       {project && (
         <>
-          <span className="text-border">|</span>
-          <span className="text-xs text-navy-muted truncate max-w-[240px]">{project.title}</span>
+          <span className="text-border shrink-0">|</span>
+          <span className="text-xs text-navy-muted truncate max-w-[200px] shrink-0">{project.title}</span>
         </>
+      )}
+
+      <div className="flex-1" />
+
+      {/* Reviewer role selector */}
+      {reviewers.length > 0 && (
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-xs text-gray-400 hidden sm:block">Reviewing as:</span>
+          <select
+            className="text-xs border border-border rounded-md px-2 py-1 text-navy bg-white font-medium"
+            value={activeReviewerId ?? ''}
+            onChange={e => setReviewerId(parseInt(e.target.value))}
+          >
+            {reviewers.map(r => (
+              <option key={r.id} value={r.id}>
+                {r.role} – {r.name}
+              </option>
+            ))}
+          </select>
+          {activeReviewer && (
+            <span className={`text-xs font-bold px-2 py-0.5 rounded border ${
+              activeReviewer.role === 'R1'
+                ? 'bg-blue-50 text-info border-blue-200'
+                : 'bg-gray-50 text-gray-600 border-gray-200'
+            }`}>
+              {activeReviewer.role}
+            </span>
+          )}
+        </div>
       )}
     </nav>
   )

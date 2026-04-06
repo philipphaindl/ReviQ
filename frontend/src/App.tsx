@@ -13,11 +13,15 @@ import { EligibilityStub, SnowballingStub, QualityStub, ExtractionStub, ResultsS
 interface ProjectContextValue {
   projectId: number | null
   setProjectId: (id: number | null) => void
+  reviewerId: number | null
+  setReviewerId: (id: number | null) => void
 }
 
 export const ProjectContext = createContext<ProjectContextValue>({
   projectId: null,
   setProjectId: () => {},
+  reviewerId: null,
+  setReviewerId: () => {},
 })
 
 export const useProject = () => useContext(ProjectContext)
@@ -30,14 +34,33 @@ export default function App() {
     return stored ? parseInt(stored, 10) : null
   })
 
+  const [reviewerId, setReviewerId] = useState<number | null>(() => {
+    const stored = localStorage.getItem('reviq_reviewer_id')
+    return stored ? parseInt(stored, 10) : null
+  })
+
   const handleSetProjectId = (id: number | null) => {
     setProjectId(id)
     if (id) localStorage.setItem('reviq_project_id', String(id))
     else localStorage.removeItem('reviq_project_id')
+    // Reset reviewer when switching projects
+    setReviewerId(null)
+    localStorage.removeItem('reviq_reviewer_id')
+  }
+
+  const handleSetReviewerId = (id: number | null) => {
+    setReviewerId(id)
+    if (id) localStorage.setItem('reviq_reviewer_id', String(id))
+    else localStorage.removeItem('reviq_reviewer_id')
   }
 
   return (
-    <ProjectContext.Provider value={{ projectId, setProjectId: handleSetProjectId }}>
+    <ProjectContext.Provider value={{
+      projectId,
+      setProjectId: handleSetProjectId,
+      reviewerId,
+      setReviewerId: handleSetReviewerId,
+    }}>
       <BrowserRouter>
         <div className="min-h-screen bg-white flex flex-col">
           <NavBar />

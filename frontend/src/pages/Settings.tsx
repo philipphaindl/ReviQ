@@ -78,21 +78,28 @@ function ProjectTab({ pid }: { pid: number }) {
   const qc = useQueryClient()
   const { data: project } = useQuery({ queryKey: ['project', pid], queryFn: () => getProject(pid) })
   const [form, setForm] = useState<Record<string, string | number>>({})
+  const [submitted, setSubmitted] = useState(false)
   const mutation = useMutation({
     mutationFn: (data: any) => updateProject(pid, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['project', pid] }); setForm({}) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['project', pid] }); setForm({}); setSubmitted(false) },
   })
 
   if (!project) return null
   const val = (key: string) => (key in form ? form[key] : (project as any)[key])
-  const save = () => Object.keys(form).length > 0 && mutation.mutate(form)
+  const currentTitle = val('title') as string
+  const save = () => {
+    setSubmitted(true)
+    if (!currentTitle?.trim()) return
+    if (Object.keys(form).length > 0) mutation.mutate(form)
+  }
 
   return (
     <div className="max-w-xl space-y-4">
       <Card>
         <CardHeader title="Project Details" />
-        <FormField label="Title">
-          <input className="input" value={val('title') as string}
+        <FormField label="Title" required error={submitted && !currentTitle?.trim() ? 'Title is required' : undefined}>
+          <input className={`input ${submitted && !currentTitle?.trim() ? 'border-exclude ring-1 ring-exclude' : ''}`}
+            value={currentTitle}
             onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
             onKeyDown={e => e.key === 'Enter' && save()} />
         </FormField>
@@ -129,7 +136,7 @@ function ProjectTab({ pid }: { pid: number }) {
       </Card>
 
       <div className="flex items-center gap-3">
-        <button className="btn-primary" disabled={mutation.isPending || Object.keys(form).length === 0} onClick={save}>
+        <button className="btn-primary" disabled={mutation.isPending} onClick={save}>
           {mutation.isPending ? 'Saving…' : 'Save Changes'}
         </button>
         {mutation.isSuccess && <span className="text-xs text-include">Saved</span>}
