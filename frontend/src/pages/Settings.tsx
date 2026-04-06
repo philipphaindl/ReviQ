@@ -731,7 +731,7 @@ function SearchStringsTab({ pid }: { pid: number }) {
   const qc = useQueryClient()
   const { data: strings = [] } = useQuery({ queryKey: ['search-strings', pid], queryFn: () => getSearchStrings(pid) })
   const [modal, setModal] = useState<{ mode: 'add' | 'edit'; id?: number } | null>(null)
-  const [form, setForm] = useState({ db_name: DATABASES[0].key, query_string: '', filter_settings: '', search_date: '' })
+  const [form, setForm] = useState<{ db_name: string; query_string: string; filter_settings: string; search_date: string }>({ db_name: DATABASES[0].key, query_string: '', filter_settings: '', search_date: '' })
   const [submitted, setSubmitted] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null)
 

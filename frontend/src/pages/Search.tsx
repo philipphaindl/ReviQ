@@ -13,7 +13,7 @@ export default function Search() {
   const qc = useQueryClient()
   const bibInputRef = useRef<HTMLInputElement>(null)
   const decisionsInputRef = useRef<HTMLInputElement>(null)
-  const [dbName, setDbName] = useState(DATABASES[0].key)
+  const [dbName, setDbName] = useState<string>(DATABASES[0].key)
   const [dbNameError, setDbNameError] = useState(false)
   const [importResult, setImportResult] = useState<any>(null)
   const [importDecResult, setImportDecResult] = useState<any>(null)
