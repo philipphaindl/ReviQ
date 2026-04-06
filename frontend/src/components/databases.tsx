@@ -1,13 +1,14 @@
-import type { FC } from 'react'
+import type { CSSProperties } from 'react'
 
-// Supported academic databases with SVG logo components
+// Supported academic databases
 
 export const DATABASES = [
-  { key: 'springerlink', label: 'Springer Link'    },
-  { key: 'ieee',         label: 'IEEE Xplore'      },
-  { key: 'scopus',       label: 'Scopus'           },
-  { key: 'acm',          label: 'ACM Digital Library' },
+  { key: 'springerlink', label: 'SpringerLink'         },
+  { key: 'ieee',         label: 'IEEE Xplore'          },
+  { key: 'scopus',       label: 'Elsevier Scopus'      },
+  { key: 'acm',          label: 'ACM Digital Library'  },
   { key: 'wiley',        label: 'Wiley Online Library' },
+  { key: 'dblp',         label: 'DBLP Library'         },
 ] as const
 
 export type DatabaseKey = (typeof DATABASES)[number]['key']
@@ -16,52 +17,46 @@ export function dbByKey(key: string) {
   return DATABASES.find(d => d.key === key)
 }
 
-// PNG file mapping: database key → public asset path
-const LOGO_PNGS: Record<string, string> = {
-  springerlink: '/springer.png',
-  ieee:         '/ieee.png',
-  scopus:       '/scopus.png',
-  acm:          '/acm.png',
-  wiley:        '/wiley.png',
+// Brand color palette — background / text
+const DB_COLORS: Record<string, { bg: string; text: string }> = {
+  springerlink: { bg: '#E8501A', text: '#fff'     },  // Springer orange
+  ieee:         { bg: '#00629B', text: '#fff'     },  // IEEE blue
+  scopus:       { bg: '#E87722', text: '#fff'     },  // Elsevier orange
+  acm:          { bg: '#B00020', text: '#fff'     },  // ACM red
+  wiley:        { bg: '#003057', text: '#fff'     },  // Wiley navy
+  dblp:         { bg: '#004F9F', text: '#fff'     },  // DBLP blue
 }
 
 // ── DatabaseBadge ─────────────────────────────────────────────────────────────
 
-/** Shows a PNG logo for known databases, or a plain text pill for unknown ones. */
+/** Coloured pill badge for a database. Falls back to a neutral grey pill for unknown keys. */
 export function DatabaseBadge({ dbKey, size = 'md' }: { dbKey: string; size?: 'sm' | 'md' | 'lg' }) {
-  const pngSrc = LOGO_PNGS[dbKey]
-  const height = size === 'lg' ? 32 : size === 'md' ? 24 : 18
+  const db = dbByKey(dbKey)
+  const label = db?.label ?? dbKey
+  const colors = DB_COLORS[dbKey] ?? { bg: '#6B7280', text: '#fff' }
 
-  if (pngSrc) {
-    return (
-      <span
-        title={dbByKey(dbKey)?.label ?? dbKey}
-        className="inline-flex items-center"
-        style={{ lineHeight: 0 }}
-      >
-        <img
-          src={pngSrc}
-          alt={dbByKey(dbKey)?.label ?? dbKey}
-          height={height}
-          style={{ height, width: 'auto', display: 'block' }}
-        />
-      </span>
-    )
+  const sizeStyles: Record<string, CSSProperties> = {
+    sm: { fontSize: 9,  padding: '2px 6px',  borderRadius: 5  },
+    md: { fontSize: 11, padding: '3px 8px',  borderRadius: 6  },
+    lg: { fontSize: 13, padding: '4px 11px', borderRadius: 7  },
   }
 
-  // Unknown database — plain pill
   return (
     <span
-      className="inline-flex items-center rounded font-bold uppercase tracking-wider"
+      title={label}
       style={{
-        fontSize: size === 'lg' ? 11 : size === 'md' ? 10 : 8,
-        padding: size === 'lg' ? '3px 8px' : '2px 5px',
-        background: '#F0F0F0',
-        color: '#555',
-        border: '1px solid #DDD',
+        display: 'inline-flex',
+        alignItems: 'center',
+        fontFamily: 'system-ui, sans-serif',
+        fontWeight: 600,
+        letterSpacing: '0.01em',
+        whiteSpace: 'nowrap',
+        backgroundColor: colors.bg,
+        color: colors.text,
+        ...sizeStyles[size],
       }}
     >
-      {dbKey}
+      {label}
     </span>
   )
 }

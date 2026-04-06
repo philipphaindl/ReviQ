@@ -63,8 +63,6 @@ export default function Overview() {
       {/* Active project stats */}
       {activeProject && stats && (
         <div className="space-y-3">
-          <p className="section-title">Active Project — {activeProject.title}</p>
-
           {/* Row 1: 6 stat boxes */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <StatCard label="Retrieved"          value={stats.total_retrieved} />

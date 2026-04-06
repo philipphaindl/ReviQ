@@ -533,7 +533,7 @@ function TaxonomiesTab({ pid }: { pid: number }) {
   const activeLabel = allTypes.find(t => t.key === activeKey)?.label ?? activeKey
 
   const [modal, setModal] = useState<TaxonomyModal | null>(null)
-  const [catForm, setCatForm] = useState({ key: '', label: '' })
+  const [catForm, setCatForm] = useState({ label: '' })
   const [catSubmitted, setCatSubmitted] = useState(false)
   const [entryValue, setEntryValue] = useState('')
   const [entrySubmitted, setEntrySubmitted] = useState(false)
@@ -591,10 +591,9 @@ function TaxonomiesTab({ pid }: { pid: number }) {
 
   const submitAddCategory = () => {
     setCatSubmitted(true)
-    if (!catForm.key.trim() || !catForm.label.trim()) return
-    // New category is created implicitly by adding first entry
-    // Just switch to that type; user then adds entries
-    const newKey = catForm.key.trim().toLowerCase().replace(/\s+/g, '_')
+    if (!catForm.label.trim()) return
+    // Key is auto-derived from label; category is created implicitly on first entry add
+    const newKey = catForm.label.trim().toLowerCase().replace(/\s+/g, '_')
     setActiveKey(newKey)
     setModal(null)
     setCatSubmitted(false)
@@ -603,7 +602,7 @@ function TaxonomiesTab({ pid }: { pid: number }) {
   const submitEditCategory = (oldKey: string) => {
     setCatSubmitted(true)
     if (!catForm.label.trim()) return
-    const newKey = catForm.key.trim().toLowerCase().replace(/\s+/g, '_')
+    const newKey = catForm.label.trim().toLowerCase().replace(/\s+/g, '_')
     renameCatMutation.mutate({ oldKey, newKey })
   }
 
@@ -620,7 +619,7 @@ function TaxonomiesTab({ pid }: { pid: number }) {
         <CardHeader
           title="Taxonomy Categories"
           action={
-            <button className="btn-secondary text-xs" onClick={() => { setCatForm({ key: '', label: '' }); setCatSubmitted(false); setModal({ kind: 'add-category' }) }}>
+            <button className="btn-secondary text-xs" onClick={() => { setCatForm({ label: '' }); setCatSubmitted(false); setModal({ kind: 'add-category' }) }}>
               + New Category
             </button>
           }
@@ -632,7 +631,7 @@ function TaxonomiesTab({ pid }: { pid: number }) {
               <span className={`text-sm font-medium ${activeKey === t.key ? 'text-info' : 'text-navy'}`}>{t.label}</span>
               <div className="flex gap-1" onClick={e => e.stopPropagation()}>
                 <button className="btn-secondary text-xs px-2 py-0.5"
-                  onClick={() => { setCatForm({ key: t.key, label: t.label }); setCatSubmitted(false); setModal({ kind: 'edit-category', key: t.key, label: t.label }) }}>
+                  onClick={() => { setCatForm({ label: t.label }); setCatSubmitted(false); setModal({ kind: 'edit-category', key: t.key, label: t.label }) }}>
                   Edit
                 </button>
                 <button className="btn-danger text-xs px-2 py-0.5"
@@ -699,14 +698,9 @@ function TaxonomiesTab({ pid }: { pid: number }) {
       {/* Modals */}
       {modal?.kind === 'add-category' && (
         <Modal title="New Taxonomy Category" onClose={() => setModal(null)} onEnter={submitAddCategory}>
-          <FormField label="Key (internal, e.g. venue_type)" required error={catSubmitted && !catForm.key.trim() ? 'Key is required' : undefined}>
-            <input className={`input ${catSubmitted && !catForm.key.trim() ? 'border-exclude ring-1 ring-exclude' : ''}`}
-              placeholder="venue_type" value={catForm.key} autoFocus
-              onChange={e => setCatForm(f => ({ ...f, key: e.target.value }))} />
-          </FormField>
-          <FormField label="Display Name" required error={catSubmitted && !catForm.label.trim() ? 'Display name is required' : undefined}>
+          <FormField label="Category Name" required error={catSubmitted && !catForm.label.trim() ? 'Category name is required' : undefined}>
             <input className={`input ${catSubmitted && !catForm.label.trim() ? 'border-exclude ring-1 ring-exclude' : ''}`}
-              placeholder="Venue Type" value={catForm.label}
+              placeholder="e.g. Venue Type" value={catForm.label} autoFocus
               onChange={e => setCatForm(f => ({ ...f, label: e.target.value }))} />
           </FormField>
           <button className="btn-primary w-full justify-center mt-2" onClick={submitAddCategory}>
