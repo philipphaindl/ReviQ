@@ -5,7 +5,7 @@ import {
   importBibFile, getImportStats, getDuplicates, overrideDedup, importReviewerDecisions,
 } from '../api/client'
 import { Card, CardHeader, StatCard, EmptyState } from '../components/ui'
-import { DATABASES, DatabaseBadge } from '../components/databases'
+import { DATABASES, DatabaseBadge, normalizeDbKey } from '../components/databases'
 import type { Paper } from '../api/types'
 
 export default function Search() {
@@ -97,10 +97,7 @@ export default function Search() {
               {sources.map(([source, counts]) => (
                 <tr key={source}>
                   <td className="py-2">
-                    <div className="flex items-center gap-2">
-                      <DatabaseBadge dbKey={source} size="sm" />
-                      <span className="font-medium text-navy">{DATABASES.find(d => d.key === source)?.label ?? source}</span>
-                    </div>
+                    <DatabaseBadge dbKey={normalizeDbKey(source)} size="sm" />
                   </td>
                   <td className="py-2 text-right text-gray-600">{counts.total}</td>
                   <td className="py-2 text-right text-include font-medium">{counts.original}</td>

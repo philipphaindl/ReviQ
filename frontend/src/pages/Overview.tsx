@@ -87,7 +87,7 @@ export default function Overview() {
           {configuredDbs.length > 0 && (
             <div className="card py-4 px-5 flex items-center gap-5 flex-wrap">
               <span className="text-xs font-semibold text-navy-muted uppercase tracking-wider shrink-0">Databases</span>
-              <div className="flex items-center gap-8 flex-wrap">
+              <div className="flex items-center gap-3 flex-wrap">
                 {configuredDbs.map(k => <DatabaseBadge key={k} dbKey={k} size="lg" />)}
               </div>
             </div>

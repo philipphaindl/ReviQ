@@ -416,7 +416,7 @@ function ConflictsView({ pid }: { pid: number }) {
 
       {conflicts.length === 0 ? (
         <Card>
-          <EmptyState icon="✅" message="No open conflicts. All screening decisions are in agreement." />
+          <EmptyState icon="—" message="No open conflicts. All screening decisions are in agreement." />
         </Card>
       ) : (
         <Card>
