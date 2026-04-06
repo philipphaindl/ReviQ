@@ -665,8 +665,8 @@ function TaxonomiesTab({ pid }: { pid: number }) {
                           if (ev.key === 'Escape') setEditingEntryId(null)
                         }} />
                       <button className="btn-primary text-xs px-2 py-1 shrink-0"
-                        disabled={editEntryMutation.isPending}
-                        onClick={() => editEntryValue.trim() && editEntryMutation.mutate({ id: e.id, value: editEntryValue.trim() })}>Save</button>
+                        disabled={!editEntryValue.trim() || editEntryMutation.isPending}
+                        onClick={() => editEntryMutation.mutate({ id: e.id, value: editEntryValue.trim() })}>Save</button>
                       <button className="btn-secondary text-xs px-2 py-1 shrink-0" onClick={() => setEditingEntryId(null)}>Cancel</button>
                     </>
                   ) : (
@@ -772,7 +772,16 @@ function SearchStringsTab({ pid }: { pid: number }) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['search-strings', pid] }),
   })
 
-  const openAdd = () => { setForm({ db_name: DATABASES[0].key, query_string: '', filter_settings: '', search_date: '' }); setSubmitted(false); setModal({ mode: 'add' }) }
+  // Databases already configured (for dedup check)
+  const usedKeys = strings.map(s => s.db_name)
+
+  const openAdd = () => {
+    // Pre-select first database not yet used
+    const firstAvailable = DATABASES.find(d => !usedKeys.includes(d.key))?.key ?? DATABASES[0].key
+    setForm({ db_name: firstAvailable, query_string: '', filter_settings: '', search_date: '' })
+    setSubmitted(false)
+    setModal({ mode: 'add' })
+  }
   const openEdit = (s: any) => {
     setForm({ db_name: s.db_name, query_string: s.query_string ?? '', filter_settings: s.filter_settings ?? '', search_date: s.search_date ?? '' })
     setSubmitted(false)
@@ -780,33 +789,44 @@ function SearchStringsTab({ pid }: { pid: number }) {
   }
   const submit = () => {
     setSubmitted(true)
-    if (!form.db_name) return
+    if (!form.db_name || !form.query_string.trim()) return
     modal?.mode === 'add' ? addMutation.mutate() : updateMutation.mutate()
   }
+
+  // For the add modal: only show databases not yet configured
+  const availableDbs = modal?.mode === 'edit'
+    ? DATABASES  // when editing, show all (the current db is already in the list)
+    : DATABASES.filter(d => !usedKeys.includes(d.key) || d.key === form.db_name)
 
   return (
     <div className="max-w-2xl">
       <Card>
         <CardHeader title="Database Search Strings"
-          action={<button className="btn-secondary text-xs" onClick={openAdd}>+ Add</button>} />
+          action={usedKeys.length < DATABASES.length
+            ? <button className="btn-secondary text-xs" onClick={openAdd}>+ Add</button>
+            : null} />
         {strings.length === 0
           ? <EmptyState icon="—" message="No search strings defined." />
           : strings.map(s => (
-            <div key={s.id} className="py-3 border-b border-border last:border-0">
-              <div className="flex items-center justify-between mb-1">
-                <div className="flex items-center gap-2">
-                  <DatabaseBadge dbKey={s.db_name} />
-                  <span className="text-sm font-semibold text-navy">{DATABASES.find(d => d.key === s.db_name)?.label ?? s.db_name}</span>
+            <div key={s.id} className="py-4 border-b border-border last:border-0">
+              <div className="flex items-start justify-between gap-3">
+                {/* Logo only — no redundant text label */}
+                <div className="shrink-0 flex items-center" style={{ minWidth: 140 }}>
+                  <DatabaseBadge dbKey={s.db_name} size="lg" />
                 </div>
-                <div className="flex gap-1">
+                <div className="flex-1 min-w-0">
+                  {s.query_string
+                    ? <p className="text-xs font-mono text-gray-600 bg-gray-50 p-2 rounded break-all leading-relaxed">{s.query_string}</p>
+                    : <p className="text-xs text-gray-400 italic">No query string</p>}
+                  <div className="flex gap-4 mt-1.5">
+                    {s.filter_settings && <span className="text-xs text-gray-400">Filter: {s.filter_settings}</span>}
+                    {s.search_date && <span className="text-xs text-gray-400">Searched: {s.search_date}</span>}
+                  </div>
+                </div>
+                <div className="flex gap-1 shrink-0">
                   <button className="btn-secondary text-xs px-2 py-1" onClick={() => openEdit(s)}>Edit</button>
                   <button className="btn-danger text-xs px-2 py-1" onClick={() => setConfirmDelete(s.id)}>Remove</button>
                 </div>
-              </div>
-              {s.query_string && <p className="text-xs font-mono text-gray-600 bg-gray-50 p-2 rounded break-all">{s.query_string}</p>}
-              <div className="flex gap-4 mt-1">
-                {s.filter_settings && <span className="text-xs text-gray-400">Filter: {s.filter_settings}</span>}
-                {s.search_date && <span className="text-xs text-gray-400">Date: {s.search_date}</span>}
               </div>
             </div>
           ))}
@@ -826,11 +846,13 @@ function SearchStringsTab({ pid }: { pid: number }) {
           <FormField label="Database" required error={submitted && !form.db_name ? 'Select a database' : undefined}>
             <select className="select" value={form.db_name}
               onChange={e => setForm(f => ({ ...f, db_name: e.target.value }))}>
-              {DATABASES.map(d => <option key={d.key} value={d.key}>{d.label}</option>)}
+              {availableDbs.map(d => <option key={d.key} value={d.key}>{d.label}</option>)}
             </select>
           </FormField>
-          <FormField label="Query String">
-            <textarea className="textarea font-mono text-xs" rows={5} value={form.query_string}
+          <FormField label="Query String" required error={submitted && !form.query_string.trim() ? 'Query string is required' : undefined}>
+            <textarea className={`textarea font-mono text-xs ${submitted && !form.query_string.trim() ? 'border-exclude ring-1 ring-exclude' : ''}`}
+              rows={5} value={form.query_string}
+              placeholder={'TITLE-ABS-KEY( "your terms" )'}
               onChange={e => setForm(f => ({ ...f, query_string: e.target.value }))} />
           </FormField>
           <FormField label="Filter Settings">

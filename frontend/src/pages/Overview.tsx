@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { useProject } from '../App'
-import { getProjects, createProject, getExportStats, getImportStats } from '../api/client'
+import { getProjects, createProject, getExportStats, getImportStats, getSearchStrings } from '../api/client'
 import { StatCard, Card, CardHeader, EmptyState, Modal, FormField, ConfirmDialog } from '../components/ui'
 import { DatabaseBadge, DATABASES } from '../components/databases'
 import { useState } from 'react'
@@ -29,6 +29,12 @@ export default function Overview() {
     enabled: !!projectId,
   })
 
+  const { data: searchStrings = [] } = useQuery({
+    queryKey: ['search-strings', projectId],
+    queryFn: () => getSearchStrings(projectId!),
+    enabled: !!projectId,
+  })
+
   const createMutation = useMutation({
     mutationFn: createProject,
     onSuccess: (p: Project) => {
@@ -49,10 +55,8 @@ export default function Overview() {
     createMutation.mutate(form)
   }
 
-  // Databases used in this project (from import stats)
-  const usedDbs = importStats ? Object.keys(importStats.by_source) : []
-  const knownDbs = usedDbs.filter(k => DATABASES.some(d => d.key === k))
-  const unknownDbs = usedDbs.filter(k => !DATABASES.some(d => d.key === k))
+  // Databases configured in Setup → Search Strings (always have proper keys)
+  const configuredDbs = searchStrings.map(s => s.db_name)
 
   return (
     <div className="space-y-6">
@@ -81,13 +85,12 @@ export default function Overview() {
             />
           </div>
 
-          {/* Row 2: database logos */}
-          {usedDbs.length > 0 && (
+          {/* Row 2: database logos from configured search strings */}
+          {configuredDbs.length > 0 && (
             <div className="card py-4 px-5 flex items-center gap-5 flex-wrap">
               <span className="text-xs font-semibold text-navy-muted uppercase tracking-wider shrink-0">Databases</span>
-              <div className="flex items-center gap-6 flex-wrap">
-                {knownDbs.map(k => <DatabaseBadge key={k} dbKey={k} size="lg" />)}
-                {unknownDbs.map(k => <DatabaseBadge key={k} dbKey={k} size="lg" />)}
+              <div className="flex items-center gap-8 flex-wrap">
+                {configuredDbs.map(k => <DatabaseBadge key={k} dbKey={k} size="lg" />)}
               </div>
             </div>
           )}

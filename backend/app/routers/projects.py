@@ -44,6 +44,10 @@ def create_project(body: ProjectCreate, session: Session = Depends(get_session))
     session.add(project)
     session.commit()
     session.refresh(project)
+    # Auto-create R1 (lead reviewer) using the lead researcher's name
+    r1 = Reviewer(project_id=project.id, name=body.lead_researcher, role='R1')
+    session.add(r1)
+    session.commit()
     return project
 
 
