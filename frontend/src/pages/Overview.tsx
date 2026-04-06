@@ -1,9 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { useProject } from '../App'
-import { getProjects, createProject, getExportStats, getImportStats, getSearchStrings } from '../api/client'
+import { getProjects, createProject, getExportStats, getImportStats, getSearchStrings, deleteProject, exportProjectUrl } from '../api/client'
 import { StatCard, Card, CardHeader, EmptyState, Modal, FormField, ConfirmDialog } from '../components/ui'
-import { DatabaseBadge, DATABASES } from '../components/databases'
+import { DatabaseBadge } from '../components/databases'
 import { useState } from 'react'
 import type { Project } from '../api/types'
 
@@ -14,18 +14,13 @@ export default function Overview() {
   const [showCreate, setShowCreate] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [form, setForm] = useState({ title: '', lead_researcher: '', description: '' })
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
 
   const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: getProjects })
 
   const { data: stats } = useQuery({
     queryKey: ['export-stats', projectId],
     queryFn: () => getExportStats(projectId!),
-    enabled: !!projectId,
-  })
-
-  const { data: importStats } = useQuery({
-    queryKey: ['import-stats', projectId],
-    queryFn: () => getImportStats(projectId!),
     enabled: !!projectId,
   })
 
@@ -46,7 +41,17 @@ export default function Overview() {
     },
   })
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => deleteProject(id),
+    onSuccess: (_data, id) => {
+      qc.invalidateQueries({ queryKey: ['projects'] })
+      if (projectId === id) setProjectId(null)
+      setConfirmDeleteId(null)
+    },
+  })
+
   const activeProject = projects.find(p => p.id === projectId)
+  const confirmDeleteProject = projects.find(p => p.id === confirmDeleteId)
 
   const openCreate = () => { setForm({ title: '', lead_researcher: '', description: '' }); setSubmitted(false); setShowCreate(true) }
   const submitCreate = () => {
@@ -55,7 +60,6 @@ export default function Overview() {
     createMutation.mutate(form)
   }
 
-  // Databases configured in Setup → Search Strings (always have proper keys)
   const configuredDbs = searchStrings.map(s => s.db_name)
 
   return (
@@ -63,7 +67,6 @@ export default function Overview() {
       {/* Active project stats */}
       {activeProject && stats && (
         <div className="space-y-3">
-          {/* Row 1: 6 stat boxes */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <StatCard label="Retrieved"          value={stats.total_retrieved} />
             <StatCard label="Unique"             value={stats.total_unique} />
@@ -83,7 +86,6 @@ export default function Overview() {
             />
           </div>
 
-          {/* Row 2: database logos from configured search strings */}
           {configuredDbs.length > 0 && (
             <div className="card py-4 px-5 flex items-center gap-5 flex-wrap">
               <span className="text-xs font-semibold text-navy-muted uppercase tracking-wider shrink-0">Databases</span>
@@ -110,23 +112,33 @@ export default function Overview() {
         ) : (
           <div className="divide-y divide-border">
             {projects.map(p => (
-              <div key={p.id} className="py-3 flex items-center justify-between">
-                <div>
+              <div key={p.id} className="py-3 flex items-center justify-between gap-3">
+                <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-navy">{p.title}</p>
                   <p className="text-xs text-gray-400">
                     {p.lead_researcher} · {new Date(p.created_at).toLocaleDateString()}
                   </p>
                 </div>
-                <div className="flex gap-2 items-center">
+                <div className="flex gap-2 items-center shrink-0">
                   {p.id === projectId ? (
                     <span className="phase-badge bg-blue-50 text-info border border-blue-200 font-semibold">Active</span>
                   ) : (
                     <button className="btn-primary text-xs" onClick={() => setProjectId(p.id)}>
-                      Switch to this project
+                      Switch
                     </button>
                   )}
                   <button className="btn-secondary text-xs" onClick={() => { setProjectId(p.id); navigate('/setup') }}>
                     Setup
+                  </button>
+                  <a
+                    href={exportProjectUrl(p.id)}
+                    download={`${p.title.replace(/\s+/g, '_')}_export.json`}
+                    className="btn-secondary text-xs"
+                  >
+                    ↓ Export
+                  </a>
+                  <button className="btn-danger text-xs" onClick={() => setConfirmDeleteId(p.id)}>
+                    Delete
                   </button>
                 </div>
               </div>
@@ -172,6 +184,16 @@ export default function Overview() {
             {createMutation.isPending ? 'Creating…' : 'Create Project'}
           </button>
         </Modal>
+      )}
+
+      {/* Delete confirmation */}
+      {confirmDeleteId !== null && confirmDeleteProject && (
+        <ConfirmDialog
+          message={`Permanently delete "${confirmDeleteProject.title}" and all its papers, decisions, and data? This cannot be undone.`}
+          confirmLabel="Delete Project"
+          onConfirm={() => deleteMutation.mutate(confirmDeleteId)}
+          onCancel={() => setConfirmDeleteId(null)}
+        />
       )}
     </div>
   )

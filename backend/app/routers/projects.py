@@ -8,6 +8,8 @@ from app.database import get_session
 from app.models import (
     Project, Reviewer, InclusionCriterion, ExclusionCriterion,
     QACriterion, TaxonomyEntry, DatabaseSearchString,
+    Paper, ReviewerDecision, FinalDecision, ConflictLog,
+    QAScore, ExtractionField, ExtractionRecord, SnowballingIteration,
 )
 
 router = APIRouter(tags=["projects"])
@@ -77,8 +79,52 @@ def delete_project(project_id: int, session: Session = Depends(get_session)):
     p = session.get(Project, project_id)
     if not p:
         raise HTTPException(404, "Project not found")
+    # Manually cascade — SQLite foreign keys are not enforced without PRAGMA
+    for model in (
+        QAScore, ExtractionRecord, ReviewerDecision, FinalDecision,
+        ConflictLog, SnowballingIteration, ExtractionField,
+        Paper, TaxonomyEntry, DatabaseSearchString,
+        QACriterion, InclusionCriterion, ExclusionCriterion, Reviewer,
+    ):
+        for row in session.exec(select(model).where(model.project_id == project_id)).all():
+            session.delete(row)
     session.delete(p)
     session.commit()
+
+
+@router.get("/projects/{project_id}/export")
+def export_project(project_id: int, session: Session = Depends(get_session)):
+    p = session.get(Project, project_id)
+    if not p:
+        raise HTTPException(404, "Project not found")
+
+    def rows(model):
+        return [r.model_dump() for r in session.exec(select(model).where(model.project_id == project_id)).all()]
+
+    papers = session.exec(select(Paper).where(Paper.project_id == project_id)).all()
+    paper_ids = [p.id for p in papers]
+
+    decisions = session.exec(select(ReviewerDecision).where(ReviewerDecision.project_id == project_id)).all()
+    final_decisions = session.exec(select(FinalDecision).where(FinalDecision.project_id == project_id)).all()
+    conflicts = session.exec(select(ConflictLog).where(ConflictLog.project_id == project_id)).all()
+    qa_scores = session.exec(select(QAScore).where(QAScore.project_id == project_id)).all()
+
+    return {
+        "export_version": 1,
+        "exported_at": datetime.utcnow().isoformat() + "Z",
+        "project": p.model_dump(),
+        "reviewers": rows(Reviewer),
+        "inclusion_criteria": rows(InclusionCriterion),
+        "exclusion_criteria": rows(ExclusionCriterion),
+        "qa_criteria": rows(QACriterion),
+        "taxonomy": rows(TaxonomyEntry),
+        "search_strings": rows(DatabaseSearchString),
+        "papers": [paper.model_dump() for paper in papers],
+        "reviewer_decisions": [d.model_dump() for d in decisions],
+        "final_decisions": [d.model_dump() for d in final_decisions],
+        "conflicts": [c.model_dump() for c in conflicts],
+        "qa_scores": [s.model_dump() for s in qa_scores],
+    }
 
 
 # ── Reviewers ─────────────────────────────────────────────────────────────────
