@@ -539,6 +539,7 @@ function TaxonomiesTab({ pid }: { pid: number }) {
   const [entrySubmitted, setEntrySubmitted] = useState(false)
   const [editingEntryId, setEditingEntryId] = useState<number | null>(null)
   const [editEntryValue, setEditEntryValue] = useState('')
+  const [editEntryError, setEditEntryError] = useState(false)
 
   const { data: entries = [] } = useQuery({
     queryKey: ['taxonomy', pid, activeKey],
@@ -657,22 +658,35 @@ function TaxonomiesTab({ pid }: { pid: number }) {
               {entries.map(e => (
                 <div key={e.id} className="py-2 flex items-center gap-2">
                   {editingEntryId === e.id ? (
-                    <>
-                      <input className="input flex-1 text-sm" value={editEntryValue} autoFocus
-                        onChange={ev => setEditEntryValue(ev.target.value)}
-                        onKeyDown={ev => {
-                          if (ev.key === 'Enter' && editEntryValue.trim()) editEntryMutation.mutate({ id: e.id, value: editEntryValue.trim() })
-                          if (ev.key === 'Escape') setEditingEntryId(null)
-                        }} />
-                      <button className="btn-primary text-xs px-2 py-1 shrink-0"
-                        disabled={!editEntryValue.trim() || editEntryMutation.isPending}
-                        onClick={() => editEntryMutation.mutate({ id: e.id, value: editEntryValue.trim() })}>Save</button>
-                      <button className="btn-secondary text-xs px-2 py-1 shrink-0" onClick={() => setEditingEntryId(null)}>Cancel</button>
-                    </>
+                    <div className="flex-1 flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <input
+                          className={`input flex-1 text-sm ${editEntryError && !editEntryValue.trim() ? 'border-exclude ring-1 ring-exclude' : ''}`}
+                          value={editEntryValue} autoFocus
+                          onChange={ev => { setEditEntryValue(ev.target.value); if (editEntryError) setEditEntryError(false) }}
+                          onKeyDown={ev => {
+                            if (ev.key === 'Enter') {
+                              if (!editEntryValue.trim()) { setEditEntryError(true); return }
+                              editEntryMutation.mutate({ id: e.id, value: editEntryValue.trim() })
+                            }
+                            if (ev.key === 'Escape') setEditingEntryId(null)
+                          }} />
+                        <button className="btn-primary text-xs px-2 py-1 shrink-0"
+                          disabled={editEntryMutation.isPending}
+                          onClick={() => {
+                            if (!editEntryValue.trim()) { setEditEntryError(true); return }
+                            editEntryMutation.mutate({ id: e.id, value: editEntryValue.trim() })
+                          }}>Save</button>
+                        <button className="btn-secondary text-xs px-2 py-1 shrink-0" onClick={() => setEditingEntryId(null)}>Cancel</button>
+                      </div>
+                      {editEntryError && !editEntryValue.trim() && (
+                        <p className="text-xs text-exclude">Entry name is required</p>
+                      )}
+                    </div>
                   ) : (
                     <>
                       <span className="text-sm text-navy flex-1">{e.value}</span>
-                      <button className="btn-secondary text-xs px-2 py-1 shrink-0" onClick={() => { setEditingEntryId(e.id); setEditEntryValue(e.value) }}>Edit</button>
+                      <button className="btn-secondary text-xs px-2 py-1 shrink-0" onClick={() => { setEditingEntryId(e.id); setEditEntryValue(e.value); setEditEntryError(false) }}>Edit</button>
                       <button className="btn-danger text-xs px-2 py-1 shrink-0" onClick={() => setModal({ kind: 'confirm-delete-entry', id: e.id })}>Remove</button>
                     </>
                   )}
