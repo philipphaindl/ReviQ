@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState } from 'react'
 import NavBar from './components/layout/NavBar'
 import Sidebar from './components/layout/Sidebar'
 import Overview from './pages/Overview'
@@ -28,33 +28,7 @@ export const useProject = () => useContext(ProjectContext)
 
 // ── App ───────────────────────────────────────────────────────────────────────
 
-function useFavicon() {
-  useEffect(() => {
-    const c = document.createElement('canvas')
-    c.width = c.height = 64
-    const x = c.getContext('2d')!
-    x.beginPath()
-    const r = 11
-    x.moveTo(r, 0); x.lineTo(64 - r, 0); x.arcTo(64, 0, 64, r, r)
-    x.lineTo(64, 64 - r); x.arcTo(64, 64, 64 - r, 64, r)
-    x.lineTo(r, 64); x.arcTo(0, 64, 0, 64 - r, r)
-    x.lineTo(0, r); x.arcTo(0, 0, r, 0, r)
-    x.closePath()
-    x.fillStyle = '#003057'; x.fill()
-    x.fillStyle = 'white'
-    x.font = 'bold 46px system-ui,sans-serif'
-    x.textAlign = 'center'; x.textBaseline = 'middle'
-    x.fillText('R', 32, 35)
-    const existing = document.querySelector<HTMLLinkElement>('link[rel="icon"]')
-    const link = existing ?? document.createElement('link')
-    link.rel = 'icon'; link.type = 'image/png'
-    link.href = c.toDataURL('image/png')
-    if (!existing) document.head.appendChild(link)
-  }, [])
-}
-
 export default function App() {
-  useFavicon()
   const [projectId, setProjectId] = useState<number | null>(() => {
     const stored = localStorage.getItem('reviq_project_id')
     return stored ? parseInt(stored, 10) : null
