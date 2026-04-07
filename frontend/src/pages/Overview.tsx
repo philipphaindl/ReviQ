@@ -75,7 +75,7 @@ export default function Overview() {
             <StatCard
               label="Screening Included"
               value={stats.screening_included}
-              sub={`${stats.screening_excluded} excl · ${stats.screening_undecided} undec`}
+              sub={`${stats.screening_excluded} excluded · ${stats.screening_undecided} undecided`}
               color="include"
             />
             <StatCard

@@ -4,7 +4,22 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ReviQ – SLR Workbench</title>
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgcng9IjE4IiBmaWxsPSIjMDAzMDU3Ii8+PHRleHQgeD0iNTAiIHk9IjcxIiBmb250LWZhbWlseT0ic3lzdGVtLXVpLHNhbnMtc2VyaWYiIGZvbnQtd2VpZ2h0PSI4MDAiIGZvbnQtc2l6ZT0iNTgiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IndoaXRlIj5SPC90ZXh0Pjwvc3ZnPg==" />
+    <script>
+      (function () {
+        var c = document.createElement('canvas'); c.width = c.height = 64;
+        var x = c.getContext('2d');
+        x.beginPath(); var r = 11;
+        x.moveTo(r,0); x.lineTo(64-r,0); x.arcTo(64,0,64,r,r);
+        x.lineTo(64,64-r); x.arcTo(64,64,64-r,64,r);
+        x.lineTo(r,64); x.arcTo(0,64,0,64-r,r);
+        x.lineTo(0,r); x.arcTo(0,0,r,0,r);
+        x.closePath(); x.fillStyle='#003057'; x.fill();
+        x.fillStyle='white'; x.font='bold 46px system-ui,sans-serif';
+        x.textAlign='center'; x.textBaseline='middle'; x.fillText('R',32,35);
+        var l=document.createElement('link'); l.rel='icon'; l.type='image/png';
+        l.href=c.toDataURL('image/png'); document.head.appendChild(l);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
