@@ -120,10 +120,8 @@ function PaperQARow({ paper, criteria, onScore }: {
           <span className={`text-xs font-bold px-2 py-0.5 rounded border ${qc.bg} ${qc.text} ${qc.border}`}>
             {paper.quality_level.toUpperCase()}
           </span>
-          <span className="text-xs font-semibold text-navy">{paper.percentage.toFixed(1)}%</span>
-          <span className="text-xs text-gray-400">
-            {paper.total_score}/{paper.max_score} pts
-          </span>
+          <span className="text-xs font-semibold text-navy">{paper.total_score.toFixed(1)} / {paper.max_score}</span>
+          <span className="text-xs text-gray-400">({paper.percentage.toFixed(0)}%)</span>
           {paper.fully_scored
             ? <span className="text-xs text-green-600 font-medium">Fully scored</span>
             : <span className="text-xs text-amber-600 font-medium">
@@ -267,8 +265,8 @@ function QAScoringModal({ paper, criteria, pid, onClose }: {
       <div className={`flex items-center gap-3 p-3 rounded-md border mb-4 ${levelColors.bg} ${levelColors.border}`}>
         <div className="flex-1">
           <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Current Score</p>
-          <p className={`text-lg font-bold ${levelColors.text}`}>{pct.toFixed(1)}%</p>
-          <p className={`text-xs ${levelColors.text}`}>{total.toFixed(1)} / {max} pts</p>
+          <p className={`text-lg font-bold ${levelColors.text}`}>{total.toFixed(1)} / {max}</p>
+          <p className={`text-xs ${levelColors.text}`}>{pct.toFixed(0)}%</p>
         </div>
         <span className={`text-sm font-bold px-3 py-1 rounded border ${levelColors.bg} ${levelColors.text} ${levelColors.border}`}>
           {level.toUpperCase()}
@@ -304,12 +302,13 @@ function SummaryView({ pid }: { pid: number }) {
   const high = summary.papers.filter(p => p.quality_level === 'high').length
   const medium = summary.papers.filter(p => p.quality_level === 'medium').length
   const low = summary.papers.filter(p => p.quality_level === 'low').length
-  const avgPct = summary.papers.reduce((s, p) => s + p.percentage, 0) / summary.papers.length
+  const avgScore = summary.papers.reduce((s, p) => s + p.total_score, 0) / summary.papers.length
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-4 gap-3">
-        <StatCard label="Avg. Quality" value={`${avgPct.toFixed(1)}%`} />
+        <StatCard label="Avg. Score" value={avgScore.toFixed(1)}
+          sub={`out of ${summary.max_total} max`} />
         <StatCard label="High" value={high} color="include" />
         <StatCard label="Medium" value={medium} color="uncertain" />
         <StatCard label="Low" value={low} color="exclude" />
@@ -354,8 +353,7 @@ function SummaryView({ pid }: { pid: number }) {
                     )
                   })}
                   <td className="py-2 text-right font-semibold text-navy whitespace-nowrap">
-                    {paper.total_score}/{paper.max_score}
-                    <span className="text-xs text-gray-400 ml-1">({paper.percentage.toFixed(0)}%)</span>
+                    {paper.total_score.toFixed(1)}/{paper.max_score}
                   </td>
                   <td className="py-2 text-right">
                     <span className={`text-xs font-bold px-2 py-0.5 rounded border ${qc.bg} ${qc.text} ${qc.border}`}>

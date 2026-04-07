@@ -59,7 +59,7 @@ export default function Search() {
   })
 
   if (!projectId) {
-    return <EmptyState icon="📥" message="No active project. Select or create one from the Overview." />
+    return <EmptyState icon="—" message="No active project. Select or create one from the Overview." />
   }
 
   const sources = stats ? Object.entries(stats.by_source) : []
@@ -240,7 +240,7 @@ export default function Search() {
           disabled={importDecisionsMutation.isPending}
           onClick={() => decisionsInputRef.current?.click()}
         >
-          {importDecisionsMutation.isPending ? 'Importing…' : '📂 Choose Decision JSON'}
+          {importDecisionsMutation.isPending ? 'Importing…' : 'Choose Decision JSON'}
         </button>
 
         {importDecResult && (

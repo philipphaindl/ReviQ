@@ -75,6 +75,51 @@ def create_iteration(
     return entry
 
 
+class IterationUpdate(BaseModel):
+    iteration_type: str  # forward, backward
+
+
+@router.put("/projects/{project_id}/snowballing/{iteration_id}")
+def update_iteration(
+    project_id: int,
+    iteration_id: int,
+    body: IterationUpdate,
+    session: Session = Depends(get_session),
+):
+    it = session.get(SnowballingIteration, iteration_id)
+    if not it or it.project_id != project_id:
+        raise HTTPException(404, "Iteration not found")
+    it.iteration_type = body.iteration_type
+    session.add(it)
+    session.commit()
+    session.refresh(it)
+    return it
+
+
+@router.delete("/projects/{project_id}/snowballing/{iteration_id}", status_code=204)
+def delete_iteration(
+    project_id: int,
+    iteration_id: int,
+    session: Session = Depends(get_session),
+):
+    it = session.get(SnowballingIteration, iteration_id)
+    if not it or it.project_id != project_id:
+        raise HTTPException(404, "Iteration not found")
+    # Delete all papers imported in this iteration
+    source = f"snowballing:{it.iteration_number}"
+    papers = session.exec(
+        select(Paper).where(Paper.project_id == project_id).where(Paper.source == source)
+    ).all()
+    from app.models import ReviewerDecision, FinalDecision, ConflictLog
+    for paper in papers:
+        for model in (ReviewerDecision, FinalDecision, ConflictLog):
+            for row in session.exec(select(model).where(model.paper_id == paper.id)).all():
+                session.delete(row)
+        session.delete(paper)
+    session.delete(it)
+    session.commit()
+
+
 @router.put("/projects/{project_id}/snowballing/{iteration_id}/saturate")
 def confirm_saturation(
     project_id: int,
@@ -86,6 +131,23 @@ def confirm_saturation(
         raise HTTPException(404, "Iteration not found")
     it.saturation_confirmed = True
     it.is_saturated = True
+    session.add(it)
+    session.commit()
+    session.refresh(it)
+    return it
+
+
+@router.put("/projects/{project_id}/snowballing/{iteration_id}/unsaturate")
+def revoke_saturation(
+    project_id: int,
+    iteration_id: int,
+    session: Session = Depends(get_session),
+):
+    it = session.get(SnowballingIteration, iteration_id)
+    if not it or it.project_id != project_id:
+        raise HTTPException(404, "Iteration not found")
+    it.saturation_confirmed = False
+    it.is_saturated = False
     session.add(it)
     session.commit()
     session.refresh(it)

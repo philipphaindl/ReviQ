@@ -96,7 +96,7 @@ function PapersView({ pid }: { pid: number }) {
     .filter(p => p.dedup_status === 'original' && screeningIncludedIds.has(p.id))
     .map(p => {
       const ft = ftDecisionMap.get(p.id)
-      return { ...p, final_decision: ft?.final_decision ?? null }
+      return { ...p, final_decision: ft?.final_decision ?? null, decisions: ft?.decisions ?? [] }
     })
 
   const decisionMutation = useMutation({
@@ -201,12 +201,14 @@ function PaperRow({ paper, onDecide }: { paper: Paper; onDecide: () => void }) {
   const dec = paper.final_decision?.decision
   const accentClass = dec === 'I' ? 'left-accent-include' : dec === 'E' ? 'left-accent-exclude' : dec === 'U' ? 'left-accent-uncertain' : 'left-accent-info'
   const langName = paper.language && paper.language !== 'en' ? (LANG_NAMES[paper.language] ?? paper.language.toUpperCase()) : null
+  const appliedCriterion = paper.decisions?.[0]?.criterion_label
 
   return (
     <div className={`card pl-4 ${accentClass} cursor-pointer hover:shadow-card-hover transition-shadow`} onClick={onDecide}>
       <div className="flex-1 min-w-0">
         <div className="flex items-start gap-2 flex-wrap">
           {dec ? <DecisionBadge decision={dec} /> : <Badge label="Undecided" variant="neutral" />}
+          {appliedCriterion && <Badge label={appliedCriterion} variant={dec === 'I' ? 'include' : dec === 'E' ? 'exclude' : 'neutral'} />}
           {paper.full_text_inaccessible && <Badge label="Inaccessible" variant="exclude" />}
           {langName && <Badge label={`Non-English: ${langName}`} variant="uncertain" />}
           <span className="text-xs text-gray-400">{paper.source} · {paper.year}</span>

@@ -149,8 +149,17 @@ export const getSnowballingIterations = (pid: number) =>
 export const createSnowballingIteration = (pid: number, iteration_type: string) =>
   api.post<SnowballingIteration>(`/projects/${pid}/snowballing`, { iteration_type }).then(r => r.data)
 
+export const updateSnowballingIteration = (pid: number, iterationId: number, iteration_type: string) =>
+  api.put(`/projects/${pid}/snowballing/${iterationId}`, { iteration_type }).then(r => r.data)
+
+export const deleteSnowballingIteration = (pid: number, iterationId: number) =>
+  api.delete(`/projects/${pid}/snowballing/${iterationId}`)
+
 export const confirmSaturation = (pid: number, iterationId: number) =>
   api.put(`/projects/${pid}/snowballing/${iterationId}/saturate`).then(r => r.data)
+
+export const revokeSaturation = (pid: number, iterationId: number) =>
+  api.put(`/projects/${pid}/snowballing/${iterationId}/unsaturate`).then(r => r.data)
 
 export const importSnowballingBib = (pid: number, iterationId: number, file: File) => {
   const formData = new FormData()
