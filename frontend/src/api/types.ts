@@ -164,3 +164,43 @@ export interface ExportStats {
   fulltext_excluded: number
   open_conflicts: number
 }
+
+export interface SnowballingIteration {
+  id: number
+  project_id: number
+  iteration_number: number
+  iteration_type: string // forward, backward
+  is_saturated: boolean
+  saturation_confirmed: boolean
+  created_at: string
+  paper_count: number
+  included_count: number
+}
+
+export interface QAScoreEntry {
+  criterion_id: number
+  label: string
+  description: string
+  max_score: number
+  score: number | null
+}
+
+export interface QAPaperResult {
+  paper_id: number
+  paper_title: string
+  paper_authors?: string
+  paper_year?: number
+  paper_source: string
+  scores: QAScoreEntry[]
+  total_score: number
+  max_score: number
+  percentage: number
+  quality_level: 'high' | 'medium' | 'low'
+  fully_scored: boolean
+}
+
+export interface QASummary {
+  criteria: { id: number; label: string; description: string; max_score: number }[]
+  papers: QAPaperResult[]
+  max_total: number
+}

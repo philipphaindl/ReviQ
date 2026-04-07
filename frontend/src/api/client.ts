@@ -3,6 +3,7 @@ import type {
   Project, Reviewer, InclusionCriterion, ExclusionCriterion,
   QACriterion, TaxonomyEntry, DatabaseSearchString,
   Paper, KappaResult, ImportStats, ConflictLog, ExportStats,
+  SnowballingIteration, QASummary,
 } from './types'
 
 const api = axios.create({ baseURL: '/api' })
@@ -134,3 +135,40 @@ export const exportDecisionsUrl = (pid: number, reviewerId: number, phase: strin
 
 export const exportBibtexUrl = (pid: number, phase: string, decision: string) =>
   `/api/projects/${pid}/export/bibtex?phase=${phase}&decision=${decision}`
+
+// ── Paper update ──────────────────────────────────────────────────────────────
+
+export const updatePaper = (pid: number, paperId: number, data: { full_text_url?: string; full_text_inaccessible?: boolean }) =>
+  api.put(`/projects/${pid}/papers/${paperId}`, data).then(r => r.data)
+
+// ── Snowballing ───────────────────────────────────────────────────────────────
+
+export const getSnowballingIterations = (pid: number) =>
+  api.get<SnowballingIteration[]>(`/projects/${pid}/snowballing`).then(r => r.data)
+
+export const createSnowballingIteration = (pid: number, iteration_type: string) =>
+  api.post<SnowballingIteration>(`/projects/${pid}/snowballing`, { iteration_type }).then(r => r.data)
+
+export const confirmSaturation = (pid: number, iterationId: number) =>
+  api.put(`/projects/${pid}/snowballing/${iterationId}/saturate`).then(r => r.data)
+
+export const importSnowballingBib = (pid: number, iterationId: number, file: File) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  return api.post<{ source: string; imported_unique: number; detected_duplicates: number; imported_citekeys: string[] }>(
+    `/projects/${pid}/snowballing/${iterationId}/import`,
+    formData,
+    { headers: { 'Content-Type': 'multipart/form-data' } },
+  ).then(r => r.data)
+}
+
+// ── QA Scoring ────────────────────────────────────────────────────────────────
+
+export const getQASummary = (pid: number) =>
+  api.get<QASummary>(`/projects/${pid}/qa-summary`).then(r => r.data)
+
+export const upsertQAScore = (
+  pid: number,
+  paperId: number,
+  data: { reviewer_id: number; criterion_id: number; score: number; rationale?: string },
+) => api.post(`/projects/${pid}/papers/${paperId}/qa-scores`, data).then(r => r.data)

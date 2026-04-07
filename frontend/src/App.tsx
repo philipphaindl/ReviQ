@@ -6,7 +6,10 @@ import Overview from './pages/Overview'
 import Settings from './pages/Settings'
 import Search from './pages/Search'
 import Screening from './pages/Screening'
-import { EligibilityStub, SnowballingStub, QualityStub, ExtractionStub, ResultsStub } from './pages/Stubs'
+import Eligibility from './pages/Eligibility'
+import Snowballing from './pages/Snowballing'
+import Quality from './pages/Quality'
+import { ExtractionStub, ResultsStub } from './pages/Stubs'
 
 // ── Project context ───────────────────────────────────────────────────────────
 
@@ -72,9 +75,9 @@ export default function App() {
                 <Route path="/setup" element={<Settings />} />
                 <Route path="/import" element={<Search />} />
                 <Route path="/screening" element={<Screening />} />
-                <Route path="/eligibility" element={<EligibilityStub />} />
-                <Route path="/snowballing" element={<SnowballingStub />} />
-                <Route path="/quality" element={<QualityStub />} />
+                <Route path="/eligibility" element={<Eligibility />} />
+                <Route path="/snowballing" element={<Snowballing />} />
+                <Route path="/quality" element={<Quality />} />
                 <Route path="/extraction" element={<ExtractionStub />} />
                 <Route path="/results" element={<ResultsStub />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
