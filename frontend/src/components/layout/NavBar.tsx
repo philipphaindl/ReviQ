@@ -37,9 +37,10 @@ export default function NavBar() {
         onClick={() => navigate('/')}
         className="flex items-center gap-2 font-bold text-navy text-base tracking-tight hover:opacity-80 transition-opacity shrink-0"
       >
-        <svg width="28" height="28" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-          <rect width="100" height="100" rx="18" fill="#003057"/>
-          <text x="50" y="68" fontFamily="system-ui,sans-serif" fontWeight="800" fontSize="52" textAnchor="middle" fill="white">RQ</text>
+        <svg width="30" height="30" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <rect width="100" height="100" rx="20" fill="#003057"/>
+          <circle cx="42" cy="42" r="22" fill="none" stroke="white" strokeWidth="12"/>
+          <line x1="58" y1="58" x2="80" y2="80" stroke="white" strokeWidth="12" strokeLinecap="round"/>
         </svg>
         ReviQ
       </button>
