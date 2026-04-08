@@ -26,7 +26,7 @@ export default function Eligibility() {
     <div className="space-y-5">
       <div>
         <h1 className="text-xl font-bold text-navy">Full-Text Eligibility</h1>
-        <p className="text-sm text-gray-500">Phase 4 — Assess full texts of papers that passed screening</p>
+        <p className="text-sm text-gray-500">Phase 4 — Assess full texts of screened papers</p>
       </div>
 
       <div className="flex gap-0 border-b border-border">
@@ -206,7 +206,7 @@ function PaperRow({ paper, onDecide }: { paper: Paper; onDecide: () => void }) {
   return (
     <div className={`card pl-4 ${accentClass} cursor-pointer hover:shadow-card-hover transition-shadow`} onClick={onDecide}>
       <div className="flex-1 min-w-0">
-        <div className="flex items-start gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
           {dec ? <DecisionBadge decision={dec} /> : <Badge label="Undecided" variant="neutral" />}
           {appliedCriterion && <Badge label={appliedCriterion} variant={dec === 'I' ? 'include' : dec === 'E' ? 'exclude' : 'neutral'} />}
           {paper.full_text_inaccessible && <Badge label="Inaccessible" variant="exclude" />}

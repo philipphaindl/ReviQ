@@ -369,13 +369,15 @@ function SummaryView({ pid }: { pid: number }) {
       {summary.criteria.length > 0 && (
         <Card>
           <CardHeader title="Quality Criteria" />
-          <div className="space-y-1.5">
+          <div className="space-y-0">
             {summary.criteria.map(c => (
-              <p key={c.id} className="text-xs text-gray-600">
-                <span className="font-bold text-navy">{c.label}</span>
-                <span className="mx-1.5 text-gray-300">·</span>
-                {c.description}
-              </p>
+              <div key={c.id} className="py-3 border-b border-border last:border-0 flex items-start gap-3">
+                <span className="text-xs font-bold text-info bg-blue-50 border border-blue-200 rounded px-2 py-0.5 shrink-0 mt-0.5 w-[110px] truncate text-center inline-block" title={c.label}>{c.label}</span>
+                <div className="flex-1">
+                  <p className="text-sm text-navy">{c.description}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Max score: {c.max_score}</p>
+                </div>
+              </div>
             ))}
           </div>
         </Card>

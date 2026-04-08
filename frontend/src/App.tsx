@@ -9,7 +9,8 @@ import Screening from './pages/Screening'
 import Eligibility from './pages/Eligibility'
 import Snowballing from './pages/Snowballing'
 import Quality from './pages/Quality'
-import { ExtractionStub, ResultsStub } from './pages/Stubs'
+import Extraction from './pages/Extraction'
+import Results from './pages/Results'
 
 // ── Project context ───────────────────────────────────────────────────────────
 
@@ -78,8 +79,8 @@ export default function App() {
                 <Route path="/eligibility" element={<Eligibility />} />
                 <Route path="/snowballing" element={<Snowballing />} />
                 <Route path="/quality" element={<Quality />} />
-                <Route path="/extraction" element={<ExtractionStub />} />
-                <Route path="/results" element={<ResultsStub />} />
+                <Route path="/extraction" element={<Extraction />} />
+                <Route path="/results" element={<Results />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </main>

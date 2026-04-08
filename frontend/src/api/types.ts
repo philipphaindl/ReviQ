@@ -204,3 +204,39 @@ export interface QASummary {
   papers: QAPaperResult[]
   max_total: number
 }
+
+export interface ExtractionField {
+  id: number
+  project_id: number
+  field_name: string
+  field_label: string
+  field_type: string  // text, number, boolean, dropdown
+  options?: string    // JSON array string for dropdown
+  sort_order: number
+}
+
+export interface ExtractionRecord {
+  id: number
+  project_id: number
+  paper_id: number
+  field_name: string
+  field_value?: string
+  extracted_by_reviewer_id: number
+}
+
+export interface ExtractionPaperRow {
+  paper_id: number
+  citekey: string
+  title: string
+  authors?: string
+  year?: number
+  source: string
+  values: Record<string, string | undefined>
+  filled: number
+  total_fields: number
+}
+
+export interface ExtractionSummary {
+  fields: ExtractionField[]
+  papers: ExtractionPaperRow[]
+}

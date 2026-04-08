@@ -3,7 +3,7 @@ import type {
   Project, Reviewer, InclusionCriterion, ExclusionCriterion,
   QACriterion, TaxonomyEntry, DatabaseSearchString,
   Paper, KappaResult, ImportStats, ConflictLog, ExportStats,
-  SnowballingIteration, QASummary,
+  SnowballingIteration, QASummary, ExtractionField, ExtractionSummary,
 } from './types'
 
 const api = axios.create({ baseURL: '/api' })
@@ -181,3 +181,31 @@ export const upsertQAScore = (
   paperId: number,
   data: { reviewer_id: number; criterion_id: number; score: number; rationale?: string },
 ) => api.post(`/projects/${pid}/papers/${paperId}/qa-scores`, data).then(r => r.data)
+
+// ── Extraction ────────────────────────────────────────────────────────────────
+
+export const getExtractionFields = (pid: number) =>
+  api.get<ExtractionField[]>(`/projects/${pid}/extraction/fields`).then(r => r.data)
+
+export const createExtractionField = (
+  pid: number,
+  data: { field_name: string; field_label: string; field_type: string; options?: string; sort_order?: number },
+) => api.post<ExtractionField>(`/projects/${pid}/extraction/fields`, data).then(r => r.data)
+
+export const updateExtractionField = (
+  pid: number,
+  fieldId: number,
+  data: { field_label?: string; field_type?: string; options?: string; sort_order?: number },
+) => api.put<ExtractionField>(`/projects/${pid}/extraction/fields/${fieldId}`, data).then(r => r.data)
+
+export const deleteExtractionField = (pid: number, fieldId: number) =>
+  api.delete(`/projects/${pid}/extraction/fields/${fieldId}`)
+
+export const getExtractionSummary = (pid: number) =>
+  api.get<ExtractionSummary>(`/projects/${pid}/extraction/summary`).then(r => r.data)
+
+export const upsertExtractionRecord = (
+  pid: number,
+  paperId: number,
+  data: { reviewer_id: number; field_name: string; field_value?: string },
+) => api.post(`/projects/${pid}/papers/${paperId}/extraction`, data).then(r => r.data)

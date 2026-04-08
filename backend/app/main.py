@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import create_db_and_tables
-from app.routers import projects, papers, import_, decisions, kappa, export, qa, snowballing
+from app.routers import projects, papers, import_, decisions, kappa, export, qa, snowballing, extraction
 
 
 @asynccontextmanager
@@ -35,6 +35,7 @@ app.include_router(kappa.router, prefix="/api")
 app.include_router(export.router, prefix="/api")
 app.include_router(qa.router, prefix="/api")
 app.include_router(snowballing.router, prefix="/api")
+app.include_router(extraction.router, prefix="/api")
 
 
 @app.get("/health")

@@ -43,7 +43,7 @@ export default function Settings() {
     <div className="space-y-5">
       <div>
         <h1 className="text-xl font-bold text-navy">Setup</h1>
-        <p className="text-sm text-gray-500">Phase 1 — Configure your SLR project</p>
+        <p className="text-sm text-gray-500">Phase 1 — Configuration and Settings</p>
       </div>
 
       <div className="flex gap-0 border-b border-border">
@@ -432,7 +432,7 @@ function QATab({ pid }: { pid: number }) {
           ? <EmptyState icon="—" message="No QA criteria defined." />
           : criteria.map(c => (
             <div key={c.id} className="py-3 border-b border-border last:border-0 flex items-start gap-3">
-              <span className="text-xs font-bold text-info bg-blue-50 border border-blue-200 rounded px-2 py-0.5 shrink-0 mt-0.5">{c.label}</span>
+              <span className="text-xs font-bold text-info bg-blue-50 border border-blue-200 rounded px-2 py-0.5 shrink-0 mt-0.5 w-[110px] truncate text-center inline-block" title={c.label}>{c.label}</span>
               <div className="flex-1">
                 <p className="text-sm text-navy">{c.description}</p>
                 <p className="text-xs text-gray-400 mt-0.5">Max score: {c.max_score}</p>
@@ -458,7 +458,7 @@ function QATab({ pid }: { pid: number }) {
           onClose={close} onEnter={submit}>
           <FormField label="Label" required error={submitted && !form.label ? 'Label is required (e.g. QA1)' : undefined}>
             <input className={`input ${submitted && !form.label ? 'border-exclude ring-1 ring-exclude' : ''}`}
-              placeholder="QA1" value={form.label} autoFocus
+              placeholder="QA1" value={form.label} autoFocus maxLength={15}
               onChange={e => setForm(f => ({ ...f, label: e.target.value }))} />
           </FormField>
           <FormField label="Description / Question" required error={submitted && !form.description ? 'Description is required' : undefined}>
