@@ -26,7 +26,7 @@ export default function Eligibility() {
     <div className="space-y-5">
       <div>
         <h1 className="text-xl font-bold text-navy">Full-Text Eligibility</h1>
-        <p className="text-sm text-gray-500">Phase 3 — Assess full texts of papers that passed screening</p>
+        <p className="text-sm text-gray-500">Phase 4 — Assess full texts of papers that passed screening</p>
       </div>
 
       <div className="flex gap-0 border-b border-border">
@@ -153,7 +153,7 @@ function PapersView({ pid }: { pid: number }) {
       </div>
 
       {screeningIncludedIds.size === 0 ? (
-        <EmptyState icon="—" message="No papers included from screening yet. Complete Phase 2 first." />
+        <EmptyState icon="—" message="No papers included from screening yet. Complete Phase 3 (Screening) first." />
       ) : filteredPapers.length === 0 ? (
         <EmptyState icon="—" message="No papers match the current filter." />
       ) : (

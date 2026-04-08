@@ -19,7 +19,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'project',    label: 'Project' },
   { id: 'reviewers',  label: 'Reviewers' },
   { id: 'criteria',   label: 'I/E Criteria' },
-  { id: 'qa',         label: 'QA Schema' },
+  { id: 'qa',         label: 'Quality Assessment' },
   { id: 'taxonomies', label: 'Taxonomies' },
   { id: 'search',     label: 'Search Strings' },
 ]
@@ -43,7 +43,7 @@ export default function Settings() {
     <div className="space-y-5">
       <div>
         <h1 className="text-xl font-bold text-navy">Setup</h1>
-        <p className="text-sm text-gray-500">Phase 0 — Configure your SLR project</p>
+        <p className="text-sm text-gray-500">Phase 1 — Configure your SLR project</p>
       </div>
 
       <div className="flex gap-0 border-b border-border">
@@ -425,7 +425,7 @@ function QATab({ pid }: { pid: number }) {
     <div className="max-w-2xl">
       <Card>
         <CardHeader
-          title={`QA Schema — Max score: ${totalMax.toFixed(1)}`}
+          title={`Quality Criteria — Max score: ${totalMax % 1 === 0 ? String(totalMax) : totalMax.toFixed(1)}`}
           action={<button className="btn-secondary text-xs" onClick={openAdd}>+ Add</button>}
         />
         {criteria.length === 0

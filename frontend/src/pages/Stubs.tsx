@@ -61,7 +61,7 @@ export function QualityStub() {
 export function ExtractionStub() {
   return (
     <PhaseComingSoon
-      phase="Phase 6"
+      phase="Phase 7"
       icon="📝"
       title="Data Extraction"
       description="Structured data extraction for each included paper. Field schema is fully configurable per project (research type, contribution type, domain-specific fields)."
@@ -80,7 +80,7 @@ export function ExtractionStub() {
 export function ResultsStub() {
   return (
     <PhaseComingSoon
-      phase="Phase 7"
+      phase="Phase 8"
       icon="📊"
       title="Results & Visualization"
       description="Auto-generated charts, PRISMA flow diagram, and export package. All figures derive from the actual decision data — no manual entry required."

@@ -19,7 +19,7 @@ export default function Quality() {
     <div className="space-y-5">
       <div>
         <h1 className="text-xl font-bold text-navy">Quality Assessment</h1>
-        <p className="text-sm text-gray-500">Phase 5 — Score included papers on QA criteria</p>
+        <p className="text-sm text-gray-500">Phase 6 — Score included papers on quality criteria</p>
       </div>
 
       <div className="flex gap-0 border-b border-border">
@@ -96,6 +96,8 @@ function ScoringView({ pid }: { pid: number }) {
   )
 }
 
+const fmt = (n: number) => n % 1 === 0 ? String(Math.round(n)) : n.toFixed(1)
+
 const QUALITY_COLORS = {
   high: { bg: 'bg-green-100', text: 'text-green-800', border: 'border-green-200' },
   medium: { bg: 'bg-yellow-100', text: 'text-yellow-800', border: 'border-yellow-200' },
@@ -120,8 +122,7 @@ function PaperQARow({ paper, criteria, onScore }: {
           <span className={`text-xs font-bold px-2 py-0.5 rounded border ${qc.bg} ${qc.text} ${qc.border}`}>
             {paper.quality_level.toUpperCase()}
           </span>
-          <span className="text-xs font-semibold text-navy">{paper.total_score.toFixed(1)} / {paper.max_score}</span>
-          <span className="text-xs text-gray-400">({paper.percentage.toFixed(0)}%)</span>
+          <span className="text-xs font-semibold text-navy">{fmt(paper.total_score)} / {fmt(paper.max_score)}</span>
           {paper.fully_scored
             ? <span className="text-xs text-green-600 font-medium">Fully scored</span>
             : <span className="text-xs text-amber-600 font-medium">
@@ -235,7 +236,7 @@ function QAScoringModal({ paper, criteria, pid, onClose }: {
                     currentScore === criterion.max_score ? 'bg-green-100 text-green-800' :
                     currentScore > 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
                   }`}>
-                    {currentScore} / {criterion.max_score}
+                    {fmt(currentScore)} / {fmt(criterion.max_score)}
                   </span>
                 )}
               </div>
@@ -264,7 +265,7 @@ function QAScoringModal({ paper, criteria, pid, onClose }: {
       <div className={`flex items-center gap-3 p-3 rounded-md border mb-4 ${levelColors.bg} ${levelColors.border}`}>
         <div className="flex-1">
           <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Total Score</p>
-          <p className={`text-lg font-bold ${levelColors.text}`}>{total.toFixed(1)} / {max}</p>
+          <p className={`text-lg font-bold ${levelColors.text}`}>{fmt(total)} / {fmt(max)}</p>
         </div>
         <span className={`text-sm font-bold px-3 py-1 rounded border ${levelColors.bg} ${levelColors.text} ${levelColors.border}`}>
           {level.toUpperCase()}
@@ -305,7 +306,7 @@ function SummaryView({ pid }: { pid: number }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-4 gap-3">
-        <StatCard label="Avg. Score" value={avgScore.toFixed(1)}
+        <StatCard label="Avg. Score" value={fmt(avgScore)}
           sub={`out of ${summary.max_total} max`} />
         <StatCard label="High" value={high} color="include" />
         <StatCard label="Medium" value={medium} color="uncertain" />
@@ -351,7 +352,7 @@ function SummaryView({ pid }: { pid: number }) {
                     )
                   })}
                   <td className="py-2 text-right font-semibold text-navy whitespace-nowrap">
-                    {paper.total_score.toFixed(1)}/{paper.max_score}
+                    {fmt(paper.total_score)}/{fmt(paper.max_score)}
                   </td>
                   <td className="py-2 text-right">
                     <span className={`text-xs font-bold px-2 py-0.5 rounded border ${qc.bg} ${qc.text} ${qc.border}`}>
@@ -367,7 +368,7 @@ function SummaryView({ pid }: { pid: number }) {
 
       {summary.criteria.length > 0 && (
         <Card>
-          <CardHeader title="Criteria" />
+          <CardHeader title="Quality Criteria" />
           <div className="space-y-1.5">
             {summary.criteria.map(c => (
               <p key={c.id} className="text-xs text-gray-600">
