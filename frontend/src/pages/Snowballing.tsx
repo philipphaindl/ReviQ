@@ -25,7 +25,7 @@ export default function Snowballing() {
     <div className="space-y-5">
       <div>
         <h1 className="text-xl font-bold text-navy">Snowballing</h1>
-        <p className="text-sm text-gray-500">Phase 5 — Forward and Backward Citation Snowballing <span className="text-gray-300 font-normal">(optional)</span>
+        <p className="text-sm text-gray-500">Phase 5 — Forward and Backward Citation Snowballing <span className="text-gray-300 font-normal">(optional)</span></p>
       </div>
       <IterationsView pid={projectId} />
     </div>
