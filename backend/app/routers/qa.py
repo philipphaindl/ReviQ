@@ -90,7 +90,9 @@ def qa_summary(project_id: int, session: Session = Depends(get_session)):
     ).all()
     max_total = sum(c.max_score for c in criteria)
 
-    # Papers included from full-text; fall back to screening if no full-text decisions
+    # Per SLR methodology (Kitchenham & Charters 2007):
+    # QA-eligible papers = full-text included (Phase 4) + snowballing included (Phase 5)
+    # If no full-text decisions exist, fall back to all screening-included (Phase 3).
     ft_included = session.exec(
         select(FinalDecision)
         .where(FinalDecision.project_id == project_id)
@@ -104,11 +106,17 @@ def qa_summary(project_id: int, session: Session = Depends(get_session)):
         .where(FinalDecision.decision == "I")
     ).all()
 
-    eligible_paper_ids = (
-        [d.paper_id for d in ft_included]
-        if ft_included
-        else [d.paper_id for d in screening_included]
-    )
+    if ft_included:
+        ft_ids = {d.paper_id for d in ft_included}
+        # Also include snowballing papers (source starts with "snowballing:") that were
+        # screening-included, since they bypass the full-text phase.
+        snowball_ids = {
+            d.paper_id for d in screening_included
+            if (p := session.get(Paper, d.paper_id)) and p.source.startswith("snowballing:")
+        }
+        eligible_paper_ids = list(ft_ids | snowball_ids)
+    else:
+        eligible_paper_ids = [d.paper_id for d in screening_included]
 
     all_scores = session.exec(
         select(QAScore).where(QAScore.project_id == project_id)

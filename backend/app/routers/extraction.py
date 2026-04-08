@@ -163,7 +163,9 @@ def extraction_summary(project_id: int, session: Session = Depends(get_session))
         .order_by(ExtractionField.sort_order, ExtractionField.id)
     ).all()
 
-    # Papers included from full-text, fallback to screening
+    # Per SLR methodology: Phase 7 extracts from Phase 4 (full-text included) +
+    # Phase 5 (snowballing screening-included). Fall back to all screening-included
+    # if no full-text decisions exist.
     ft_included = session.exec(
         select(FinalDecision)
         .where(FinalDecision.project_id == project_id)
@@ -177,7 +179,15 @@ def extraction_summary(project_id: int, session: Session = Depends(get_session))
         .where(FinalDecision.decision == "I")
     ).all()
 
-    paper_ids = [d.paper_id for d in ft_included] if ft_included else [d.paper_id for d in sc_included]
+    if ft_included:
+        ft_ids = {d.paper_id for d in ft_included}
+        snowball_ids = {
+            d.paper_id for d in sc_included
+            if (p := session.get(Paper, d.paper_id)) and p.source.startswith("snowballing:")
+        }
+        paper_ids = list(ft_ids | snowball_ids)
+    else:
+        paper_ids = [d.paper_id for d in sc_included]
 
     all_records = session.exec(
         select(ExtractionRecord).where(ExtractionRecord.project_id == project_id)

@@ -356,7 +356,7 @@ function ExtractView({ pid }: { pid: number }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-3">
-        <StatCard label="Included Papers" value={summary.papers.length} sub="From Phase 4 (Eligibility)" />
+        <StatCard label="Included Papers" value={summary.papers.length} sub="Phase 4 (Eligibility) + Phase 5 (Snowballing)" />
         <StatCard label="Fully Extracted" value={done} color="include" />
         <StatCard label="Pending" value={summary.papers.length - done} color="uncertain" />
       </div>
@@ -422,24 +422,24 @@ function ExtractionModal({ paper, fields, pid, onClose }: {
     queryKey: ['reviewers', pid],
     queryFn: () => getReviewers(pid),
   })
-  // Fetch all taxonomy types + their entries so dropdowns can show taxonomy values
+  // Fetch all taxonomy types
   const { data: taxonomyTypes = [] } = useQuery({
     queryKey: ['taxonomy-types', pid],
     queryFn: () => getTaxonomyTypes(pid),
   })
-  // Fetch entries for each taxonomy type
-  const taxonomyEntryQueries = taxonomyTypes.map(type => ({
-    type,
-    query: useQuery({
-      queryKey: ['taxonomy', pid, type],
-      queryFn: () => getTaxonomy(pid, type),
-    }),
-  }))
-  // Build a map: taxonomyType → string[]
-  const taxonomyOptions: Record<string, string[]> = {}
-  for (const { type, query } of taxonomyEntryQueries) {
-    if (query.data) taxonomyOptions[type] = query.data.map(e => e.value)
-  }
+  // Fetch all taxonomy entries in one combined query (avoids hooks-in-loop)
+  const { data: taxonomyOptions = {} } = useQuery<Record<string, string[]>>({
+    queryKey: ['all-taxonomy-entries', pid, taxonomyTypes.join(',')],
+    queryFn: async () => {
+      const pairs = await Promise.all(
+        taxonomyTypes.map(type =>
+          getTaxonomy(pid, type).then(entries => [type, entries.map(e => e.value)] as const)
+        )
+      )
+      return Object.fromEntries(pairs)
+    },
+    enabled: taxonomyTypes.length > 0,
+  })
 
   const activeReviewerId = reviewerId ?? reviewers.find(r => r.role === 'R1')?.id ?? reviewers[0]?.id
 

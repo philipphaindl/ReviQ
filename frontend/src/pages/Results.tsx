@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react'
 import { useProject } from '../App'
 import { getExportStats, getQASummary, getExtractionSummary, exportBibtexUrl, getImportStats, getPapers } from '../api/client'
 import { Card, CardHeader, StatCard, EmptyState } from '../components/ui'
+import { normalizeDbKey, dbByKey } from '../components/databases'
 import type { ExtractionField } from '../api/types'
 
 type ResView = 'prisma' | 'charts' | 'export'
@@ -249,12 +250,15 @@ function PrismaFlowDiagram({
 
       {/* Identification box with per-DB breakdown */}
       <MainBox cy={y1} label="Records retrieved" n={totalRetrieved}>
-        {sourceEntries.map(([src, v], i) => (
-          <text key={src} x={cx} y={y1 - identBoxH / 2 + 50 + i * 14} textAnchor="middle"
-            style={{ ...smallStyle }}>
-            {src}: {v.total} ({v.original} unique)
-          </text>
-        ))}
+        {sourceEntries.map(([src, v], i) => {
+          const label = dbByKey(normalizeDbKey(src))?.label ?? src
+          return (
+            <text key={src} x={cx} y={y1 - identBoxH / 2 + 50 + i * 14} textAnchor="middle"
+              style={{ ...smallStyle }}>
+              {label}: {v.total} ({v.original} unique)
+            </text>
+          )
+        })}
       </MainBox>
 
       {/* Dedup note */}
