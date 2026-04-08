@@ -57,7 +57,7 @@ export function normalizeDbKey(raw: string): string {
 // ── DatabaseBadge ─────────────────────────────────────────────────────────────
 
 /** Coloured pill badge for a database. Normalises raw source strings automatically. */
-export function DatabaseBadge({ dbKey, size = 'md' }: { dbKey: string; size?: 'sm' | 'md' | 'lg' }) {
+export function DatabaseBadge({ dbKey, size = 'md', block = false }: { dbKey: string; size?: 'sm' | 'md' | 'lg'; block?: boolean }) {
   const canonical = normalizeDbKey(dbKey)
   const db = dbByKey(canonical)
   const label = db?.label ?? dbKey
@@ -73,12 +73,16 @@ export function DatabaseBadge({ dbKey, size = 'md' }: { dbKey: string; size?: 's
     <span
       title={label}
       style={{
-        display: 'inline-flex',
+        display: block ? 'flex' : 'inline-flex',
+        width: block ? '100%' : undefined,
+        justifyContent: block ? 'center' : undefined,
         alignItems: 'center',
         fontFamily: 'system-ui, sans-serif',
         fontWeight: 600,
         letterSpacing: '0.01em',
         whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
         backgroundColor: colors.bg,
         color: colors.text,
         ...sizeStyles[size],

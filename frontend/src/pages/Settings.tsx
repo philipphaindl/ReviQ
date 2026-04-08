@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useProject } from '../App'
 import {
   getProject, updateProject,
-  getReviewers, addReviewer, deleteReviewer,
+  getReviewers, addReviewer, updateReviewer, deleteReviewer,
   getInclusionCriteria, addInclusionCriterion, updateInclusionCriterion, deleteInclusionCriterion,
   getExclusionCriteria, addExclusionCriterion, updateExclusionCriterion, deleteExclusionCriterion,
   getQACriteria, addQACriterion, updateQACriterion, deleteQACriterion,
@@ -18,7 +18,7 @@ type Tab = 'project' | 'reviewers' | 'criteria' | 'qa' | 'taxonomies' | 'search'
 const TABS: { id: Tab; label: string }[] = [
   { id: 'project',    label: 'Project' },
   { id: 'reviewers',  label: 'Reviewers' },
-  { id: 'criteria',   label: 'I/E Criteria' },
+  { id: 'criteria',   label: 'Inclusion/Exclusion' },
   { id: 'qa',         label: 'Quality Assessment' },
   { id: 'taxonomies', label: 'Taxonomies' },
   { id: 'search',     label: 'Search Strings' },
@@ -43,7 +43,7 @@ export default function Settings() {
     <div className="space-y-5">
       <div>
         <h1 className="text-xl font-bold text-navy">Setup</h1>
-        <p className="text-sm text-gray-500">Phase 1 — Configuration and Settings</p>
+        <p className="text-sm text-gray-500">Phase 1 — Project Configuration and Protocol Setup</p>
       </div>
 
       <div className="flex gap-0 border-b border-border">
@@ -115,7 +115,7 @@ function ProjectTab({ pid }: { pid: number }) {
       </Card>
 
       <Card>
-        <CardHeader title="QA Thresholds" />
+        <CardHeader title="Quality Score Thresholds" />
         <div className="grid grid-cols-2 gap-4">
           <FormField label="High Quality ≥ (%)">
             <input type="number" className="input" min={0} max={100} value={val('qa_high_threshold') as number}
@@ -147,17 +147,25 @@ function ProjectTab({ pid }: { pid: number }) {
 
 // ── Reviewers Tab ─────────────────────────────────────────────────────────────
 
+type ReviewerModalState =
+  | { kind: 'add' }
+  | { kind: 'edit'; id: number; name: string; email: string; role: string }
+
 function ReviewersTab({ pid }: { pid: number }) {
   const qc = useQueryClient()
   const { data: reviewers = [] } = useQuery({ queryKey: ['reviewers', pid], queryFn: () => getReviewers(pid) })
-  const [modal, setModal] = useState(false)
+  const [modal, setModal] = useState<ReviewerModalState | null>(null)
   const [form, setForm] = useState({ name: '', email: '', role: 'R2' })
   const [submitted, setSubmitted] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null)
 
   const addMutation = useMutation({
     mutationFn: () => addReviewer(pid, form),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['reviewers', pid] }); setModal(false); setForm({ name: '', email: '', role: 'R2' }); setSubmitted(false) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['reviewers', pid] }); setModal(null); setForm({ name: '', email: '', role: 'R2' }); setSubmitted(false) },
+  })
+  const editMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: { name: string; email: string } }) => updateReviewer(pid, id, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['reviewers', pid] }); setModal(null); setSubmitted(false) },
   })
   const deleteMutation = useMutation({
     mutationFn: (rid: number) => deleteReviewer(pid, rid),
@@ -166,7 +174,26 @@ function ReviewersTab({ pid }: { pid: number }) {
 
   const usedRoles = reviewers.map(r => r.role)
   const availableRoles = ROLES.filter(r => !usedRoles.includes(r))
-  const submit = () => { setSubmitted(true); if (form.name) addMutation.mutate() }
+
+  const openAdd = () => {
+    const defaultRole = availableRoles[0] ?? 'R2'
+    setForm({ name: '', email: '', role: defaultRole })
+    setSubmitted(false)
+    setModal({ kind: 'add' })
+  }
+
+  const openEdit = (r: { id: number; name: string; email?: string; role: string }) => {
+    setForm({ name: r.name, email: r.email ?? '', role: r.role })
+    setSubmitted(false)
+    setModal({ kind: 'edit', id: r.id, name: r.name, email: r.email ?? '', role: r.role })
+  }
+
+  const submit = () => {
+    setSubmitted(true)
+    if (!form.name.trim()) return
+    if (modal?.kind === 'add') addMutation.mutate()
+    else if (modal?.kind === 'edit') editMutation.mutate({ id: modal.id, data: { name: form.name, email: form.email } })
+  }
 
   return (
     <div className="max-w-xl">
@@ -174,25 +201,28 @@ function ReviewersTab({ pid }: { pid: number }) {
         <CardHeader
           title="Reviewers (max 5)"
           action={reviewers.length < 5
-            ? <button className="btn-secondary text-xs" onClick={() => { setSubmitted(false); setModal(true) }}>+ Add</button>
+            ? <button className="btn-secondary text-xs" onClick={openAdd}>+ Add</button>
             : null}
         />
         {reviewers.length === 0 ? (
-          <EmptyState icon="—" message="No reviewers configured. R1 is always the lead reviewer." />
+          <EmptyState icon="—" message="No reviewers configured. R1 is the lead reviewer." />
         ) : (
           <div className="divide-y divide-border">
             {reviewers.sort((a, b) => a.role.localeCompare(b.role)).map(r => (
               <div key={r.id} className="py-3 flex items-center gap-3">
-                <span className={`text-xs font-bold px-2 py-0.5 rounded border ${r.role === 'R1' ? 'bg-blue-50 text-info border-blue-200' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
-                  {r.role}
+                <span className={`text-xs font-bold px-2 py-0.5 rounded border shrink-0 ${r.role === 'R1' ? 'bg-blue-50 text-info border-blue-200' : 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                  {r.role}{r.role === 'R1' ? ' — Lead' : ''}
                 </span>
                 <div className="flex-1">
                   <p className="text-sm font-medium text-navy">{r.name}</p>
                   {r.email && <p className="text-xs text-gray-400">{r.email}</p>}
                 </div>
-                {r.role !== 'R1' && (
-                  <button className="btn-danger text-xs px-2 py-1" onClick={() => setConfirmDelete(r.id)}>Remove</button>
-                )}
+                <div className="flex gap-1 shrink-0">
+                  <button className="btn-secondary text-xs px-2 py-1" onClick={() => openEdit(r)}>Edit</button>
+                  {r.role !== 'R1' && (
+                    <button className="btn-danger text-xs px-2 py-1" onClick={() => setConfirmDelete(r.id)}>Remove</button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -208,9 +238,13 @@ function ReviewersTab({ pid }: { pid: number }) {
       )}
 
       {modal && (
-        <Modal title="Add Reviewer" onClose={() => setModal(false)} onEnter={submit}>
-          <FormField label="Name" required error={submitted && !form.name ? 'Name is required' : undefined}>
-            <input className={`input ${submitted && !form.name ? 'border-exclude ring-1 ring-exclude' : ''}`}
+        <Modal
+          title={modal.kind === 'add' ? 'Add Reviewer' : 'Edit Reviewer'}
+          onClose={() => setModal(null)}
+          onEnter={submit}
+        >
+          <FormField label="Name" required error={submitted && !form.name.trim() ? 'Name is required' : undefined}>
+            <input className={`input ${submitted && !form.name.trim() ? 'border-exclude ring-1 ring-exclude' : ''}`}
               value={form.name} autoFocus
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
           </FormField>
@@ -218,16 +252,23 @@ function ReviewersTab({ pid }: { pid: number }) {
             <input className="input" type="email" value={form.email}
               onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
           </FormField>
-          <FormField label="Role">
-            <select className="select" value={form.role}
-              onChange={e => setForm(f => ({ ...f, role: e.target.value }))}>
-              {availableRoles.map(r => <option key={r} value={r}>{r}{r === 'R1' ? ' (Lead)' : ''}</option>)}
-            </select>
-          </FormField>
-          <button className="btn-primary w-full justify-center mt-2"
-            disabled={addMutation.isPending} onClick={submit}>
-            {addMutation.isPending ? 'Adding…' : 'Add Reviewer'}
-          </button>
+          {modal.kind === 'add' && (
+            <FormField label="Role">
+              <select className="select" value={form.role}
+                onChange={e => setForm(f => ({ ...f, role: e.target.value }))}>
+                {availableRoles.map(r => <option key={r} value={r}>{r}{r === 'R1' ? ' (Lead)' : ''}</option>)}
+              </select>
+            </FormField>
+          )}
+          <div className="flex gap-2 mt-2">
+            <button className="btn-secondary flex-1 justify-center" onClick={() => setModal(null)}>Cancel</button>
+            <button className="btn-primary flex-1 justify-center"
+              disabled={addMutation.isPending || editMutation.isPending} onClick={submit}>
+              {modal.kind === 'add'
+                ? (addMutation.isPending ? 'Adding…' : 'Add Reviewer')
+                : (editMutation.isPending ? 'Saving…' : 'Save Changes')}
+            </button>
+          </div>
         </Modal>
       )}
     </div>
@@ -302,6 +343,7 @@ function CriteriaTab({ pid }: { pid: number }) {
           ? <EmptyState icon="—" message="No inclusion criteria defined." />
           : inclusions.map(c => (
             <CriterionRow key={c.id} label={c.label} description={c.description} badge={`Phase: ${c.phase}`}
+              variant="inclusion"
               onEdit={() => openEdit('edit-i', c)} onDelete={() => setConfirmDelete({ type: 'i', id: c.id })} />
           ))}
       </Card>
@@ -313,6 +355,7 @@ function CriteriaTab({ pid }: { pid: number }) {
           ? <EmptyState icon="—" message="No exclusion criteria defined." />
           : exclusions.map(c => (
             <CriterionRow key={c.id} label={c.label} description={c.description} badge={`Phase: ${c.phase}`}
+              variant="exclusion"
               onEdit={() => openEdit('edit-e', c)} onDelete={() => setConfirmDelete({ type: 'e', id: c.id })} />
           ))}
       </Card>
@@ -338,7 +381,7 @@ function CriteriaTab({ pid }: { pid: number }) {
         >
           <FormField label="Label" required error={submitted && !form.label ? 'Label is required (e.g. I1, E3)' : undefined}>
             <input className={`input ${submitted && !form.label ? 'border-exclude ring-1 ring-exclude' : ''}`}
-              placeholder="I1" value={form.label} autoFocus
+              placeholder="I1" value={form.label} autoFocus maxLength={15}
               onChange={e => setForm(f => ({ ...f, label: e.target.value }))} />
           </FormField>
           <FormField label="Description" required error={submitted && !form.description ? 'Description is required' : undefined}>
@@ -365,12 +408,18 @@ function CriteriaTab({ pid }: { pid: number }) {
 
 // ── Criterion row component ───────────────────────────────────────────────────
 
-function CriterionRow({ label, description, badge, onEdit, onDelete }: {
-  label: string; description: string; badge?: string; onEdit: () => void; onDelete: () => void
+function CriterionRow({ label, description, badge, variant = 'neutral', onEdit, onDelete }: {
+  label: string; description: string; badge?: string
+  variant?: 'inclusion' | 'exclusion' | 'neutral'
+  onEdit: () => void; onDelete: () => void
 }) {
+  const badgeClass =
+    variant === 'inclusion' ? 'text-green-700 bg-green-50 border-green-200' :
+    variant === 'exclusion' ? 'text-red-700 bg-red-50 border-red-200' :
+    'text-info bg-blue-50 border-blue-200'
   return (
     <div className="flex items-start gap-3 py-3 border-b border-border last:border-0">
-      <span className="shrink-0 text-xs font-bold text-info bg-blue-50 border border-blue-200 rounded px-2 py-0.5 mt-0.5">{label}</span>
+      <span className={`shrink-0 text-xs font-bold rounded px-2 py-0.5 border mt-0.5 w-[110px] truncate text-center inline-block ${badgeClass}`} title={label}>{label}</span>
       <div className="flex-1 min-w-0">
         <p className="text-sm text-navy">{description}</p>
         {badge && <span className="text-xs text-gray-400">{badge}</span>}
@@ -818,9 +867,9 @@ function SearchStringsTab({ pid }: { pid: number }) {
           : strings.map(s => (
             <div key={s.id} className="py-4 border-b border-border last:border-0">
               <div className="flex items-start justify-between gap-3">
-                {/* Logo only — no redundant text label */}
-                <div className="shrink-0 flex items-center" style={{ minWidth: 140 }}>
-                  <DatabaseBadge dbKey={s.db_name} size="lg" />
+                {/* Fixed-width badge so all databases align uniformly */}
+                <div className="shrink-0 flex items-center" style={{ width: 170 }}>
+                  <DatabaseBadge dbKey={s.db_name} size="lg" block />
                 </div>
                 <div className="flex-1 min-w-0">
                   {s.query_string

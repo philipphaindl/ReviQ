@@ -25,7 +25,7 @@ export default function Snowballing() {
     <div className="space-y-5">
       <div>
         <h1 className="text-xl font-bold text-navy">Snowballing</h1>
-        <p className="text-sm text-gray-500">Phase 5 — Capture further papers through forward &amp; backward snowballing <span className="text-gray-300 font-normal">(optional)</span></p>
+        <p className="text-sm text-gray-500">Phase 5 — Forward and Backward Citation Snowballing <span className="text-gray-300 font-normal">(optional)</span>
       </div>
       <IterationsView pid={projectId} />
     </div>
@@ -283,7 +283,7 @@ function IterationCard({ iteration, pid, expanded, onToggle }: {
   const isSaturated = iteration.saturation_confirmed
 
   return (
-    <Card>
+    <Card className={expanded ? 'border-info shadow-md' : ''}>
       {/* Header */}
       <div className="flex items-center gap-3">
         <div className="flex-1 min-w-0 cursor-pointer" onClick={onToggle}>

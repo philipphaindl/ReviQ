@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useProject } from '../App'
 import { getExportStats, getQASummary, getExtractionSummary, exportBibtexUrl } from '../api/client'
 import { Card, CardHeader, StatCard, EmptyState } from '../components/ui'
+import type { ExtractionField } from '../api/types'
 
 type ResView = 'prisma' | 'charts' | 'export'
 
@@ -18,7 +19,7 @@ export default function Results() {
     <div className="space-y-5">
       <div>
         <h1 className="text-xl font-bold text-navy">Results & Visualization</h1>
-        <p className="text-sm text-gray-500">Phase 8 — Synthesize and visualize your findings</p>
+        <p className="text-sm text-gray-500">Phase 8 — Results Synthesis and Visualization</p>
       </div>
 
       <div className="flex gap-0 border-b border-border">
@@ -225,6 +226,53 @@ function PrismaFlowDiagram({
 
 // ── Charts View ───────────────────────────────────────────────────────────────
 
+function PieChart({ data }: { data: { label: string; value: number; color: string }[] }) {
+  const total = data.reduce((s, d) => s + d.value, 0)
+  if (total === 0) return null
+
+  const size = 130
+  const cx = size / 2
+  const cy = size / 2
+  const r = 50
+
+  let currentAngle = -Math.PI / 2
+  const slices = data.map(d => {
+    const angle = (d.value / total) * 2 * Math.PI
+    const start = currentAngle
+    currentAngle += angle
+    return { ...d, start, end: currentAngle, angle }
+  })
+
+  const arcPath = (start: number, end: number, radius: number) => {
+    const x1 = cx + radius * Math.cos(start)
+    const y1 = cy + radius * Math.sin(start)
+    const x2 = cx + radius * Math.cos(end)
+    const y2 = cy + radius * Math.sin(end)
+    const large = end - start > Math.PI ? 1 : 0
+    return `M ${cx} ${cy} L ${x1} ${y1} A ${radius} ${radius} 0 ${large} 1 ${x2} ${y2} Z`
+  }
+
+  return (
+    <div className="flex items-center gap-4">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ flexShrink: 0 }}>
+        {slices.map((s, i) => (
+          <path key={i} d={arcPath(s.start, s.end, r)} fill={s.color} stroke="white" strokeWidth={1.5} />
+        ))}
+      </svg>
+      <div className="space-y-1.5 flex-1">
+        {data.map(d => (
+          <div key={d.label} className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
+            <span className="text-xs text-navy flex-1">{d.label}</span>
+            <span className="text-xs font-semibold text-navy">{d.value}</span>
+            <span className="text-xs text-gray-400">({Math.round(d.value / total * 100)}%)</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function ChartsView({ pid }: { pid: number }) {
   const { data: qaSummary } = useQuery({
     queryKey: ['qa-summary', pid],
@@ -237,7 +285,6 @@ function ChartsView({ pid }: { pid: number }) {
 
   // Build year distribution from extraction summary or QA summary
   const yearMap: Record<number, number> = {}
-
   if (extSummary?.papers.length) {
     for (const p of extSummary.papers) {
       if (p.year) yearMap[p.year] = (yearMap[p.year] ?? 0) + 1
@@ -247,27 +294,41 @@ function ChartsView({ pid }: { pid: number }) {
       if (p.paper_year) yearMap[p.paper_year] = (yearMap[p.paper_year] ?? 0) + 1
     }
   }
-
   const years = Object.keys(yearMap).map(Number).sort((a, b) => a - b)
   const maxYearCount = Math.max(...Object.values(yearMap), 1)
 
+  // Quality distribution
   const qualityDist = qaSummary ? {
     high:   qaSummary.papers.filter(p => p.quality_level === 'high').length,
     medium: qaSummary.papers.filter(p => p.quality_level === 'medium').length,
     low:    qaSummary.papers.filter(p => p.quality_level === 'low').length,
   } : null
+  const qaTotal = qualityDist ? qualityDist.high + qualityDist.medium + qualityDist.low : 0
+
+  // Taxonomy/dropdown field distributions from extraction data
+  const dropdownFields: ExtractionField[] = extSummary?.fields.filter(f => f.field_type === 'dropdown') ?? []
+  const fieldDists: { field: ExtractionField; dist: Record<string, number> }[] = dropdownFields.map(f => {
+    const dist: Record<string, number> = {}
+    for (const p of extSummary?.papers ?? []) {
+      const val = p.values[f.field_name]
+      if (val) dist[val] = (dist[val] ?? 0) + 1
+    }
+    return { field: f, dist }
+  }).filter(d => Object.keys(d.dist).length > 0)
+
+  const PIE_COLORS = ['#2563eb', '#16a34a', '#d97706', '#dc2626', '#7c3aed', '#0891b2', '#db2777', '#65a30d']
 
   const hasYearData = years.length > 0
-  const hasQA = qualityDist !== null && (qualityDist.high + qualityDist.medium + qualityDist.low) > 0
-  const hasExt = extSummary && extSummary.fields.length > 0 && extSummary.papers.length > 0
+  const hasQA = qaTotal > 0
+  const hasTaxonomy = fieldDists.length > 0
 
-  if (!hasYearData && !hasQA && !hasExt) {
+  if (!hasYearData && !hasQA && !hasTaxonomy) {
     return <EmptyState icon="—" message="No data available yet. Complete screening or quality assessment to see charts." />
   }
 
   return (
     <div className="space-y-4">
-      {/* Publications by year */}
+      {/* Publications per year */}
       {hasYearData && (
         <Card>
           <CardHeader title="Publications per Year" />
@@ -278,11 +339,9 @@ function ChartsView({ pid }: { pid: number }) {
               return (
                 <div key={y} className="flex items-center gap-3">
                   <span className="text-xs text-navy font-mono w-10 shrink-0 text-right">{y}</span>
-                  <div className="flex-1 bg-gray-100 rounded-full h-5 relative">
-                    <div
-                      className="bg-info h-5 rounded-full transition-all flex items-center justify-end pr-2"
-                      style={{ width: `${Math.max(pct, 4)}%` }}
-                    >
+                  <div className="flex-1 bg-gray-100 rounded-md h-6 relative">
+                    <div className="bg-info h-6 rounded-md transition-all flex items-center justify-end pr-2"
+                      style={{ width: `${Math.max(pct, 4)}%` }}>
                       <span className="text-xs font-bold text-white">{count}</span>
                     </div>
                   </div>
@@ -293,67 +352,47 @@ function ChartsView({ pid }: { pid: number }) {
         </Card>
       )}
 
-      {/* Quality distribution */}
+      {/* Quality assessment bar chart with percentages */}
       {hasQA && qualityDist && (
         <Card>
           <CardHeader title="Quality Assessment Distribution" />
-          <div className="grid grid-cols-3 gap-3 mb-4">
-            <div className="bg-green-50 border border-green-200 rounded-md p-3 text-center">
-              <p className="text-xs text-green-700 font-semibold uppercase tracking-wider">High</p>
-              <p className="text-2xl font-bold text-green-700 mt-1">{qualityDist.high}</p>
-            </div>
-            <div className="bg-yellow-50 border border-yellow-200 rounded-md p-3 text-center">
-              <p className="text-xs text-yellow-700 font-semibold uppercase tracking-wider">Medium</p>
-              <p className="text-2xl font-bold text-yellow-700 mt-1">{qualityDist.medium}</p>
-            </div>
-            <div className="bg-red-50 border border-red-200 rounded-md p-3 text-center">
-              <p className="text-xs text-red-700 font-semibold uppercase tracking-wider">Low</p>
-              <p className="text-2xl font-bold text-red-700 mt-1">{qualityDist.low}</p>
-            </div>
+          <div className="space-y-2 pt-1">
+            {[
+              { label: 'High', count: qualityDist.high, color: 'bg-green-500', textColor: 'text-green-700' },
+              { label: 'Medium', count: qualityDist.medium, color: 'bg-yellow-400', textColor: 'text-yellow-700' },
+              { label: 'Low', count: qualityDist.low, color: 'bg-red-400', textColor: 'text-red-700' },
+            ].map(row => {
+              const pct = qaTotal > 0 ? Math.round(row.count / qaTotal * 100) : 0
+              return (
+                <div key={row.label} className="flex items-center gap-3">
+                  <span className={`text-xs font-semibold w-14 shrink-0 ${row.textColor}`}>{row.label}</span>
+                  <div className="flex-1 bg-gray-100 rounded-md h-6 relative">
+                    <div className={`${row.color} h-6 rounded-md transition-all flex items-center justify-end pr-2`}
+                      style={{ width: `${Math.max(pct, pct > 0 ? 6 : 0)}%` }}>
+                      {pct >= 10 && <span className="text-xs font-bold text-white">{pct}%</span>}
+                    </div>
+                  </div>
+                  <span className="text-xs text-gray-500 shrink-0 w-16 text-right">{row.count} paper{row.count !== 1 ? 's' : ''} ({pct}%)</span>
+                </div>
+              )
+            })}
           </div>
-          {/* Stacked bar */}
-          {(() => {
-            const total = qualityDist.high + qualityDist.medium + qualityDist.low
-            if (total === 0) return null
-            return (
-              <div className="flex h-5 rounded-full overflow-hidden gap-0.5">
-                {qualityDist.high > 0 && (
-                  <div className="bg-green-500 flex items-center justify-center text-white text-xs font-bold transition-all"
-                    style={{ width: `${qualityDist.high / total * 100}%` }}>
-                    {qualityDist.high > 1 ? qualityDist.high : ''}
-                  </div>
-                )}
-                {qualityDist.medium > 0 && (
-                  <div className="bg-yellow-400 flex items-center justify-center text-white text-xs font-bold transition-all"
-                    style={{ width: `${qualityDist.medium / total * 100}%` }}>
-                    {qualityDist.medium > 1 ? qualityDist.medium : ''}
-                  </div>
-                )}
-                {qualityDist.low > 0 && (
-                  <div className="bg-red-400 flex items-center justify-center text-white text-xs font-bold transition-all"
-                    style={{ width: `${qualityDist.low / total * 100}%` }}>
-                    {qualityDist.low > 1 ? qualityDist.low : ''}
-                  </div>
-                )}
-              </div>
-            )
-          })()}
         </Card>
       )}
 
-      {/* Extraction completion */}
-      {hasExt && extSummary && (
-        <Card>
-          <CardHeader title="Extraction Completion" />
-          <div className="grid grid-cols-3 gap-3">
-            <StatCard label="Papers" value={extSummary.papers.length} />
-            <StatCard label="Fully Extracted"
-              value={extSummary.papers.filter(p => p.filled === p.total_fields).length}
-              color="include" />
-            <StatCard label="Fields Defined" value={extSummary.fields.length} />
-          </div>
-        </Card>
-      )}
+      {/* Taxonomy/dropdown field pie charts */}
+      {hasTaxonomy && fieldDists.map(({ field, dist }) => {
+        const entries = Object.entries(dist).sort((a, b) => b[1] - a[1])
+        const pieData = entries.map(([ label, value ], i) => ({
+          label, value, color: PIE_COLORS[i % PIE_COLORS.length],
+        }))
+        return (
+          <Card key={field.field_name}>
+            <CardHeader title={field.field_label} />
+            <PieChart data={pieData} />
+          </Card>
+        )
+      })}
     </div>
   )
 }
@@ -436,7 +475,7 @@ function ExportView({ pid }: { pid: number }) {
 
 function StatRow({ label, value }: { label: string; value: number }) {
   return (
-    <div className="flex justify-between py-1 border-b border-border last:border-0">
+    <div className="flex justify-between py-1 border-b border-border">
       <span className="text-gray-600">{label}</span>
       <span className="font-semibold text-navy">{value}</span>
     </div>

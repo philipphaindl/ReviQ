@@ -39,7 +39,7 @@ export default function Extraction() {
     <div className="space-y-5">
       <div>
         <h1 className="text-xl font-bold text-navy">Data Extraction</h1>
-        <p className="text-sm text-gray-500">Phase 7 — Extract structured data from included papers</p>
+        <p className="text-sm text-gray-500">Phase 7 — Structured Data Extraction</p>
       </div>
 
       <div className="flex gap-0 border-b border-border">

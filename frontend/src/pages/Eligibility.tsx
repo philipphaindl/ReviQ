@@ -26,7 +26,7 @@ export default function Eligibility() {
     <div className="space-y-5">
       <div>
         <h1 className="text-xl font-bold text-navy">Full-Text Eligibility</h1>
-        <p className="text-sm text-gray-500">Phase 4 — Assess full texts of screened papers</p>
+        <p className="text-sm text-gray-500">Phase 4 — Full-Text Eligibility Assessment</p>
       </div>
 
       <div className="flex gap-0 border-b border-border">

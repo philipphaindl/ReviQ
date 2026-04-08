@@ -26,7 +26,7 @@ export default function Screening() {
     <div className="space-y-5">
       <div>
         <h1 className="text-xl font-bold text-navy">Screening</h1>
-        <p className="text-sm text-gray-500">Phase 3 — Title &amp; Abstract Screening</p>
+        <p className="text-sm text-gray-500">Phase 3 — Title and Abstract Screening</p>
       </div>
 
       <div className="flex gap-0 border-b border-border">
