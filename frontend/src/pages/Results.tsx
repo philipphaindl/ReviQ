@@ -158,8 +158,9 @@ function PrismaFlowDiagram({
     ? boxH + Math.max(0, ftCritEntries.length - 0) * 14
     : 0
 
-  // Source entries for identification box
-  const sourceEntries = Object.entries(bySource).filter(([, v]) => v.total > 0)
+  // Source entries for identification box — exclude snowballing iterations
+  const sourceEntries = Object.entries(bySource)
+    .filter(([src, v]) => !src.startsWith('snowballing:') && v.total > 0)
   const identBoxH = boxH + Math.max(0, sourceEntries.length) * 14
 
   // Y positions for main boxes (center y)

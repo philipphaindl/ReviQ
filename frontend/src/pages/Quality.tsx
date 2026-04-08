@@ -69,8 +69,8 @@ function ScoringView({ pid }: { pid: number }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-3">
-        <StatCard label="Eligible Papers" value={summary.papers.length} />
-        <StatCard label="Fully Scored" value={scored} color="include" />
+        <StatCard label="Eligible Papers" value={summary.papers.length} sub="From Phase 4 (Eligibility)" />
+        <StatCard label="Fully Scored" value={scored} color="include" sub="→ Phase 7 (Extraction)" />
         <StatCard label="Pending" value={summary.papers.length - scored} color="uncertain" />
       </div>
 

@@ -422,6 +422,24 @@ function ExtractionModal({ paper, fields, pid, onClose }: {
     queryKey: ['reviewers', pid],
     queryFn: () => getReviewers(pid),
   })
+  // Fetch all taxonomy types + their entries so dropdowns can show taxonomy values
+  const { data: taxonomyTypes = [] } = useQuery({
+    queryKey: ['taxonomy-types', pid],
+    queryFn: () => getTaxonomyTypes(pid),
+  })
+  // Fetch entries for each taxonomy type
+  const taxonomyEntryQueries = taxonomyTypes.map(type => ({
+    type,
+    query: useQuery({
+      queryKey: ['taxonomy', pid, type],
+      queryFn: () => getTaxonomy(pid, type),
+    }),
+  }))
+  // Build a map: taxonomyType → string[]
+  const taxonomyOptions: Record<string, string[]> = {}
+  for (const { type, query } of taxonomyEntryQueries) {
+    if (query.data) taxonomyOptions[type] = query.data.map(e => e.value)
+  }
 
   const activeReviewerId = reviewerId ?? reviewers.find(r => r.role === 'R1')?.id ?? reviewers[0]?.id
 
@@ -457,6 +475,28 @@ function ExtractionModal({ paper, fields, pid, onClose }: {
     }
   }
 
+  // Split fields: dropdowns first (Taxonomies section), then others (Fields section)
+  const dropdownFields = fields.filter(f => f.field_type === 'dropdown')
+  const otherFields = fields.filter(f => f.field_type !== 'dropdown')
+
+  // Enrich dropdown field with taxonomy options when stored options are empty
+  const resolveOptions = (field: ExtractionField): string[] => {
+    if (field.options) {
+      try {
+        const parsed = JSON.parse(field.options) as string[]
+        if (parsed.length > 0) return parsed
+      } catch { /* fall through */ }
+    }
+    // Try to find matching taxonomy by field_name or field_label (slugified)
+    for (const type of taxonomyTypes) {
+      if (field.field_name === type || field.field_name.includes(type) || type.includes(field.field_name)) {
+        return taxonomyOptions[type] ?? []
+      }
+    }
+    // Fallback: combine all taxonomy options
+    return Object.values(taxonomyOptions).flat()
+  }
+
   return (
     <Modal title="Data Extraction" onClose={onClose} width="max-w-2xl">
       <div className="bg-card rounded-md p-4 mb-4 border border-border">
@@ -465,12 +505,36 @@ function ExtractionModal({ paper, fields, pid, onClose }: {
       </div>
 
       <div className="space-y-3 mb-4">
-        {fields.map(field => (
-          <div key={field.field_name} className="border border-border rounded-md p-3">
-            <p className="text-sm font-semibold text-navy mb-1">{field.field_label}</p>
-            <FieldInput field={field} value={values[field.field_name] ?? ''} onChange={v => handleChange(field.field_name, v)} />
-          </div>
-        ))}
+        {/* ── Taxonomies section ── */}
+        {dropdownFields.length > 0 && (
+          <>
+            <p className="text-xs font-semibold text-navy-muted uppercase tracking-wider pt-1">Taxonomies</p>
+            {dropdownFields.map(field => (
+              <div key={field.field_name} className="border border-amber-200 bg-amber-50/40 rounded-md p-3">
+                <p className="text-sm font-semibold text-navy mb-1">{field.field_label}</p>
+                <FieldInput
+                  field={field}
+                  resolvedOptions={resolveOptions(field)}
+                  value={values[field.field_name] ?? ''}
+                  onChange={v => handleChange(field.field_name, v)}
+                />
+              </div>
+            ))}
+          </>
+        )}
+
+        {/* ── Fields section ── */}
+        {otherFields.length > 0 && (
+          <>
+            <p className="text-xs font-semibold text-navy-muted uppercase tracking-wider pt-1">Fields</p>
+            {otherFields.map(field => (
+              <div key={field.field_name} className="border border-border rounded-md p-3">
+                <p className="text-sm font-semibold text-navy mb-1">{field.field_label}</p>
+                <FieldInput field={field} value={values[field.field_name] ?? ''} onChange={v => handleChange(field.field_name, v)} />
+              </div>
+            ))}
+          </>
+        )}
       </div>
 
       {saved && <p className="text-xs text-green-600 mb-2">Saved.</p>}
@@ -486,8 +550,8 @@ function ExtractionModal({ paper, fields, pid, onClose }: {
   )
 }
 
-function FieldInput({ field, value, onChange }: {
-  field: ExtractionField; value: string; onChange: (v: string) => void
+function FieldInput({ field, value, onChange, resolvedOptions }: {
+  field: ExtractionField; value: string; onChange: (v: string) => void; resolvedOptions?: string[]
 }) {
   if (field.field_type === 'boolean') {
     return (
@@ -503,7 +567,7 @@ function FieldInput({ field, value, onChange }: {
     )
   }
   if (field.field_type === 'dropdown') {
-    const options: string[] = (() => { try { return JSON.parse(field.options ?? '[]') } catch { return [] } })()
+    const options = resolvedOptions ?? (() => { try { return JSON.parse(field.options ?? '[]') as string[] } catch { return [] } })()
     return (
       <select className="input" value={value} onChange={e => onChange(e.target.value)}>
         <option value="">— Select —</option>

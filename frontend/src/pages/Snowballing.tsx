@@ -46,17 +46,28 @@ function IterationsView({ pid }: { pid: number }) {
     queryFn: () => getSnowballingIterations(pid),
   })
 
-  // Seed papers: original papers included from screening (non-snowballing source)
   const { data: screeningPapers = [] } = useQuery({
     queryKey: ['papers', pid, 'screening'],
     queryFn: () => getPapers(pid, { phase: 'screening' }),
   })
+  // Prefer full-text eligibility included as seed corpus; fall back to screening-included
+  const { data: fulltextPapers = [] } = useQuery({
+    queryKey: ['papers', pid, 'full-text'],
+    queryFn: () => getPapers(pid, { phase: 'full-text' }),
+  })
 
-  const seedPapers = screeningPapers.filter(
+  const fulltextIncluded = fulltextPapers.filter(
+    p => p.final_decision?.decision === 'I' && !p.source.startsWith('snowballing:')
+  )
+  const screeningIncluded = screeningPapers.filter(
     p => p.dedup_status === 'original'
       && !p.source.startsWith('snowballing:')
       && p.final_decision?.decision === 'I'
   )
+  const seedPapers = fulltextIncluded.length > 0 ? fulltextIncluded : screeningIncluded
+  const seedPhaseLabel = fulltextIncluded.length > 0
+    ? 'From Phase 4 (Eligibility)'
+    : 'From Phase 3 (Screening)'
 
   const createMutation = useMutation({
     mutationFn: () => createSnowballingIteration(pid, iterType),
@@ -76,8 +87,7 @@ function IterationsView({ pid }: { pid: number }) {
     <div className="space-y-5">
       {/* Stats */}
       <div className="grid grid-cols-4 gap-3">
-        <StatCard label="Seed Papers" value={seedPapers.length} color="include"
-          sub="Included from screening" />
+        <StatCard label="Seed Papers" value={seedPapers.length} sub={seedPhaseLabel} />
         <StatCard label="Iterations" value={iterations.length} />
         <StatCard label="Retrieved" value={totalPapers} />
         <StatCard label="Newly Included" value={totalIncluded} color={totalIncluded > 0 ? 'include' : 'navy'} />
@@ -108,8 +118,8 @@ function IterationsView({ pid }: { pid: number }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {/* Seed papers row */}
-              <tr className="bg-blue-50">
+              {/* Seed papers row — highlighted only when no iteration is selected */}
+              <tr className={expandedId === null ? 'bg-blue-50' : ''}>
                 <td className="py-2 font-semibold text-navy">Seed corpus</td>
                 <td className="py-2 text-xs text-gray-500">Initial search</td>
                 <td className="py-2 text-right text-navy font-medium">—</td>

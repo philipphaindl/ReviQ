@@ -126,9 +126,9 @@ function PapersView({ pid }: { pid: number }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-5 gap-3">
-        <StatCard label="Eligible" value={counts.total} />
+        <StatCard label="Eligible" value={counts.total} sub="Screening-included · Phase 3 → 4" />
         <StatCard label="Undecided" value={counts.undecided} color="uncertain" />
-        <StatCard label="Included" value={counts.I} color="include" />
+        <StatCard label="Included" value={counts.I} color="include" sub="→ Phase 6/7 (QA / Extract)" />
         <StatCard label="Excluded" value={counts.E} color="exclude" />
         <StatCard label="Uncertain" value={counts.U} color="uncertain" />
       </div>
