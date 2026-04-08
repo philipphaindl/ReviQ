@@ -362,21 +362,25 @@ function ExtractView({ pid }: { pid: number }) {
   if (isLoading) return <p className="text-sm text-gray-400">Loading…</p>
   if (!summary) return null
 
-  if (summary.fields.length === 0) {
-    return <EmptyState icon="—" message="No extraction fields defined. Add fields in the 'Field Schema' tab first." />
-  }
   if (summary.papers.length === 0) {
     return <EmptyState icon="—" message="No included papers yet. Complete Full-Text Eligibility (Phase 4) first." />
   }
 
-  const done = summary.papers.filter(p => p.filled === p.total_fields).length
+  const hasTaxonomies = taxonomyTypes.length > 0
+  const hasFields = summary.fields.length > 0
+  const done = summary.papers.filter(p => p.filled === p.total_fields && p.total_fields > 0).length
 
   return (
     <div className="space-y-4">
+      {!hasTaxonomies && !hasFields && (
+        <div className="bg-amber-50 border border-amber-200 rounded-md px-4 py-2.5 text-sm text-amber-800">
+          No taxonomies or extraction fields configured yet. Add taxonomies in Setup → Taxonomy and/or fields in the Field Schema tab.
+        </div>
+      )}
       <div className="grid grid-cols-3 gap-3">
         <StatCard label="Included Papers" value={summary.papers.length} sub="Phase 4 (Eligibility) + Phase 5 (Snowballing)" />
-        <StatCard label="Fully Extracted" value={done} color="include" />
-        <StatCard label="Pending" value={summary.papers.length - done} color="uncertain" />
+        {hasFields && <StatCard label="Fields Extracted" value={done} color="include" />}
+        {hasTaxonomies && <StatCard label="Taxonomy Types" value={taxonomyTypes.length} color="info" />}
       </div>
 
       <div className="space-y-2">
@@ -390,6 +394,7 @@ function ExtractView({ pid }: { pid: number }) {
           paper={selectedPaper}
           fields={summary.fields}
           pid={pid}
+          taxonomyTypes={taxonomyTypes}
           taxonomyOptions={taxonomyOptions}
           onClose={() => setSelectedPaper(null)}
         />
@@ -428,10 +433,11 @@ function ExtractionPaperCard({ paper, onExtract }: { paper: ExtractionPaperRow; 
   )
 }
 
-function ExtractionModal({ paper, fields, pid, taxonomyOptions, onClose }: {
+function ExtractionModal({ paper, fields, pid, taxonomyTypes, taxonomyOptions, onClose }: {
   paper: ExtractionPaperRow
   fields: ExtractionField[]
   pid: number
+  taxonomyTypes: string[]
   taxonomyOptions: Record<string, string[]>
   onClose: () => void
 }) {
@@ -445,16 +451,18 @@ function ExtractionModal({ paper, fields, pid, taxonomyOptions, onClose }: {
 
   const activeReviewerId = reviewerId ?? reviewers.find(r => r.role === 'R1')?.id ?? reviewers[0]?.id
 
+  // Initialize values for both taxonomy types and extraction fields from stored data
   const [values, setValues] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {}
+    for (const type of taxonomyTypes) init[type] = paper.values[type] ?? ''
     for (const f of fields) init[f.field_name] = paper.values[f.field_name] ?? ''
     return init
   })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
-  const handleChange = (fieldName: string, value: string) => {
-    setValues(prev => ({ ...prev, [fieldName]: value }))
+  const handleChange = (key: string, value: string) => {
+    setValues(prev => ({ ...prev, [key]: value }))
     setSaved(false)
   }
 
@@ -463,6 +471,15 @@ function ExtractionModal({ paper, fields, pid, taxonomyOptions, onClose }: {
     setSaving(true)
     setSaved(false)
     try {
+      // Save taxonomy selections (keyed by taxonomy type name)
+      for (const type of taxonomyTypes) {
+        await upsertExtractionRecord(pid, paper.paper_id, {
+          reviewer_id: activeReviewerId,
+          field_name: type,
+          field_value: values[type] || undefined,
+        })
+      }
+      // Save extraction field values
       for (const f of fields) {
         await upsertExtractionRecord(pid, paper.paper_id, {
           reviewer_id: activeReviewerId,
@@ -477,28 +494,8 @@ function ExtractionModal({ paper, fields, pid, taxonomyOptions, onClose }: {
     }
   }
 
-  // Split fields: dropdowns first (Taxonomies section), then others (Fields section)
-  const dropdownFields = fields.filter(f => f.field_type === 'dropdown')
-  const otherFields = fields.filter(f => f.field_type !== 'dropdown')
-
-  // Enrich dropdown field with taxonomy options when stored options are empty
-  const resolveOptions = (field: ExtractionField): string[] => {
-    if (field.options) {
-      try {
-        const parsed = JSON.parse(field.options) as string[]
-        if (parsed.length > 0) return parsed
-      } catch { /* fall through */ }
-    }
-    // Try to find matching taxonomy type by field_name similarity
-    const types = Object.keys(taxonomyOptions)
-    for (const type of types) {
-      if (field.field_name === type || field.field_name.includes(type) || type.includes(field.field_name)) {
-        return taxonomyOptions[type]
-      }
-    }
-    // Fallback: combine all taxonomy entries across all types
-    return Object.values(taxonomyOptions).flat()
-  }
+  const toLabel = (type: string) =>
+    type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 
   return (
     <Modal title="Data Extraction" onClose={onClose} width="max-w-2xl">
@@ -508,35 +505,46 @@ function ExtractionModal({ paper, fields, pid, taxonomyOptions, onClose }: {
       </div>
 
       <div className="space-y-3 mb-4">
-        {/* ── Taxonomies section ── */}
-        {dropdownFields.length > 0 && (
+        {/* ── Taxonomies section — driven directly by taxonomy configuration ── */}
+        {taxonomyTypes.length > 0 && (
           <>
             <p className="text-xs font-semibold text-navy-muted uppercase tracking-wider pt-1">Taxonomies</p>
-            {dropdownFields.map(field => (
-              <div key={field.field_name} className="border border-amber-200 bg-amber-50/40 rounded-md p-3">
-                <p className="text-sm font-semibold text-navy mb-1">{field.field_label}</p>
-                <FieldInput
-                  field={field}
-                  resolvedOptions={resolveOptions(field)}
-                  value={values[field.field_name] ?? ''}
-                  onChange={v => handleChange(field.field_name, v)}
-                />
-              </div>
-            ))}
+            {taxonomyTypes.map(type => {
+              const options = taxonomyOptions[type] ?? []
+              return (
+                <div key={type} className="border border-amber-200 bg-amber-50/40 rounded-md p-3">
+                  <p className="text-sm font-semibold text-navy mb-1">{toLabel(type)}</p>
+                  {options.length > 0 ? (
+                    <select className="input" value={values[type] ?? ''} onChange={e => handleChange(type, e.target.value)}>
+                      <option value="">— Select —</option>
+                      {options.map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  ) : (
+                    <p className="text-xs text-gray-400 italic">No entries for this taxonomy. Add entries in Setup → Taxonomy.</p>
+                  )}
+                </div>
+              )
+            })}
           </>
         )}
 
         {/* ── Fields section ── */}
-        {otherFields.length > 0 && (
+        {fields.length > 0 && (
           <>
             <p className="text-xs font-semibold text-navy-muted uppercase tracking-wider pt-1">Fields</p>
-            {otherFields.map(field => (
+            {fields.map(field => (
               <div key={field.field_name} className="border border-border rounded-md p-3">
                 <p className="text-sm font-semibold text-navy mb-1">{field.field_label}</p>
                 <FieldInput field={field} value={values[field.field_name] ?? ''} onChange={v => handleChange(field.field_name, v)} />
               </div>
             ))}
           </>
+        )}
+
+        {taxonomyTypes.length === 0 && fields.length === 0 && (
+          <p className="text-sm text-gray-400 italic text-center py-4">
+            No taxonomies or fields configured. Add taxonomies in Setup → Taxonomy or fields in Field Schema.
+          </p>
         )}
       </div>
 
