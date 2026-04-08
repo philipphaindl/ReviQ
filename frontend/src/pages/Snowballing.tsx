@@ -305,7 +305,7 @@ function IterationCard({ iteration, pid, expanded, onToggle }: {
               </span>
             )}
           </div>
-          <p className="text-xs text-gray-400 mt-0.5">
+          <p className="text-xs text-gray-400 mt-1.5">
             {iteration.paper_count} retrieved · {iteration.included_count} included
           </p>
         </div>

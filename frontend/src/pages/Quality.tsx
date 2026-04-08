@@ -30,7 +30,7 @@ export default function Quality() {
                 ? 'text-info after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-info'
                 : 'text-gray-400 hover:text-navy'
             }`}>
-            {v === 'scoring' ? 'Score Papers' : 'QA Summary'}
+            {v === 'scoring' ? 'Score Papers' : 'Summary'}
           </button>
         ))}
       </div>
@@ -229,7 +229,6 @@ function QAScoringModal({ paper, criteria, pid, onClose }: {
                 <div>
                   <p className="text-sm font-semibold text-navy">{criterion.label}</p>
                   <p className="text-xs text-gray-500">{criterion.description}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">Max: {criterion.max_score} pt{criterion.max_score !== 1 ? 's' : ''}</p>
                 </div>
                 {currentScore !== null && (
                   <span className={`text-xs font-bold px-2 py-0.5 rounded shrink-0 ${
@@ -264,9 +263,8 @@ function QAScoringModal({ paper, criteria, pid, onClose }: {
       {/* Running total */}
       <div className={`flex items-center gap-3 p-3 rounded-md border mb-4 ${levelColors.bg} ${levelColors.border}`}>
         <div className="flex-1">
-          <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Current Score</p>
+          <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Total Score</p>
           <p className={`text-lg font-bold ${levelColors.text}`}>{total.toFixed(1)} / {max}</p>
-          <p className={`text-xs ${levelColors.text}`}>{pct.toFixed(0)}%</p>
         </div>
         <span className={`text-sm font-bold px-3 py-1 rounded border ${levelColors.bg} ${levelColors.text} ${levelColors.border}`}>
           {level.toUpperCase()}
@@ -369,14 +367,14 @@ function SummaryView({ pid }: { pid: number }) {
 
       {summary.criteria.length > 0 && (
         <Card>
-          <CardHeader title="QA Criteria" />
-          <div className="space-y-2">
+          <CardHeader title="Criteria" />
+          <div className="space-y-1.5">
             {summary.criteria.map(c => (
-              <div key={c.id} className="flex items-start gap-3">
-                <span className="text-xs font-bold text-navy shrink-0 w-8">{c.label}</span>
-                <span className="text-xs text-gray-600 flex-1">{c.description}</span>
-                <span className="text-xs text-gray-400 shrink-0">max {c.max_score}</span>
-              </div>
+              <p key={c.id} className="text-xs text-gray-600">
+                <span className="font-bold text-navy">{c.label}</span>
+                <span className="mx-1.5 text-gray-300">·</span>
+                {c.description}
+              </p>
             ))}
           </div>
         </Card>

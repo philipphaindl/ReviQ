@@ -171,8 +171,8 @@ function PapersView({ pid }: { pid: number }) {
       {selectedPaper && (
         <DecisionModal
           paper={selectedPaper}
-          inclusionCriteria={inclusions.filter(c => c.phase === 'full-text')}
-          exclusionCriteria={exclusions.filter(c => c.phase === 'full-text')}
+          inclusionCriteria={(() => { const ft = inclusions.filter(c => c.phase === 'full-text'); return ft.length > 0 ? ft : inclusions })()}
+          exclusionCriteria={(() => { const ft = exclusions.filter(c => c.phase === 'full-text'); return ft.length > 0 ? ft : exclusions })()}
           onSubmit={(decision, criterion, rationale) => {
             decisionMutation.mutate({
               reviewer_id: activeReviewerId!,
