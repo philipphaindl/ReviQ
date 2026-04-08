@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useProject } from '../App'
-import { getExportStats, getQASummary, getExtractionSummary, exportBibtexUrl } from '../api/client'
+import { getExportStats, getQASummary, getExtractionSummary, exportBibtexUrl, getImportStats, getPapers } from '../api/client'
 import { Card, CardHeader, StatCard, EmptyState } from '../components/ui'
 import type { ExtractionField } from '../api/types'
 
@@ -49,6 +49,18 @@ function PrismaView({ pid }: { pid: number }) {
     queryKey: ['export-stats', pid],
     queryFn: () => getExportStats(pid),
   })
+  const { data: importStats } = useQuery({
+    queryKey: ['import-stats', pid],
+    queryFn: () => getImportStats(pid),
+  })
+  const { data: screeningPapers = [] } = useQuery({
+    queryKey: ['papers', pid, 'screening'],
+    queryFn: () => getPapers(pid, { phase: 'screening' }),
+  })
+  const { data: fulltextPapers = [] } = useQuery({
+    queryKey: ['papers', pid, 'full-text'],
+    queryFn: () => getPapers(pid, { phase: 'full-text' }),
+  })
 
   if (isLoading) return <p className="text-sm text-gray-400">Loading…</p>
   if (!stats) return null
@@ -58,6 +70,25 @@ function PrismaView({ pid }: { pid: number }) {
   const fulltextAssessed = stats.screening_included
   const fulltextExcluded = stats.fulltext_excluded
   const included = stats.fulltext_included > 0 ? stats.fulltext_included : stats.screening_included
+
+  // Per-DB counts from import stats
+  const bySource = importStats?.by_source ?? {}
+
+  // Per-criterion exclusion breakdowns (client-side from paper decisions)
+  const screeningExclusionByCriterion: Record<string, number> = {}
+  for (const p of screeningPapers) {
+    if (p.dedup_status === 'original' && p.final_decision?.decision === 'E') {
+      const crit = p.decisions?.[0]?.criterion_label ?? 'Other'
+      screeningExclusionByCriterion[crit] = (screeningExclusionByCriterion[crit] ?? 0) + 1
+    }
+  }
+  const fulltextExclusionByCriterion: Record<string, number> = {}
+  for (const p of fulltextPapers) {
+    if (p.final_decision?.decision === 'E') {
+      const crit = p.decisions?.[0]?.criterion_label ?? 'Other'
+      fulltextExclusionByCriterion[crit] = (fulltextExclusionByCriterion[crit] ?? 0) + 1
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -80,6 +111,9 @@ function PrismaView({ pid }: { pid: number }) {
             fulltextAssessed={fulltextAssessed}
             fulltextExcluded={fulltextExcluded}
             included={included}
+            bySource={bySource}
+            screeningExclusionByCriterion={screeningExclusionByCriterion}
+            fulltextExclusionByCriterion={fulltextExclusionByCriterion}
           />
         </div>
       </Card>
@@ -91,66 +125,95 @@ function PrismaFlowDiagram({
   totalRetrieved, totalDuplicates, totalUnique,
   screened, screeningExcluded,
   fulltextAssessed, fulltextExcluded,
-  included,
+  included, bySource,
+  screeningExclusionByCriterion, fulltextExclusionByCriterion,
 }: {
   totalRetrieved: number; totalDuplicates: number; totalUnique: number
   screened: number; screeningExcluded: number
   fulltextAssessed: number; fulltextExcluded: number
   included: number
+  bySource: Record<string, { total: number; original: number; duplicate: number }>
+  screeningExclusionByCriterion: Record<string, number>
+  fulltextExclusionByCriterion: Record<string, number>
 }) {
   // Layout constants
-  const W = 700
-  const H = 580
+  const W = 720
   const boxW = 260
   const boxH = 52
-  const sideBoxW = 180
-  const cx = W / 2  // center x of main column
+  const sideBoxW = 190
+  const cx = 300  // center x of main column
   const sideX = cx + boxW / 2 + 20  // left edge of exclusion boxes
   const arrowColor = '#94a3b8'
   const mainColor = '#1e3a5f'
   const sectionColor = '#e2e8f0'
   const sectionText = '#64748b'
 
+  // Determine exclusion box heights based on criterion counts
+  const screenCritEntries = Object.entries(screeningExclusionByCriterion)
+  const ftCritEntries = Object.entries(fulltextExclusionByCriterion)
+  const screenExclBoxH = screeningExcluded > 0
+    ? boxH + Math.max(0, screenCritEntries.length - 0) * 14
+    : 0
+  const ftExclBoxH = fulltextExcluded > 0
+    ? boxH + Math.max(0, ftCritEntries.length - 0) * 14
+    : 0
+
+  // Source entries for identification box
+  const sourceEntries = Object.entries(bySource).filter(([, v]) => v.total > 0)
+  const identBoxH = boxH + Math.max(0, sourceEntries.length) * 14
+
   // Y positions for main boxes (center y)
-  const y1 = 60   // Records identified
-  const y2 = 150  // After dedup
-  const y3 = 250  // Screened
-  const y4 = 350  // Full-text assessed
-  const y5 = 470  // Included
+  const y1 = identBoxH / 2 + 10   // Records identified
+  const y2 = y1 + identBoxH / 2 + 40 + boxH / 2  // After dedup
+  const y3 = y2 + boxH / 2 + 40 + boxH / 2  // Screened
+  const y4 = y3 + Math.max(boxH / 2, screenExclBoxH / 2) + 40 + boxH / 2  // Full-text assessed
+  const y5 = y4 + Math.max(boxH / 2, ftExclBoxH / 2) + 40 + boxH / 2  // Included
+  const H = y5 + boxH / 2 + 20
 
   const labelStyle = { fontSize: '11px', fill: sectionText, fontWeight: '600' as const, textTransform: 'uppercase' as const, letterSpacing: '0.08em' }
   const boxTextStyle = { fontSize: '12px', fill: mainColor, fontWeight: '500' as const }
   const nStyle = { fontSize: '13px', fill: mainColor, fontWeight: '700' as const }
+  const smallStyle = { fontSize: '10px', fill: '#64748b' }
 
-  function MainBox({ cy, label, n }: { cy: number; label: string; n: number }) {
+  function MainBox({ cy, label, n, children }: { cy: number; label: string; n: number; children?: ReactNode }) {
+    const h = children ? identBoxH : boxH
     return (
       <g>
-        <rect x={cx - boxW / 2} y={cy - boxH / 2} width={boxW} height={boxH}
+        <rect x={cx - boxW / 2} y={cy - h / 2} width={boxW} height={h}
           rx={6} fill="white" stroke="#cbd5e1" strokeWidth={1.5} />
-        <text x={cx} y={cy - 7} textAnchor="middle" style={boxTextStyle}>{label}</text>
-        <text x={cx} y={cy + 12} textAnchor="middle" style={nStyle}>n = {n}</text>
+        <text x={cx} y={cy - h / 2 + 18} textAnchor="middle" style={boxTextStyle}>{label}</text>
+        <text x={cx} y={cy - h / 2 + 34} textAnchor="middle" style={nStyle}>n = {n}</text>
+        {children}
       </g>
     )
   }
 
-  function ExclusionBox({ cy, label, n }: { cy: number; label: string; n: number }) {
+  function ExclusionBox({ cy, label, n, criteria }: { cy: number; label: string; n: number; criteria: Record<string, number> }) {
     if (n === 0) return null
+    const critEntries = Object.entries(criteria)
+    const h = boxH + critEntries.length * 14
+    const boxTop = cy - h / 2
     return (
       <g>
-        <rect x={sideX} y={cy - boxH / 2} width={sideBoxW} height={boxH}
+        <rect x={sideX} y={boxTop} width={sideBoxW} height={h}
           rx={6} fill="#fef2f2" stroke="#fecaca" strokeWidth={1.5} />
-        <text x={sideX + sideBoxW / 2} y={cy - 7} textAnchor="middle" style={{ ...boxTextStyle, fontSize: '11px', fill: '#dc2626' }}>{label}</text>
-        <text x={sideX + sideBoxW / 2} y={cy + 12} textAnchor="middle" style={{ ...nStyle, fill: '#dc2626' }}>n = {n}</text>
-        {/* Arrow from main column to exclusion box */}
-        <line x1={cx + boxW / 2} y1={cy} x2={sideX} y2={cy}
+        <text x={sideX + sideBoxW / 2} y={boxTop + 18} textAnchor="middle" style={{ ...boxTextStyle, fontSize: '11px', fill: '#dc2626' }}>{label}</text>
+        <text x={sideX + sideBoxW / 2} y={boxTop + 34} textAnchor="middle" style={{ ...nStyle, fill: '#dc2626' }}>n = {n}</text>
+        {critEntries.map(([crit, count], i) => (
+          <text key={crit} x={sideX + 8} y={boxTop + 50 + i * 14} style={{ ...smallStyle, fill: '#dc2626' }}>
+            • {crit}: {count}
+          </text>
+        ))}
+        {/* Arrow from main column border to exclusion box border */}
+        <line x1={cx + boxW / 2} y1={cy} x2={sideX - 6} y2={cy}
           stroke="#fca5a5" strokeWidth={1.5} markerEnd="url(#arrowRed)" />
       </g>
     )
   }
 
-  function DownArrow({ y1: y1a, y2: y2a }: { y1: number; y2: number }) {
+  function DownArrow({ fromY, toY }: { fromY: number; toY: number }) {
     return (
-      <line x1={cx} y1={y1a + boxH / 2} x2={cx} y2={y2a - boxH / 2}
+      <line x1={cx} y1={fromY} x2={cx} y2={toY - 6}
         stroke={arrowColor} strokeWidth={1.5} markerEnd="url(#arrowGray)" />
     )
   }
@@ -169,10 +232,10 @@ function PrismaFlowDiagram({
   return (
     <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ maxWidth: '100%' }}>
       <defs>
-        <marker id="arrowGray" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+        <marker id="arrowGray" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
           <path d="M0,0 L0,8 L8,4 z" fill={arrowColor} />
         </marker>
-        <marker id="arrowRed" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+        <marker id="arrowRed" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
           <path d="M0,0 L0,8 L8,4 z" fill="#fca5a5" />
         </marker>
       </defs>
@@ -183,33 +246,40 @@ function PrismaFlowDiagram({
       <SectionLabel y={y4} label="ELIGIBILITY" />
       <SectionLabel y={y5} label="INCLUDED" />
 
-      {/* Main flow boxes */}
-      <MainBox cy={y1} label="Records retrieved" n={totalRetrieved} />
+      {/* Identification box with per-DB breakdown */}
+      <MainBox cy={y1} label="Records retrieved" n={totalRetrieved}>
+        {sourceEntries.map(([src, v], i) => (
+          <text key={src} x={cx} y={y1 - identBoxH / 2 + 50 + i * 14} textAnchor="middle"
+            style={{ ...smallStyle }}>
+            {src}: {v.total} ({v.original} unique)
+          </text>
+        ))}
+      </MainBox>
 
       {/* Dedup note */}
       {totalDuplicates > 0 && (
         <g>
-          <rect x={sideX} y={y1 + 10} width={sideBoxW} height={40}
+          <rect x={sideX} y={y1 - 20} width={sideBoxW} height={40}
             rx={6} fill="#f8fafc" stroke="#e2e8f0" strokeWidth={1} />
-          <text x={sideX + sideBoxW / 2} y={y1 + 26} textAnchor="middle"
+          <text x={sideX + sideBoxW / 2} y={y1 - 4} textAnchor="middle"
             style={{ fontSize: '11px', fill: '#64748b' }}>Duplicates removed</text>
-          <text x={sideX + sideBoxW / 2} y={y1 + 42} textAnchor="middle"
+          <text x={sideX + sideBoxW / 2} y={y1 + 12} textAnchor="middle"
             style={{ fontSize: '12px', fill: '#334155', fontWeight: '700' }}>n = {totalDuplicates}</text>
         </g>
       )}
 
-      <DownArrow y1={y1} y2={y2} />
+      <DownArrow fromY={y1 + identBoxH / 2} toY={y2 - boxH / 2} />
       <MainBox cy={y2} label="Records after deduplication" n={totalUnique} />
 
-      <DownArrow y1={y2} y2={y3} />
+      <DownArrow fromY={y2 + boxH / 2} toY={y3 - boxH / 2} />
       <MainBox cy={y3} label="Records screened" n={screened} />
-      <ExclusionBox cy={y3} label="Excluded (title/abstract)" n={screeningExcluded} />
+      <ExclusionBox cy={y3} label="Excluded (title/abstract)" n={screeningExcluded} criteria={screeningExclusionByCriterion} />
 
-      <DownArrow y1={y3} y2={y4} />
+      <DownArrow fromY={y3 + Math.max(boxH / 2, screenExclBoxH / 2)} toY={y4 - boxH / 2} />
       <MainBox cy={y4} label="Full texts assessed" n={fulltextAssessed} />
-      <ExclusionBox cy={y4} label="Not eligible (full-text)" n={fulltextExcluded} />
+      <ExclusionBox cy={y4} label="Not eligible (full-text)" n={fulltextExcluded} criteria={fulltextExclusionByCriterion} />
 
-      <DownArrow y1={y4} y2={y5} />
+      <DownArrow fromY={y4 + Math.max(boxH / 2, ftExclBoxH / 2)} toY={y5 - boxH / 2} />
 
       {/* Included box — highlighted */}
       <rect x={cx - boxW / 2} y={y5 - boxH / 2} width={boxW} height={boxH}

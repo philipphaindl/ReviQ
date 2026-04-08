@@ -13,6 +13,7 @@ import {
   DecisionBadge, EmptyState, Badge,
 } from '../components/ui'
 import type { SnowballingIteration, Paper } from '../api/types'
+import { formatAuthors } from '../utils'
 
 export default function Snowballing() {
   const { projectId } = useProject()
@@ -138,7 +139,7 @@ function IterationsView({ pid }: { pid: number }) {
                   !p.final_decision
                 ).length
                 return (
-                  <tr key={it.id} className="hover:bg-card cursor-pointer"
+                  <tr key={it.id} className={`cursor-pointer transition-colors ${expandedId === it.id ? 'bg-blue-50' : 'hover:bg-card'}`}
                     onClick={() => setExpandedId(expandedId === it.id ? null : it.id)}>
                     <td className="py-2 font-semibold text-navy">Iteration {it.iteration_number}</td>
                     <td className="py-2 text-xs">
@@ -496,7 +497,7 @@ function IterationPapersView({ pid, iterationNumber }: { pid: number; iterationN
                   <span className="text-xs text-gray-400">{paper.year}</span>
                 </div>
                 <h3 className="text-sm font-medium text-navy mt-1 leading-snug">{paper.title}</h3>
-                {paper.authors && <p className="text-xs text-gray-400 mt-0.5 truncate">{paper.authors}</p>}
+                {paper.authors && <p className="text-xs text-gray-400 mt-0.5 truncate">{formatAuthors(paper.authors)}</p>}
               </div>
             </div>
           )
@@ -567,7 +568,7 @@ function SnowDecisionModal({
     <Modal title="Snowballing Screening Decision" onClose={onClose} width="max-w-2xl" onEnter={handleSubmit}>
       <div className="bg-card rounded-md p-4 mb-4 border border-border">
         <p className="text-sm font-semibold text-navy mb-1 leading-snug">{paper.title}</p>
-        <p className="text-xs text-gray-400 mb-3">{paper.authors} · {paper.year}</p>
+        <p className="text-xs text-gray-400 mb-3">{formatAuthors(paper.authors)} · {paper.year}</p>
         {paper.abstract ? (
           <div className="border-t border-border pt-3">
             <p className="text-xs font-semibold text-navy-muted uppercase tracking-wider mb-1.5">Abstract</p>

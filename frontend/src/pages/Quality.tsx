@@ -6,6 +6,7 @@ import {
   Card, CardHeader, StatCard, Modal, FormField, EmptyState,
 } from '../components/ui'
 import type { QAPaperResult, QAScoreEntry } from '../api/types'
+import { formatAuthors } from '../utils'
 
 export default function Quality() {
   const { projectId } = useProject()
@@ -132,7 +133,7 @@ function PaperQARow({ paper, criteria, onScore }: {
           <span className="text-xs text-gray-400 ml-auto">{paper.paper_year}</span>
         </div>
         <h3 className="text-sm font-medium text-navy mt-1 leading-snug">{paper.paper_title}</h3>
-        {paper.paper_authors && <p className="text-xs text-gray-400 mt-0.5 truncate">{paper.paper_authors}</p>}
+        {paper.paper_authors && <p className="text-xs text-gray-400 mt-0.5 truncate">{formatAuthors(paper.paper_authors)}</p>}
       </div>
     </div>
   )
@@ -217,7 +218,7 @@ function QAScoringModal({ paper, criteria, pid, onClose }: {
     <Modal title="Quality Assessment" onClose={onClose} width="max-w-2xl">
       <div className="bg-card rounded-md p-4 mb-4 border border-border">
         <p className="text-sm font-semibold text-navy mb-1">{paper.paper_title}</p>
-        <p className="text-xs text-gray-400">{paper.paper_authors} · {paper.paper_year}</p>
+        <p className="text-xs text-gray-400">{formatAuthors(paper.paper_authors)} · {paper.paper_year}</p>
       </div>
 
       <div className="space-y-4 mb-4">
@@ -333,7 +334,7 @@ function SummaryView({ pid }: { pid: number }) {
                 <tr key={paper.paper_id} className="hover:bg-card transition-colors">
                   <td className="py-2 pr-3 max-w-[300px]">
                     <p className="text-sm font-medium text-navy leading-snug truncate">{paper.paper_title}</p>
-                    <p className="text-xs text-gray-400">{paper.paper_authors?.split(',')[0]} · {paper.paper_year}</p>
+                    <p className="text-xs text-gray-400">{formatAuthors(paper.paper_authors)} · {paper.paper_year}</p>
                   </td>
                   {summary.criteria.map(c => {
                     const s = paper.scores.find(sc => sc.criterion_id === c.id)
@@ -371,8 +372,8 @@ function SummaryView({ pid }: { pid: number }) {
           <CardHeader title="Quality Criteria" />
           <div className="space-y-0">
             {summary.criteria.map(c => (
-              <div key={c.id} className="py-3 border-b border-border last:border-0 flex items-start gap-3">
-                <span className="text-xs font-bold text-info bg-blue-50 border border-blue-200 rounded px-2 py-0.5 shrink-0 mt-0.5 w-[110px] truncate text-center inline-block" title={c.label}>{c.label}</span>
+              <div key={c.id} className="py-2.5 border-b border-border last:border-0 flex items-center gap-3">
+                <span className="text-xs font-bold text-info bg-blue-50 border border-blue-200 rounded px-2 py-0.5 shrink-0 w-[110px] truncate text-center inline-block" title={c.label}>{c.label}</span>
                 <div className="flex-1">
                   <p className="text-sm text-navy">{c.description}</p>
                   <p className="text-xs text-gray-400 mt-0.5">Max score: {c.max_score}</p>

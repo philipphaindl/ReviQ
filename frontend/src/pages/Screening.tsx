@@ -11,6 +11,7 @@ import {
   DecisionBadge, EmptyState, Badge,
 } from '../components/ui'
 import type { Paper, ConflictLog } from '../api/types'
+import { formatAuthors } from '../utils'
 
 type ScreeningView = 'papers' | 'conflicts' | 'kappa'
 
@@ -196,7 +197,7 @@ function PaperRow({ paper, onDecide }: { paper: Paper; onDecide: () => void }) {
           <span className="text-xs text-gray-400">{paper.source} · {paper.year}</span>
         </div>
         <h3 className="text-sm font-medium text-navy mt-1 leading-snug">{paper.title}</h3>
-        {paper.authors && <p className="text-xs text-gray-400 mt-0.5 truncate">{paper.authors}</p>}
+        {paper.authors && <p className="text-xs text-gray-400 mt-0.5 truncate">{formatAuthors(paper.authors)}</p>}
       </div>
     </div>
   )
@@ -266,7 +267,7 @@ function DecisionModal({
       {/* Paper info + abstract */}
       <div className="bg-card rounded-md p-4 mb-4 border border-border">
         <p className="text-sm font-semibold text-navy mb-1 leading-snug">{paper.title}</p>
-        <p className="text-xs text-gray-400 mb-3">{paper.authors} · {paper.year} · {paper.source}</p>
+        <p className="text-xs text-gray-400 mb-3">{formatAuthors(paper.authors)} · {paper.year} · {paper.source}</p>
         {paper.abstract ? (
           <div className="border-t border-border pt-3">
             <p className="text-xs font-semibold text-navy-muted uppercase tracking-wider mb-1.5">Abstract</p>
