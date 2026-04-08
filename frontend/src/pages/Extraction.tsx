@@ -341,6 +341,24 @@ function ExtractView({ pid }: { pid: number }) {
     queryFn: () => getExtractionSummary(pid),
   })
 
+  // Pre-fetch taxonomy data here so it's ready when the modal opens
+  const { data: taxonomyTypes = [] } = useQuery({
+    queryKey: ['taxonomy-types', pid],
+    queryFn: () => getTaxonomyTypes(pid),
+  })
+  const { data: taxonomyOptions = {} } = useQuery<Record<string, string[]>>({
+    queryKey: ['all-taxonomy-entries', pid, taxonomyTypes.join(',')],
+    queryFn: async () => {
+      const pairs = await Promise.all(
+        taxonomyTypes.map(type =>
+          getTaxonomy(pid, type).then(entries => [type, entries.map(e => e.value)] as const)
+        )
+      )
+      return Object.fromEntries(pairs)
+    },
+    enabled: taxonomyTypes.length > 0,
+  })
+
   if (isLoading) return <p className="text-sm text-gray-400">Loading…</p>
   if (!summary) return null
 
@@ -372,6 +390,7 @@ function ExtractView({ pid }: { pid: number }) {
           paper={selectedPaper}
           fields={summary.fields}
           pid={pid}
+          taxonomyOptions={taxonomyOptions}
           onClose={() => setSelectedPaper(null)}
         />
       )}
@@ -409,10 +428,11 @@ function ExtractionPaperCard({ paper, onExtract }: { paper: ExtractionPaperRow; 
   )
 }
 
-function ExtractionModal({ paper, fields, pid, onClose }: {
+function ExtractionModal({ paper, fields, pid, taxonomyOptions, onClose }: {
   paper: ExtractionPaperRow
   fields: ExtractionField[]
   pid: number
+  taxonomyOptions: Record<string, string[]>
   onClose: () => void
 }) {
   const qc = useQueryClient()
@@ -421,24 +441,6 @@ function ExtractionModal({ paper, fields, pid, onClose }: {
   const { data: reviewers = [] } = useQuery({
     queryKey: ['reviewers', pid],
     queryFn: () => getReviewers(pid),
-  })
-  // Fetch all taxonomy types
-  const { data: taxonomyTypes = [] } = useQuery({
-    queryKey: ['taxonomy-types', pid],
-    queryFn: () => getTaxonomyTypes(pid),
-  })
-  // Fetch all taxonomy entries in one combined query (avoids hooks-in-loop)
-  const { data: taxonomyOptions = {} } = useQuery<Record<string, string[]>>({
-    queryKey: ['all-taxonomy-entries', pid, taxonomyTypes.join(',')],
-    queryFn: async () => {
-      const pairs = await Promise.all(
-        taxonomyTypes.map(type =>
-          getTaxonomy(pid, type).then(entries => [type, entries.map(e => e.value)] as const)
-        )
-      )
-      return Object.fromEntries(pairs)
-    },
-    enabled: taxonomyTypes.length > 0,
   })
 
   const activeReviewerId = reviewerId ?? reviewers.find(r => r.role === 'R1')?.id ?? reviewers[0]?.id
@@ -487,13 +489,14 @@ function ExtractionModal({ paper, fields, pid, onClose }: {
         if (parsed.length > 0) return parsed
       } catch { /* fall through */ }
     }
-    // Try to find matching taxonomy by field_name or field_label (slugified)
-    for (const type of taxonomyTypes) {
+    // Try to find matching taxonomy type by field_name similarity
+    const types = Object.keys(taxonomyOptions)
+    for (const type of types) {
       if (field.field_name === type || field.field_name.includes(type) || type.includes(field.field_name)) {
-        return taxonomyOptions[type] ?? []
+        return taxonomyOptions[type]
       }
     }
-    // Fallback: combine all taxonomy options
+    // Fallback: combine all taxonomy entries across all types
     return Object.values(taxonomyOptions).flat()
   }
 
