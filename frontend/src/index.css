@@ -1,0 +1,162 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    @apply bg-paper text-ink font-sans;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: 'cv02', 'cv03', 'cv04';
+    letter-spacing: 0.01em;
+  }
+  ::selection {
+    background: #D4A85220;
+  }
+
+  /* Subtle paper grain texture on the page background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.025;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    background-size: 256px 256px;
+  }
+}
+
+@layer components {
+  /* ── Navigation tab items (sub-tabs within pages) ── */
+  .nav-item {
+    @apply flex items-center gap-1.5 px-3 py-4 text-sm font-medium text-ink-muted
+           hover:text-ink transition-colors relative cursor-pointer whitespace-nowrap;
+  }
+  .nav-item.active {
+    @apply text-ink;
+  }
+  .nav-item.active::after {
+    content: '';
+    @apply absolute bottom-0 left-3 right-3 h-[2px] bg-accent;
+  }
+
+  /* ── Stats ────────────────────────────────────────────────── */
+  .stat-label {
+    @apply text-2xs font-semibold uppercase tracking-label text-ink-muted;
+    font-family: 'Source Sans 3', system-ui, sans-serif;
+  }
+  .stat-value {
+    @apply text-2xl font-bold text-ink;
+    font-family: 'JetBrains Mono', Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Stat bar — horizontal strip ─────────────────────────── */
+  .stat-bar {
+    @apply flex bg-surface border border-rule rounded-card overflow-hidden divide-x divide-rule;
+  }
+  .stat-cell {
+    @apply flex-1 px-4 py-3 min-w-0;
+  }
+
+  /* ── Badges — pill shape, status only, NOT interactive ──── */
+  .phase-badge {
+    @apply inline-flex items-center px-1.5 py-0.5 rounded text-2xs font-semibold;
+  }
+  .decision-I {
+    @apply bg-green-50 text-include;
+    border: 1px solid #2D6A4F30;
+  }
+  .decision-E {
+    @apply bg-red-50 text-exclude;
+    border: 1px solid #8B1A1A30;
+  }
+  .decision-U {
+    @apply bg-amber-50 text-uncertain;
+    border: 1px solid #8B691430;
+  }
+
+  /* ── Buttons ──────────────────────────────────────────────── */
+  .btn {
+    @apply inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium
+           rounded-[3px] transition-colors cursor-pointer border leading-snug;
+  }
+  .btn-sm {
+    @apply px-2 py-0.5 text-xs;
+  }
+  .btn-primary {
+    @apply btn bg-accent text-white border-accent font-semibold
+           hover:bg-accent-hover hover:border-accent-hover;
+  }
+  .btn-secondary {
+    @apply btn bg-transparent text-accent border-accent/25
+           hover:bg-accent-faint hover:border-accent/40;
+  }
+  .btn-ghost {
+    @apply btn bg-transparent text-ink-muted border-transparent
+           hover:text-ink hover:bg-rule/40;
+  }
+  .btn-danger {
+    @apply btn bg-transparent text-exclude border-exclude/25
+           hover:bg-red-50 hover:border-exclude/40;
+  }
+  .btn-include {
+    @apply btn bg-transparent text-include border-include/25 font-semibold
+           hover:bg-green-50 hover:border-include/40;
+  }
+  .btn-exclude {
+    @apply btn bg-transparent text-exclude border-exclude/25 font-semibold
+           hover:bg-red-50 hover:border-exclude/40;
+  }
+  .btn-uncertain {
+    @apply btn bg-transparent text-uncertain border-uncertain/25 font-semibold
+           hover:bg-amber-50 hover:border-uncertain/40;
+  }
+
+  /* ── Paper list — list-row layout for papers ──────────────── */
+  .paper-list {
+    @apply bg-surface border border-rule rounded-card overflow-hidden;
+  }
+  .paper-row {
+    @apply flex items-start py-3 px-4 border-b border-rule
+           hover:bg-paper transition-colors cursor-pointer;
+  }
+  .paper-row:last-child {
+    border-bottom-width: 0;
+  }
+
+  /* ── Inputs ───────────────────────────────────────────────── */
+  .input {
+    @apply w-full border border-rule rounded-[3px] px-3 py-2 text-sm
+           text-ink placeholder-ink-muted/50 bg-white
+           focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/15;
+  }
+  .textarea {
+    @apply input resize-none;
+  }
+  .select {
+    @apply input appearance-none;
+  }
+
+  /* ── Cards ────────────────────────────────────────────────── */
+  .card {
+    @apply bg-white rounded-card border border-rule p-5;
+  }
+
+  /* ── Section titles — editorial italic small-caps feel ──── */
+  .section-title {
+    @apply text-xs font-semibold uppercase tracking-label text-ink-muted mb-4;
+    font-family: 'Source Sans 3', system-ui, sans-serif;
+  }
+
+  /* ── Left accent bars (paper rows + cards) ────────────────── */
+  .left-accent-include   { @apply border-l-2 border-include;   }
+  .left-accent-exclude   { @apply border-l-2 border-exclude;   }
+  .left-accent-uncertain { @apply border-l-2 border-uncertain; }
+  .left-accent-info      { @apply border-l-2 border-accent;    }
+}

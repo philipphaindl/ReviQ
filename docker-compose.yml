@@ -1,0 +1,39 @@
+version: "3.9"
+
+services:
+  slr-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    platform: linux/arm64
+    container_name: reviq-backend
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - db-data:/data
+      - ${BIB_BASE_DIR:-./bib_data}:/bib_data:ro
+    environment:
+      - DATABASE_URL=sqlite:////data/reviq.db
+      - BIB_BASE_DIR=/bib_data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  slr-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    platform: linux/arm64
+    container_name: reviq-frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    depends_on:
+      - slr-backend
+    restart: unless-stopped
+
+volumes:
+  db-data:
+    name: reviq-db-data

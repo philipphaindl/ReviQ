@@ -1,0 +1,6 @@
+.DS_Store
+frontend/node_modules/
+frontend/dist/
+backend/app/__pycache__/
+backend/app/routers/__pycache__/
+backend/app/services/__pycache__/
