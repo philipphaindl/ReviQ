@@ -12,14 +12,14 @@ ReviQ walks you through the full SLR pipeline in eight phases:
 
 | # | Phase | What happens |
 |---|-------|-------------|
-| 0 | **Setup** | Project metadata, up to 5 reviewers, inclusion/exclusion criteria, QA scoring schema, taxonomy categories, database search strings |
-| 1 | **Import** | BibTeX upload per database, cross-database deduplication (DOI + normalised title/venue), duplicate override log |
-| 2 | **Screening** | Title/abstract decisions (Include / Exclude / Uncertain), per-criterion rationale, automatic conflict detection, Cohen's κ with 95% CI and PABAK |
-| 3 | **Eligibility** | Full-text assessment with the same decision workflow, full-text URL tracking |
-| 4 | **Snowballing** | Iteration-based forward/backward citation chasing (Wohlin 2014), saturation tracking |
-| 5 | **Quality Assessment** | Scoring against project-defined QA criteria (0 / 0.5 / 1), automatic quality-level classification (high/medium/low) |
-| 6 | **Data Extraction** | Configurable extraction schema (text, number, boolean, dropdown), per-paper data entry, taxonomy integration |
-| 7 | **Results** | PRISMA 2020 flow diagram (SVG, with colour and grayscale download), publication charts, venue breakdown, taxonomy distributions, PDF protocol report, BibTeX exports, replication package |
+| 1 | **Setup** | Project metadata, up to 5 reviewers, inclusion/exclusion criteria, QA scoring schema, taxonomy categories, database search strings |
+| 2 | **Import** | BibTeX upload per database, cross-database deduplication (DOI + normalised title/venue), duplicate override log |
+| 3 | **Screening** | Title/abstract decisions (Include / Exclude / Uncertain), per-criterion rationale, automatic conflict detection, Cohen's κ with 95% CI and PABAK |
+| 4 | **Eligibility** | Full-text assessment with the same decision workflow, full-text URL tracking |
+| 5 | **Snowballing** | Iteration-based forward/backward citation chasing (Wohlin 2014), saturation tracking |
+| 6 | **Quality Assessment** | Scoring against project-defined QA criteria (0 / 0.5 / 1), automatic quality-level classification (high/medium/low) |
+| 7 | **Data Extraction** | Configurable extraction schema (text, number, boolean, dropdown), per-paper data entry, taxonomy integration |
+| 8 | **Results** | PRISMA 2020 flow diagram (SVG, with colour and grayscale download), publication charts, venue breakdown, taxonomy distributions, PDF protocol report, BibTeX exports, replication package |
 
 Collaboration is file-based: reviewers export decisions as JSON, share them however they like (email, shared drive), and import them on the other end.
 
