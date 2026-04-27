@@ -1,11 +1,8 @@
-version: "3.9"
-
 services:
   slr-backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    platform: linux/arm64
     container_name: reviq-backend
     ports:
       - "${BACKEND_PORT:-8000}:8000"
@@ -26,7 +23,6 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    platform: linux/arm64
     container_name: reviq-frontend
     ports:
       - "${FRONTEND_PORT:-3000}:80"
