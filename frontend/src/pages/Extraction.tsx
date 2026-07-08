@@ -348,10 +348,19 @@ function TaxonomyLoader({ pid, type, onLoad }: { pid: number; type: string; onLo
 
 function ExtractView({ pid }: { pid: number }) {
   const [selectedPaper, setSelectedPaper] = useState<ExtractionPaperRow | null>(null)
+  const { reviewerId } = useProject()
 
+  const { data: reviewers = [] } = useQuery({
+    queryKey: ['reviewers', pid],
+    queryFn: () => getReviewers(pid),
+  })
+  const activeReviewerId = reviewerId ?? reviewers.find(r => r.role === 'R1')?.id ?? reviewers[0]?.id
+
+  // Scoped to the active reviewer: switching the reviewer in the top bar
+  // switches which extraction values are shown and edited.
   const { data: summary, isLoading } = useQuery({
-    queryKey: ['extraction-summary', pid],
-    queryFn: () => getExtractionSummary(pid),
+    queryKey: ['extraction-summary', pid, activeReviewerId ?? 'all'],
+    queryFn: () => getExtractionSummary(pid, activeReviewerId),
   })
 
   // Pre-fetch taxonomy data here so it's ready when the modal opens
@@ -404,9 +413,11 @@ function ExtractView({ pid }: { pid: number }) {
 
       {selectedPaper && (
         <ExtractionModal
+          key={activeReviewerId ?? 'none'}
           paper={selectedPaper}
           fields={summary.fields.filter(f => !taxonomyTypes.includes(f.field_name))}
           pid={pid}
+          reviewerId={activeReviewerId}
           taxonomyTypes={taxonomyTypes}
           taxonomyOptions={taxonomyOptions}
           onClose={() => setSelectedPaper(null)}
@@ -446,25 +457,20 @@ function ExtractionPaperCard({ paper, onExtract }: { paper: ExtractionPaperRow; 
   )
 }
 
-function ExtractionModal({ paper, fields, pid, taxonomyTypes, taxonomyOptions, onClose }: {
+function ExtractionModal({ paper, fields, pid, reviewerId, taxonomyTypes, taxonomyOptions, onClose }: {
   paper: ExtractionPaperRow
   fields: ExtractionField[]
   pid: number
+  reviewerId?: number
   taxonomyTypes: string[]
   taxonomyOptions: Record<string, string[]>
   onClose: () => void
 }) {
   const qc = useQueryClient()
-  const { reviewerId } = useProject()
+  const activeReviewerId = reviewerId
 
-  const { data: reviewers = [] } = useQuery({
-    queryKey: ['reviewers', pid],
-    queryFn: () => getReviewers(pid),
-  })
-
-  const activeReviewerId = reviewerId ?? reviewers.find(r => r.role === 'R1')?.id ?? reviewers[0]?.id
-
-  // Initialize values for both taxonomy types and extraction fields from stored data
+  // Initialize values for both taxonomy types and extraction fields from the
+  // active reviewer's own records (parent fetches the summary scoped to them)
   const [values, setValues] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {}
     for (const type of taxonomyTypes) init[type] = paper.values[type] ?? ''

@@ -87,10 +87,18 @@ def upsert_qa_score(
 
 
 @router.get("/projects/{project_id}/qa-summary")
-def qa_summary(project_id: int, session: Session = Depends(get_session)):
+def qa_summary(
+    project_id: int,
+    reviewer_id: Optional[int] = None,
+    session: Session = Depends(get_session),
+):
     """
     Returns all QA-eligible papers (included from full-text or screening)
     with their scores and computed quality level.
+
+    With ``reviewer_id`` the scores are that reviewer's own; without it each
+    criterion is averaged across all reviewers who scored it, so no single
+    reviewer's value silently overwrites a co-reviewer's.
     """
     criteria = session.exec(
         select(QACriterion).where(QACriterion.project_id == project_id)
@@ -124,24 +132,33 @@ def qa_summary(project_id: int, session: Session = Depends(get_session)):
     all_scores = session.exec(
         select(QAScore).where(QAScore.project_id == project_id)
     ).all()
+    if reviewer_id is not None:
+        all_scores = [s for s in all_scores if s.scored_by_reviewer_id == reviewer_id]
+
+    from app.models import Project
+    proj = session.get(Project, project_id)
+    high_t = proj.qa_high_threshold if proj else 75.0
+    med_t  = proj.qa_medium_threshold if proj else 50.0
 
     result = []
     for pid in eligible_paper_ids:
         paper = session.get(Paper, pid)
         if not paper:
             continue
-        paper_scores = [s for s in all_scores if s.paper_id == pid]
-        scored = {s.criterion_id: s.score for s in paper_scores}
+        # Average per criterion across the scores in scope. Reviewer-scoped
+        # calls see at most one score per criterion (upsert-unique), so the
+        # mean is that reviewer's own value.
+        by_criterion: dict[int, list[float]] = {}
+        for s in all_scores:
+            if s.paper_id == pid:
+                by_criterion.setdefault(s.criterion_id, []).append(s.score)
+        scored = {cid: sum(vals) / len(vals) for cid, vals in by_criterion.items()}
         total = sum(scored.get(c.id, 0.0) for c in criteria)
         pct = (total / max_total * 100) if max_total > 0 else 0
 
-        from app.models import Project
-        proj = session.get(Project, project_id)
-        high_t = proj.qa_high_threshold if proj else 75.0
-        med_t  = proj.qa_medium_threshold if proj else 50.0
-
         level = "high" if pct >= high_t else "medium" if pct >= med_t else "low"
 
+        scored_criteria = sum(1 for c in criteria if c.id in scored)
         result.append({
             "paper_id": pid,
             "paper_title": paper.title,
@@ -154,7 +171,7 @@ def qa_summary(project_id: int, session: Session = Depends(get_session)):
             "max_score": round(max_total, 2),
             "percentage": round(pct, 1),
             "quality_level": level,
-            "fully_scored": len(paper_scores) >= len(criteria) and len(criteria) > 0,
+            "fully_scored": scored_criteria == len(criteria) and len(criteria) > 0,
         })
 
     result.sort(key=lambda x: x["percentage"], reverse=True)

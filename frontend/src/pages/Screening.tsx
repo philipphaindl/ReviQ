@@ -15,7 +15,7 @@ import {
   DecisionBadge, EmptyState, Badge,
 } from '../components/ui'
 import type { Paper, ConflictLog } from '../api/types'
-import { formatAuthors } from '../utils'
+import { formatAuthors, ownDecision, consensusDecision, hasOpenConflict } from '../utils'
 
 type ScreeningView = 'papers' | 'conflicts' | 'kappa'
 
@@ -81,6 +81,7 @@ function PapersView({ pid }: { pid: number }) {
 
   // Use global reviewer (set in NavBar), fall back to R1
   const activeReviewerId = globalReviewerId ?? reviewers.find(r => r.role === 'R1')?.id ?? reviewers[0]?.id
+  const activeReviewer = reviewers.find(r => r.id === activeReviewerId)
 
   const decisionMutation = useMutation({
     mutationFn: (data: any) => addDecision(pid, selectedPaper!.id, data),
@@ -91,31 +92,36 @@ function PapersView({ pid }: { pid: number }) {
     },
   })
 
-  // Filter papers
+  // Filter papers by the ACTIVE reviewer's own decision — switching the
+  // reviewer in the top bar switches queue, badges, and counts.
   const originalPapers = papers.filter(p => p.dedup_status === 'original')
+  const myDecisionOf = (p: Paper) => ownDecision(p, activeReviewerId)?.decision
   const filteredPapers = originalPapers.filter(p => {
     if (filter === 'all') return true
-    if (filter === 'undecided') return !p.final_decision
-    return p.final_decision?.decision === filter
+    if (filter === 'undecided') return !myDecisionOf(p)
+    return myDecisionOf(p) === filter
   })
 
   const counts = {
     total: originalPapers.length,
-    undecided: originalPapers.filter(p => !p.final_decision).length,
-    I: originalPapers.filter(p => p.final_decision?.decision === 'I').length,
-    E: originalPapers.filter(p => p.final_decision?.decision === 'E').length,
-    U: originalPapers.filter(p => p.final_decision?.decision === 'U').length,
+    undecided: originalPapers.filter(p => !myDecisionOf(p)).length,
+    I: originalPapers.filter(p => myDecisionOf(p) === 'I').length,
+    E: originalPapers.filter(p => myDecisionOf(p) === 'E').length,
+    U: originalPapers.filter(p => myDecisionOf(p) === 'U').length,
+    consensus: originalPapers.filter(p => consensusDecision(p) !== null).length,
   }
+  const youSub = activeReviewer ? `by ${activeReviewer.name}` : undefined
 
   return (
     <div className="space-y-4">
       {/* Stats */}
       <StatBar>
         <StatCell label="Total" value={counts.total} sub="After deduplication" />
-        <StatCell label="Undecided" value={counts.undecided} color="uncertain" />
-        <StatCell label="Included" value={counts.I} color="include" sub="→ Phase 4 (Eligibility)" />
-        <StatCell label="Excluded" value={counts.E} color="exclude" />
-        <StatCell label="Uncertain" value={counts.U} color="uncertain" />
+        <StatCell label="Undecided" value={counts.undecided} color="uncertain" sub={youSub} />
+        <StatCell label="Included" value={counts.I} color="include" sub={youSub} />
+        <StatCell label="Excluded" value={counts.E} color="exclude" sub={youSub} />
+        <StatCell label="Uncertain" value={counts.U} color="uncertain" sub={youSub} />
+        <StatCell label="Consensus" value={counts.consensus} sub="Final → Phase 4 (Eligibility)" />
       </StatBar>
 
       {/* Toolbar */}
@@ -151,6 +157,7 @@ function PapersView({ pid }: { pid: number }) {
             <PaperRow
               key={paper.id}
               paper={paper}
+              reviewerId={activeReviewerId}
               onDecide={() => setSelectedPaper(paper)}
             />
           ))}
@@ -188,11 +195,17 @@ const LANG_NAMES: Record<string, string> = {
   pl: 'Polish', ar: 'Arabic', tr: 'Turkish', sv: 'Swedish', cs: 'Czech',
 }
 
-function PaperRow({ paper, onDecide }: { paper: Paper; onDecide: () => void }) {
-  const dec = paper.final_decision?.decision
+function PaperRow({ paper, reviewerId, onDecide }: { paper: Paper; reviewerId?: number; onDecide: () => void }) {
+  const myDec = ownDecision(paper, reviewerId)
+  const dec = myDec?.decision
   const accentClass = dec === 'I' ? 'left-accent-include' : dec === 'E' ? 'left-accent-exclude' : dec === 'U' ? 'left-accent-uncertain' : 'left-accent-info'
   const langName = paper.language && paper.language !== 'en' ? (LANG_NAMES[paper.language] ?? paper.language.toUpperCase()) : null
-  const appliedCriterion = paper.decisions?.[0]?.criterion_label
+  const appliedCriterion = myDec?.criterion_label
+  // Consensus is only surfaced when it adds information beyond the reviewer's
+  // own vote; a provisional (single-vote) final stays hidden to keep screening
+  // independent.
+  const consensus = consensusDecision(paper)
+  const conflict = hasOpenConflict(paper)
 
   return (
     <div className={`paper-row ${accentClass}`} onClick={onDecide}>
@@ -200,6 +213,11 @@ function PaperRow({ paper, onDecide }: { paper: Paper; onDecide: () => void }) {
         <div className="flex items-center gap-2 flex-wrap mb-0.5">
           {dec ? <DecisionBadge decision={dec} /> : <Badge label="Undecided" variant="neutral" />}
           {appliedCriterion && <Badge label={appliedCriterion} variant={dec === 'I' ? 'include' : dec === 'E' ? 'exclude' : 'neutral'} />}
+          {consensus && consensus !== dec && (
+            <Badge label={`Final: ${consensus === 'I' ? 'Include' : consensus === 'E' ? 'Exclude' : 'Uncertain'}`}
+              variant={consensus === 'I' ? 'include' : consensus === 'E' ? 'exclude' : 'uncertain'} />
+          )}
+          {conflict && <Badge label="Conflict" variant="uncertain" />}
           {langName && <Badge label={`Non-English: ${langName}`} variant="uncertain" />}
           <span className="text-2xs text-ink-muted ml-auto">{paper.source} · {paper.year}</span>
         </div>
@@ -229,15 +247,13 @@ function DecisionModal({
   isPending: boolean
   error?: string
 }) {
-  // Pre-populate from existing decisions: own > final > latest by timestamp
-  const decs = paper.decisions ?? []
-  const myDec = decs.find(d => d.reviewer_id === reviewerId)
-  const latestDec = decs.length ? decs.reduce((a, b) => new Date(a.timestamp) > new Date(b.timestamp) ? a : b) : null
-  const prevDec = myDec?.decision ?? paper.final_decision?.decision ?? latestDec?.decision ?? ''
-  const prevCriterion = myDec?.criterion_label
-    ?? decs.find(d => d.decision === prevDec && d.criterion_label)?.criterion_label
-    ?? ''
-  const prevRationale = myDec?.rationale ?? latestDec?.rationale ?? ''
+  // Pre-populate ONLY from the reviewer's own previous decision. Falling back
+  // to the final or another reviewer's latest decision would leak a
+  // co-reviewer's vote and break independent screening.
+  const myDec = (paper.decisions ?? []).find(d => d.reviewer_id === reviewerId)
+  const prevDec = myDec?.decision ?? ''
+  const prevCriterion = myDec?.criterion_label ?? ''
+  const prevRationale = myDec?.rationale ?? ''
 
   const [decision, setDecision] = useState(prevDec)
   // Uncertain decisions require a "leaning toward" direction (I or E) so a criterion

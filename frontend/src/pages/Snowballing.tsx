@@ -17,7 +17,7 @@ import {
   DecisionBadge, EmptyState, Badge,
 } from '../components/ui'
 import type { SnowballingIteration, Paper } from '../api/types'
-import { formatAuthors } from '../utils'
+import { formatAuthors, ownDecision, consensusDecision, hasOpenConflict } from '../utils'
 
 export default function Snowballing() {
   const { projectId } = useProject()
@@ -460,8 +460,11 @@ function IterationPapersView({ pid, iterationNumber }: { pid: number; iterationN
   const { data: exclusions = [] } = useQuery({ queryKey: ['exclusion', pid], queryFn: () => getExclusionCriteria(pid) })
 
   const activeReviewerId = globalReviewerId ?? reviewers.find(r => r.role === 'R1')?.id ?? reviewers[0]?.id
+  const activeReviewer = reviewers.find(r => r.id === activeReviewerId)
 
   const papers = allPapers.filter(p => p.source === source && p.dedup_status === 'original')
+  // Filter/counts follow the ACTIVE reviewer's own decision (top-bar switch).
+  const myDecisionOf = (p: Paper) => ownDecision(p, activeReviewerId)?.decision
 
   // Track which screening-included snowballing papers still need Phase 4 review
   // Check which screening-included snowball papers still lack a full-text decision
@@ -480,17 +483,18 @@ function IterationPapersView({ pid, iterationNumber }: { pid: number; iterationN
 
   const filteredPapers = papers.filter(p => {
     if (filter === 'all') return true
-    if (filter === 'undecided') return !p.final_decision
-    return p.final_decision?.decision === filter
+    if (filter === 'undecided') return !myDecisionOf(p)
+    return myDecisionOf(p) === filter
   })
 
   const counts = {
     total: papers.length,
-    undecided: papers.filter(p => !p.final_decision).length,
-    I: papers.filter(p => p.final_decision?.decision === 'I').length,
-    E: papers.filter(p => p.final_decision?.decision === 'E').length,
-    U: papers.filter(p => p.final_decision?.decision === 'U').length,
+    undecided: papers.filter(p => !myDecisionOf(p)).length,
+    I: papers.filter(p => myDecisionOf(p) === 'I').length,
+    E: papers.filter(p => myDecisionOf(p) === 'E').length,
+    U: papers.filter(p => myDecisionOf(p) === 'U').length,
   }
+  const youSub = activeReviewer ? `by ${activeReviewer.name}` : undefined
 
   if (papers.length === 0) {
     return <EmptyState icon="—" message="No papers imported yet. Upload a BibTeX file above." />
@@ -500,10 +504,10 @@ function IterationPapersView({ pid, iterationNumber }: { pid: number; iterationN
     <div className="space-y-3">
       <StatBar>
         <StatCell label="Total" value={counts.total} />
-        <StatCell label="Undecided" value={counts.undecided} color="uncertain" />
-        <StatCell label="Included" value={counts.I} color="include" />
-        <StatCell label="Excluded" value={counts.E} color="exclude" />
-        <StatCell label="Uncertain" value={counts.U} color="uncertain" />
+        <StatCell label="Undecided" value={counts.undecided} color="uncertain" sub={youSub} />
+        <StatCell label="Included" value={counts.I} color="include" sub={youSub} />
+        <StatCell label="Excluded" value={counts.E} color="exclude" sub={youSub} />
+        <StatCell label="Uncertain" value={counts.U} color="uncertain" sub={youSub} />
       </StatBar>
 
       {snowballIncluded.length > 0 && (
@@ -538,9 +542,12 @@ function IterationPapersView({ pid, iterationNumber }: { pid: number; iterationN
 
       <div className="space-y-2">
         {filteredPapers.map(paper => {
-          const dec = paper.final_decision?.decision
+          const myDec = ownDecision(paper, activeReviewerId)
+          const dec = myDec?.decision
           const accentClass = dec === 'I' ? 'left-accent-include' : dec === 'E' ? 'left-accent-exclude' : dec === 'U' ? 'left-accent-uncertain' : 'left-accent-info'
-          const appliedCriterion = paper.decisions?.[0]?.criterion_label
+          const appliedCriterion = myDec?.criterion_label
+          const consensus = consensusDecision(paper)
+          const conflict = hasOpenConflict(paper)
           return (
             <div key={paper.id} className={`card pl-4 ${accentClass} cursor-pointer hover:shadow-card-hover transition-shadow`}
               onClick={() => setSelectedPaper(paper)}>
@@ -550,6 +557,11 @@ function IterationPapersView({ pid, iterationNumber }: { pid: number; iterationN
                   {appliedCriterion && (
                     <Badge label={appliedCriterion} variant={dec === 'I' ? 'include' : dec === 'E' ? 'exclude' : 'neutral'} />
                   )}
+                  {consensus && consensus !== dec && (
+                    <Badge label={`Final: ${consensus === 'I' ? 'Include' : consensus === 'E' ? 'Exclude' : 'Uncertain'}`}
+                      variant={consensus === 'I' ? 'include' : consensus === 'E' ? 'exclude' : 'uncertain'} />
+                  )}
+                  {conflict && <Badge label="Conflict" variant="uncertain" />}
                   <span className="text-xs text-ink-muted">{paper.year}</span>
                 </div>
                 <h3 className="text-sm font-medium text-ink mt-1 leading-snug">{paper.title}</h3>
@@ -598,15 +610,13 @@ function SnowDecisionModal({
   isPending: boolean
   error?: string
 }) {
-  // Pre-populate from existing decisions
-  const decs = paper.decisions ?? []
-  const myDec = decs.find(d => d.reviewer_id === reviewerId)
-  const latestDec = decs.length ? decs.reduce((a, b) => new Date(a.timestamp) > new Date(b.timestamp) ? a : b) : null
-  const prevDec = myDec?.decision ?? paper.final_decision?.decision ?? latestDec?.decision ?? ''
-  const prevCriterion = myDec?.criterion_label
-    ?? decs.find(d => d.decision === prevDec && d.criterion_label)?.criterion_label
-    ?? ''
-  const prevRationale = myDec?.rationale ?? latestDec?.rationale ?? ''
+  // Pre-populate ONLY from the reviewer's own previous decision. Falling back
+  // to the final or another reviewer's latest decision would leak a
+  // co-reviewer's vote and break independent screening.
+  const myDec = (paper.decisions ?? []).find(d => d.reviewer_id === reviewerId)
+  const prevDec = myDec?.decision ?? ''
+  const prevCriterion = myDec?.criterion_label ?? ''
+  const prevRationale = myDec?.rationale ?? ''
 
   const [decision, setDecision] = useState(prevDec)
   const [uncertainDir, setUncertainDir] = useState<'I' | 'E' | ''>(() => {

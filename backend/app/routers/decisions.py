@@ -1,10 +1,11 @@
 """
 Reviewer decision endpoints and automatic conflict detection.
 
-After each decision upsert the code checks for agreement among all reviewers
-on that paper+phase. Agreement auto-creates a FinalDecision; disagreement
-creates a ConflictLog entry. Solo-reviewer projects get a provisional
-FinalDecision immediately. See the state machine comment in add_decision().
+After each decision upsert the shared state machine
+(services.decision_service.sync_decision_state) recomputes the paper's
+FinalDecision/ConflictLog: agreement auto-creates a FinalDecision,
+disagreement opens a ConflictLog and removes any provisional final,
+solo-reviewer projects get a provisional FinalDecision immediately.
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
@@ -14,6 +15,7 @@ from datetime import datetime
 
 from app.database import get_session
 from app.models import Paper, ReviewerDecision, FinalDecision, ConflictLog, Reviewer
+from app.services.decision_service import sync_decision_state
 
 router = APIRouter(tags=["decisions"])
 
@@ -99,94 +101,7 @@ def add_decision(
 
     session.commit()
 
-    # ── Decision state machine ───────────────────────────────────────────
-    # After each upsert, check all ReviewerDecisions for this paper+phase:
-    #   >= 2 decisions, all identical  -> auto-create FinalDecision ("agreement")
-    #   >= 2 decisions, any differ     -> create ConflictLog (if not already open)
-    #   == 1 decision (solo reviewer)  -> create provisional FinalDecision
-    # A previously-open conflict is auto-resolved if reviewers later agree
-    # (e.g., one reviewer changes their mind).
-    all_decisions = session.exec(
-        select(ReviewerDecision)
-        .where(ReviewerDecision.paper_id == paper.id)
-        .where(ReviewerDecision.phase == body.phase)
-    ).all()
-
-    if len(all_decisions) >= 2:
-        unique_decisions = set(d.decision for d in all_decisions)
-        if len(unique_decisions) == 1:
-            # Full agreement — create/update FinalDecision
-            final = session.exec(
-                select(FinalDecision)
-                .where(FinalDecision.paper_id == paper.id)
-                .where(FinalDecision.phase == body.phase)
-            ).first()
-            if not final:
-                final = FinalDecision(
-                    project_id=project_id,
-                    paper_id=paper.id,
-                    phase=body.phase,
-                    decision=body.decision,
-                    resolution_method="agreement",
-                )
-                session.add(final)
-            # Resolve any open conflicts for this paper
-            open_conflict = session.exec(
-                select(ConflictLog)
-                .where(ConflictLog.paper_id == paper.id)
-                .where(ConflictLog.phase == body.phase)
-                .where(ConflictLog.resolved == False)
-            ).first()
-            if open_conflict:
-                open_conflict.resolved = True
-                open_conflict.resolution = body.decision
-                open_conflict.resolution_method = "agreement"
-                open_conflict.resolved_at = datetime.utcnow()
-                session.add(open_conflict)
-        else:
-            # Conflict — log it if not already logged
-            existing_conflict = session.exec(
-                select(ConflictLog)
-                .where(ConflictLog.paper_id == paper.id)
-                .where(ConflictLog.phase == body.phase)
-                .where(ConflictLog.resolved == False)
-            ).first()
-            if not existing_conflict:
-                sorted_decs = sorted(all_decisions, key=lambda d: d.reviewer_id)
-                d1, d2 = sorted_decs[0], sorted_decs[1]
-                conflict = ConflictLog(
-                    project_id=project_id,
-                    paper_id=paper.id,
-                    phase=body.phase,
-                    r1_reviewer_id=d1.reviewer_id,
-                    r2_reviewer_id=d2.reviewer_id,
-                    r1_decision=d1.decision,
-                    r2_decision=d2.decision,
-                    r1_rationale=d1.rationale,
-                    r2_rationale=d2.rationale,
-                )
-                session.add(conflict)
-
-    elif len(all_decisions) == 1:
-        # Single reviewer — create a provisional FinalDecision (can be overridden)
-        final = session.exec(
-            select(FinalDecision)
-            .where(FinalDecision.paper_id == paper.id)
-            .where(FinalDecision.phase == body.phase)
-        ).first()
-        if not final:
-            final = FinalDecision(
-                project_id=project_id,
-                paper_id=paper.id,
-                phase=body.phase,
-                decision=body.decision,
-                resolution_method="agreement",
-            )
-            session.add(final)
-        else:
-            final.decision = body.decision
-            session.add(final)
-
+    sync_decision_state(session, project_id, paper.id, body.phase)
     session.commit()
     return {"status": "ok", "decision": body.decision}
 

@@ -196,8 +196,10 @@ export const importSnowballingBib = (pid: number, iterationId: number, file: Fil
 
 // ── QA Scoring ────────────────────────────────────────────────────────────────
 
-export const getQASummary = (pid: number) =>
-  api.get<QASummary>(`/projects/${pid}/qa-summary`).then(r => r.data)
+export const getQASummary = (pid: number, reviewerId?: number) =>
+  api.get<QASummary>(`/projects/${pid}/qa-summary`, {
+    params: reviewerId != null ? { reviewer_id: reviewerId } : undefined,
+  }).then(r => r.data)
 
 export const upsertQAScore = (
   pid: number,
@@ -224,8 +226,10 @@ export const updateExtractionField = (
 export const deleteExtractionField = (pid: number, fieldId: number) =>
   api.delete(`/projects/${pid}/extraction/fields/${fieldId}`)
 
-export const getExtractionSummary = (pid: number) =>
-  api.get<ExtractionSummary>(`/projects/${pid}/extraction/summary`).then(r => r.data)
+export const getExtractionSummary = (pid: number, reviewerId?: number) =>
+  api.get<ExtractionSummary>(`/projects/${pid}/extraction/summary`, {
+    params: reviewerId != null ? { reviewer_id: reviewerId } : undefined,
+  }).then(r => r.data)
 
 export const upsertExtractionRecord = (
   pid: number,

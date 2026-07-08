@@ -82,11 +82,12 @@ class TestPipelineScreeningStage:
         assert (stats["screening_included"]
                 + stats["screening_excluded"]
                 + stats["screening_undecided"]) == 8
-        # 4 unconflicted Includes (p0, p1, p2, p4); 1 unconflicted Exclude (p6, p7
-        # — but provisional FinalDecisions from R1's earlier decisions on p3/p5
-        # keep them in the included/excluded set until conflicts resolve).
-        # The exact distribution depends on the decision state machine, so we
-        # just pin the partition + open_conflict count.
+        # Agreements: p0, p1, p2, p4 included; p6, p7 excluded. The conflicted
+        # papers p3/p5 carry NO FinalDecision while their conflicts are open,
+        # so they count as undecided until a human resolves them.
+        assert stats["screening_included"] == 4
+        assert stats["screening_excluded"] == 2
+        assert stats["screening_undecided"] == 2
         assert stats["open_conflicts"] == 2
 
 
@@ -233,3 +234,34 @@ class TestPipelineExtractionStage:
             v = p["values"].get("usage")
             if v: usage_counts[v] = usage_counts.get(v, 0) + 1
         assert usage_counts == {"Direct": 2, "Indirect": 1}
+
+    def test_extraction_summary_scopes_by_reviewer(self, instance):
+        """``reviewer_id`` returns only that reviewer's records, so the
+        extraction UI shows the active reviewer's own values after a switch."""
+        pid, r1, r2 = _setup_project_with_two_reviewers(instance)
+        _decide_phase(instance, pid, r1["id"], ["I"] * 8, "screening")
+        _decide_phase(instance, pid, r1["id"], ["I"] * 5 + ["E"] * 3, "full-text")
+
+        instance.client.post(f"/api/projects/{pid}/extraction/fields", json={
+            "field_name": "usage", "field_label": "Usage",
+            "field_type": "dropdown", "sort_order": 0,
+        }).raise_for_status()
+
+        paper = instance.paper_by_citekey(pid, "p0")
+        for reviewer, value in ((r1, "Direct"), (r2, "Indirect")):
+            instance.client.post(
+                f"/api/projects/{pid}/papers/{paper['id']}/extraction",
+                json={"reviewer_id": reviewer["id"], "field_name": "usage",
+                      "field_value": value},
+            ).raise_for_status()
+
+        def usage_for(params):
+            summary = instance.client.get(
+                f"/api/projects/{pid}/extraction/summary", params=params).json()
+            row = next(p for p in summary["papers"] if p["paper_id"] == paper["id"])
+            return row["values"].get("usage")
+
+        assert usage_for({"reviewer_id": r1["id"]}) == "Direct"
+        assert usage_for({"reviewer_id": r2["id"]}) == "Indirect"
+        # Unscoped view merges deterministically: the latest record wins.
+        assert usage_for({}) == "Indirect"

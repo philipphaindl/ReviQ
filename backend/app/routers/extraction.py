@@ -152,8 +152,17 @@ def upsert_record(
 
 
 @router.get("/projects/{project_id}/extraction/summary")
-def extraction_summary(project_id: int, session: Session = Depends(get_session)):
-    """Return all included papers with their extraction records."""
+def extraction_summary(
+    project_id: int,
+    reviewer_id: Optional[int] = None,
+    session: Session = Depends(get_session),
+):
+    """Return all included papers with their extraction records.
+
+    With ``reviewer_id`` only that reviewer's records are returned; without
+    it records are merged across reviewers (latest record per field wins,
+    deterministically by record id).
+    """
     from app.models import FinalDecision
     _require_project(project_id, session)
 
@@ -187,9 +196,16 @@ def extraction_summary(project_id: int, session: Session = Depends(get_session))
     else:
         paper_ids = [d.paper_id for d in sc_included]
 
-    all_records = session.exec(
-        select(ExtractionRecord).where(ExtractionRecord.project_id == project_id)
-    ).all()
+    records_stmt = (
+        select(ExtractionRecord)
+        .where(ExtractionRecord.project_id == project_id)
+        .order_by(ExtractionRecord.id)
+    )
+    if reviewer_id is not None:
+        records_stmt = records_stmt.where(
+            ExtractionRecord.extracted_by_reviewer_id == reviewer_id
+        )
+    all_records = session.exec(records_stmt).all()
     rec_map: dict = {}
     for r in all_records:
         rec_map.setdefault(r.paper_id, {})[r.field_name] = r.field_value

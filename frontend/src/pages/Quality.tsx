@@ -47,10 +47,19 @@ export default function Quality() {
 
 function ScoringView({ pid }: { pid: number }) {
   const [selectedPaper, setSelectedPaper] = useState<QAPaperResult | null>(null)
+  const { reviewerId } = useProject()
 
+  const { data: reviewers = [] } = useQuery({
+    queryKey: ['reviewers', pid],
+    queryFn: () => getReviewers(pid),
+  })
+  const activeReviewerId = reviewerId ?? reviewers.find(r => r.role === 'R1')?.id ?? reviewers[0]?.id
+
+  // Scoped to the active reviewer: switching the reviewer in the top bar
+  // switches which scores are shown and edited.
   const { data: summary, isLoading } = useQuery({
-    queryKey: ['qa-summary', pid],
-    queryFn: () => getQASummary(pid),
+    queryKey: ['qa-summary', pid, activeReviewerId ?? 'all'],
+    queryFn: () => getQASummary(pid, activeReviewerId),
   })
 
   if (isLoading) return <p className="text-sm text-ink-muted">Loading…</p>
@@ -88,9 +97,11 @@ function ScoringView({ pid }: { pid: number }) {
 
       {selectedPaper && (
         <QAScoringModal
+          key={activeReviewerId ?? 'none'}
           paper={selectedPaper}
           criteria={summary.criteria}
           pid={pid}
+          reviewerId={activeReviewerId}
           onClose={() => setSelectedPaper(null)}
         />
       )}
@@ -139,23 +150,18 @@ function PaperQARow({ paper, criteria, onScore }: {
   )
 }
 
-function QAScoringModal({ paper, criteria, pid, onClose }: {
+function QAScoringModal({ paper, criteria, pid, reviewerId, onClose }: {
   paper: QAPaperResult
   criteria: { id: number; label: string; description: string; max_score: number }[]
   pid: number
+  reviewerId?: number
   onClose: () => void
 }) {
   const qc = useQueryClient()
-  const { reviewerId } = useProject()
+  const activeReviewerId = reviewerId
 
-  const { data: reviewers = [] } = useQuery({
-    queryKey: ['reviewers', pid],
-    queryFn: () => getReviewers(pid),
-  })
-
-  const activeReviewerId = reviewerId ?? reviewers.find(r => r.role === 'R1')?.id ?? reviewers[0]?.id
-
-  // Local score state initialised from server data
+  // Local score state initialised from the active reviewer's own scores
+  // (the parent fetches the summary scoped to that reviewer).
   const [scores, setScores] = useState<Record<number, number | null>>(() => {
     const init: Record<number, number | null> = {}
     for (const s of paper.scores) {

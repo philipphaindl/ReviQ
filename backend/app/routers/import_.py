@@ -14,8 +14,9 @@ from typing import Optional
 import json
 
 from app.database import get_session
-from app.models import Paper, ReviewerDecision, ConflictLog, Reviewer
+from app.models import Paper, ReviewerDecision, Reviewer
 from app.services.bibtex_service import parse_bib_content, detect_duplicates, entry_to_paper_dict
+from app.services.decision_service import sync_decision_state
 
 router = APIRouter(tags=["import"])
 
@@ -244,42 +245,12 @@ async def import_reviewer_decisions(
             session.add(new_dec)
             imported_count += 1
 
-        # Check conflicts with R1 (first reviewer)
-        r1 = session.exec(
-            select(Reviewer)
-            .where(Reviewer.project_id == project_id)
-            .where(Reviewer.role == "R1")
-        ).first()
-        if r1 and r1.id != reviewer.id:
-            r1_dec = session.exec(
-                select(ReviewerDecision)
-                .where(ReviewerDecision.paper_id == paper.id)
-                .where(ReviewerDecision.reviewer_id == r1.id)
-                .where(ReviewerDecision.phase == phase)
-            ).first()
-            if r1_dec and r1_dec.decision != decision:
-                # Check if conflict already logged
-                existing_conflict = session.exec(
-                    select(ConflictLog)
-                    .where(ConflictLog.paper_id == paper.id)
-                    .where(ConflictLog.phase == phase)
-                    .where(ConflictLog.resolved == False)
-                ).first()
-                if not existing_conflict:
-                    conflict = ConflictLog(
-                        project_id=project_id,
-                        paper_id=paper.id,
-                        phase=phase,
-                        r1_reviewer_id=r1.id,
-                        r2_reviewer_id=reviewer.id,
-                        r1_decision=r1_dec.decision,
-                        r2_decision=decision,
-                        r1_rationale=r1_dec.rationale,
-                        r2_rationale=rationale,
-                    )
-                    session.add(conflict)
-                    conflict_count += 1
-                    new_conflicts.append(citekey)
+        # Recompute final/conflict state via the shared state machine —
+        # identical semantics to an interactive decision on this instance.
+        status = sync_decision_state(session, project_id, paper.id, phase)
+        if status == "conflict_opened":
+            conflict_count += 1
+            new_conflicts.append(citekey)
 
     session.commit()
 

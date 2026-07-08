@@ -128,3 +128,88 @@ class TestQASummary:
         assert by_pct[25.0] == "low"
         assert by_pct[75.0] == "medium"
         assert by_pct[100.0] == "high"
+
+
+class TestQAReviewerScoping:
+    """Multi-reviewer QA: aggregate view averages per criterion; the
+    ``reviewer_id`` query param scopes the summary to one reviewer's own
+    scores (used by the scoring UI so switching reviewers switches data)."""
+
+    def _seed_two_reviewers(self, session):
+        proj, r1 = _seed_project(session)
+        r2 = Reviewer(project_id=proj.id, name="Rev 2", role="R2")
+        session.add(r2); session.commit(); session.refresh(r2)
+        return proj, r1, r2
+
+    def test_aggregate_averages_instead_of_overwriting(self, client, db_session):
+        proj, r1, r2 = self._seed_two_reviewers(db_session)
+        crits = _add_qa_criteria(db_session, proj.id, n=2, max_score=1.0)
+        p = _add_paper(db_session, proj.id, "dual")
+        # R1 scores (1.0, 0.0); R2 scores (0.0, 1.0) → average 0.5 per criterion.
+        for c, sc in zip(crits, [1.0, 0.0]):
+            db_session.add(QAScore(project_id=proj.id, paper_id=p.id, criterion_id=c.id,
+                                   score=sc, scored_by_reviewer_id=r1.id))
+        for c, sc in zip(crits, [0.0, 1.0]):
+            db_session.add(QAScore(project_id=proj.id, paper_id=p.id, criterion_id=c.id,
+                                   score=sc, scored_by_reviewer_id=r2.id))
+        db_session.commit()
+
+        row = client.get(f"/api/projects/{proj.id}/qa-summary").json()["papers"][0]
+        assert [s["score"] for s in row["scores"]] == [0.5, 0.5]
+        assert row["total_score"] == pytest.approx(1.0)
+
+    def test_reviewer_id_param_returns_own_scores(self, client, db_session):
+        proj, r1, r2 = self._seed_two_reviewers(db_session)
+        crits = _add_qa_criteria(db_session, proj.id, n=2, max_score=1.0)
+        p = _add_paper(db_session, proj.id, "scoped")
+        for c, sc in zip(crits, [1.0, 1.0]):
+            db_session.add(QAScore(project_id=proj.id, paper_id=p.id, criterion_id=c.id,
+                                   score=sc, scored_by_reviewer_id=r1.id))
+        for c, sc in zip(crits, [0.0, 0.5]):
+            db_session.add(QAScore(project_id=proj.id, paper_id=p.id, criterion_id=c.id,
+                                   score=sc, scored_by_reviewer_id=r2.id))
+        db_session.commit()
+
+        r1_row = client.get(f"/api/projects/{proj.id}/qa-summary",
+                            params={"reviewer_id": r1.id}).json()["papers"][0]
+        r2_row = client.get(f"/api/projects/{proj.id}/qa-summary",
+                            params={"reviewer_id": r2.id}).json()["papers"][0]
+        assert [s["score"] for s in r1_row["scores"]] == [1.0, 1.0]
+        assert [s["score"] for s in r2_row["scores"]] == [0.0, 0.5]
+        assert r1_row["total_score"] == pytest.approx(2.0)
+        assert r2_row["total_score"] == pytest.approx(0.5)
+
+    def test_fully_scored_counts_distinct_criteria_not_rows(self, client, db_session):
+        """Two reviewers scoring the SAME single criterion must not mark a
+        two-criterion paper as fully scored (the row count is 2, but only
+        one criterion is covered)."""
+        proj, r1, r2 = self._seed_two_reviewers(db_session)
+        crits = _add_qa_criteria(db_session, proj.id, n=2, max_score=1.0)
+        p = _add_paper(db_session, proj.id, "partial")
+        for rev in (r1, r2):
+            db_session.add(QAScore(project_id=proj.id, paper_id=p.id,
+                                   criterion_id=crits[0].id, score=1.0,
+                                   scored_by_reviewer_id=rev.id))
+        db_session.commit()
+
+        row = client.get(f"/api/projects/{proj.id}/qa-summary").json()["papers"][0]
+        assert row["fully_scored"] is False
+
+    def test_reviewer_scope_fully_scored_is_per_reviewer(self, client, db_session):
+        proj, r1, r2 = self._seed_two_reviewers(db_session)
+        crits = _add_qa_criteria(db_session, proj.id, n=2, max_score=1.0)
+        p = _add_paper(db_session, proj.id, "split")
+        # R1 covers both criteria; R2 covers only the first.
+        for c in crits:
+            db_session.add(QAScore(project_id=proj.id, paper_id=p.id, criterion_id=c.id,
+                                   score=1.0, scored_by_reviewer_id=r1.id))
+        db_session.add(QAScore(project_id=proj.id, paper_id=p.id, criterion_id=crits[0].id,
+                               score=0.5, scored_by_reviewer_id=r2.id))
+        db_session.commit()
+
+        r1_row = client.get(f"/api/projects/{proj.id}/qa-summary",
+                            params={"reviewer_id": r1.id}).json()["papers"][0]
+        r2_row = client.get(f"/api/projects/{proj.id}/qa-summary",
+                            params={"reviewer_id": r2.id}).json()["papers"][0]
+        assert r1_row["fully_scored"] is True
+        assert r2_row["fully_scored"] is False

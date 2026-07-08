@@ -130,22 +130,24 @@ class TestSingleRoundtripExchange:
         """The PRISMA totals must remain self-consistent after the second
         reviewer's file is absorbed.
 
-        ReviQ's decision state machine (see ``decisions.py``) gives a paper a
-        *provisional* FinalDecision the moment one reviewer touches it. When a
-        co-reviewer is later imported and disagrees, a ConflictLog is opened
-        but the provisional FinalDecision is left in place until a human
-        resolves the conflict. So with this fixture:
+        ReviQ's decision state machine (see ``decision_service.py``) gives a
+        paper a *provisional* FinalDecision the moment one reviewer touches
+        it. When a co-reviewer is later imported and disagrees, a ConflictLog
+        is opened and the provisional FinalDecision is removed — one
+        reviewer's solo call must not count as the project's decision while
+        the disagreement is unresolved. So with this fixture:
 
           - p0 (I, I) → agreement → final = I
           - p1 (I, I) → agreement → final = I
-          - p2 (R1=I, R2=E) → conflict; provisional final = E (R2's earlier solo call)
+          - p2 (R1=I, R2=E) → open conflict; no final until resolved
           - p3 (E, E) → agreement → final = E
-          - p4 (R1=E, R2=I) → conflict; provisional final = I
+          - p4 (R1=E, R2=I) → open conflict; no final until resolved
           - p5 (E, E) → agreement → final = E
 
-        Total: 3 included, 3 excluded, 2 open conflicts. The invariant that
-        matters for PRISMA reproducibility is that ``included + excluded +
-        undecided`` covers every original paper exactly once.
+        Total: 2 included, 2 excluded, 2 undecided (open conflicts). The
+        invariant that matters for PRISMA reproducibility is that
+        ``included + excluded + undecided`` covers every original paper
+        exactly once.
         """
         two_instances.use(two_instances.a)
         pid_a, r1_a = _seed_papers_and_r1(two_instances.a)
@@ -159,8 +161,9 @@ class TestSingleRoundtripExchange:
         two_instances.b.import_decisions(pid_b, payload)
 
         stats = two_instances.b.export_stats(pid_b)
-        assert stats["screening_included"] == 3
-        assert stats["screening_excluded"] == 3
+        assert stats["screening_included"] == 2
+        assert stats["screening_excluded"] == 2
+        assert stats["screening_undecided"] == 2
         assert stats["open_conflicts"] == 2
         # PRISMA partition invariant — every original paper accounted for.
         assert (stats["screening_included"]
