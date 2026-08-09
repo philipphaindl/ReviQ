@@ -96,8 +96,24 @@ export default function App() {
               If you use ReviQ in your research, please cite:
             </span>
             <span className="text-2xs text-ink">
-              Haindl, Philipp (submitted). <em>ReviQ: A Systematic Literature Review Workbench.</em> SoftwareX.
+              Philipp Haindl, <em>ReviQ: A systematic literature review workbench</em>, SoftwareX, Volume 35, 2026 (
+              <a
+                href="https://doi.org/10.1016/j.softx.2026.102814"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-ink-light"
+              >
+                https://doi.org/10.1016/j.softx.2026.102814
+              </a>
+              )
             </span>
+            <a
+              href="/reviq.bib"
+              download="reviq.bib"
+              className="text-2xs text-ink-muted underline hover:text-ink-light shrink-0"
+            >
+              [BibTeX]
+            </a>
           </footer>
         </div>
       </BrowserRouter>

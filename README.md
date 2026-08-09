@@ -4,7 +4,19 @@ A locally-deployed workbench for conducting Systematic Literature Reviews follow
 
 If you use ReviQ in your research, please cite:
 
-> Haindl, Philipp (submitted). *ReviQ: A Systematic Literature Review Workbench.* SoftwareX.
+> Philipp Haindl, *ReviQ: A systematic literature review workbench*, SoftwareX, Volume 35, 2026 ([https://doi.org/10.1016/j.softx.2026.102814](https://doi.org/10.1016/j.softx.2026.102814))
+
+```bibtex
+@article{Haindl2026ReviQ,
+  author  = {Haindl, Philipp},
+  title   = {ReviQ: A systematic literature review workbench},
+  journal = {SoftwareX},
+  volume  = {35},
+  year    = {2026},
+  doi     = {10.1016/j.softx.2026.102814},
+  url     = {https://doi.org/10.1016/j.softx.2026.102814}
+}
+```
 
 ## What it does
 

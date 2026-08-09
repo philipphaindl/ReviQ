@@ -1286,8 +1286,13 @@ def _build_pdf(
     pdf.set_x(pdf.l_margin)
     pdf.multi_cell(_CW, 3.5,
         "Generated with ReviQ. If you use ReviQ in your research, please cite: "
-        "Haindl, Philipp (submitted). ReviQ: A Systematic Literature Review Workbench. SoftwareX.",
+        "Philipp Haindl, ReviQ: A systematic literature review workbench, SoftwareX, Volume 35, 2026.",
         align="C")
+    doi_url = "https://doi.org/10.1016/j.softx.2026.102814"
+    pdf.set_font("Times","IU",7); pdf.set_text_color(*_GRAY)
+    pdf.set_x(pdf.l_margin)
+    pdf.cell(_CW, 3.5, doi_url, align="C", link=doi_url)
+    pdf.ln(3.5)
     pdf.set_text_color(*_BLACK)
 
     pdf._is_cover = False
