@@ -4,3 +4,4 @@ backend/app/services/__pycache__
 backend/tests/__pycache__
 frontend/node_modules
 frontend/dist/assets
+.DS_Store
