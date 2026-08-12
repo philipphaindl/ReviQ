@@ -1,11 +1,24 @@
 """
-BibTeX import with cross-database deduplication, and reviewer decision import.
+Paper import — BibTeX for the formal stream, glr packages for the grey one —
+and reviewer decision import.
 
-Deduplication uses a two-tier strategy (see bibtex_service.detect_duplicates):
+**BibTeX** deduplicates in two tiers (see bibtex_service.detect_duplicates):
   1. DOI match (exact, case-insensitive) — high confidence
   2. Normalized title + venue match — catches DOI-less or inconsistent entries
 Both tiers run against the existing paper pool in the DB, so importing a second
 database's BibTeX will correctly flag cross-database duplicates.
+
+**Grey literature** arrives as a `glr-interchange-v1` package and deduplicates
+on canonical URL and payload hash only — exact identities, never a title. The
+reasoning is in `grey_service`; the short version is that a grey title is
+whatever a page's `<title>` said and a false duplicate removes a source from a
+review silently.
+
+The two paths do not share a deduplication pool. A grey record carries no DOI
+and its venue is a hostname, so neither BibTeX tier can recognise it, and a
+grey copy of a formal paper is not detected as a duplicate of it. That is a
+stated limitation rather than an oversight: over-inclusion is visible at
+screening, silent exclusion is not.
 """
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlmodel import Session, select
@@ -14,7 +27,8 @@ from typing import Optional
 import json
 
 from app.database import get_session
-from app.models import Paper, ReviewerDecision, Reviewer
+from app.models import Paper, ReviewerDecision, Reviewer, GreyImport, GreySource
+from app.services import grey_service
 from app.services.bibtex_service import parse_bib_content, detect_duplicates, entry_to_paper_dict
 from app.services.decision_service import sync_decision_state
 
@@ -104,6 +118,150 @@ async def import_bib_file(
         "imported_citekeys": imported,
         "duplicate_citekeys": duplicate_records,
     }
+
+
+@router.post("/projects/{project_id}/import/grey")
+async def import_grey_package(
+    project_id: int,
+    file: UploadFile = File(...),
+    session: Session = Depends(get_session),
+):
+    """Import a `glr-interchange-v1` package into the grey literature stream.
+
+    Every record becomes a paper, including the ones that could not be
+    retrieved. That is deliberate on both sides: glr exports them so a
+    consumer's "records identified" reconciles with its retrieval report, and a
+    review that cannot say how much of its grey literature had rotted or sat
+    behind a publisher's wall is hiding a limitation rather than not having
+    one. They arrive with `full_text_inaccessible` set and their cause on the
+    `GreySource` row, which is what lets those exclusions be reported by kind
+    rather than as a single number.
+    """
+    _require_project(project_id, session)
+
+    raw = await file.read()
+    try:
+        package = grey_service.parse_package(raw)
+    except grey_service.GreyImportError as exc:
+        raise HTTPException(400, str(exc))
+
+    records = package["records"]
+    engine = grey_service.engine_of(package)
+
+    # Recognise against every grey source already in the project, whichever
+    # package it came from: two packages for overlapping query sets return the
+    # same document, and the second import must not create a second paper.
+    known = session.exec(
+        select(GreySource).where(GreySource.project_id == project_id)
+    ).all()
+    known_urls = {g.canonical_url.strip().lower() for g in known if g.canonical_url}
+    known_hashes = {g.sha256.strip().lower() for g in known if g.sha256}
+
+    unique, duplicates = grey_service.partition(records, known_urls, known_hashes)
+
+    grey_import = GreyImport(
+        project_id=project_id,
+        **grey_service.package_metadata(package, filename=file.filename),
+    )
+    session.add(grey_import)
+    session.commit()
+    session.refresh(grey_import)
+
+    imported: list[str] = []
+    duplicate_citekeys: list[str] = []
+    unretrievable = 0
+
+    for record, is_duplicate in [(r, False) for r in unique] + [(r, True) for r in duplicates]:
+        data = grey_service.record_to_paper_dict(record, engine)
+        if not data["citekey"]:
+            continue
+        if is_duplicate:
+            # Anything other than "original" counts as a duplicate; no
+            # back-reference, for the reason given on the BibTeX path above.
+            data["dedup_status"] = "duplicate"
+
+        # A citekey is derived from the canonical URL, so a collision here is
+        # the same document arriving again. `partition` has already caught that
+        # for anything with a GreySource row; this covers the rest.
+        existing = session.exec(
+            select(Paper)
+            .where(Paper.project_id == project_id)
+            .where(Paper.citekey == data["citekey"])
+        ).first()
+        if existing:
+            continue
+
+        paper = Paper(project_id=project_id, **data)
+        session.add(paper)
+        session.commit()
+        session.refresh(paper)
+
+        session.add(GreySource(
+            project_id=project_id,
+            paper_id=paper.id,
+            grey_import_id=grey_import.id,
+            **grey_service.record_to_provenance_dict(record),
+        ))
+
+        if is_duplicate:
+            duplicate_citekeys.append(data["citekey"])
+        else:
+            imported.append(data["citekey"])
+        if data["full_text_inaccessible"]:
+            unretrievable += 1
+
+    grey_import.imported_count = len(imported)
+    grey_import.duplicate_count = len(duplicate_citekeys)
+    session.add(grey_import)
+    session.commit()
+
+    counts = package.get("counts") or {}
+    return {
+        "grey_import_id": grey_import.id,
+        "engine": engine,
+        "scope": package.get("scope"),
+        "queries": len(package.get("runs") or []),
+        "total_in_package": len(records),
+        "imported_unique": len(imported),
+        "detected_duplicates": len(duplicate_citekeys),
+        # Imported and not readable: identified by the search, excluded at the
+        # retrieval stage rather than at screening. This is the number a PRISMA
+        # "reports not retrieved" box wants, and the breakdown below is what
+        # makes it defensible.
+        "imported_unretrievable": unretrievable,
+        "unretrievable_by_reason": grey_service.reason_breakdown(records),
+        # The package's own totals, so a disagreement surfaces here rather than
+        # in a finished diagram.
+        "package_reported": {
+            "documents": counts.get("documents"),
+            "usable": counts.get("ok"),
+        },
+        "imported_citekeys": imported,
+        "duplicate_citekeys": duplicate_citekeys,
+    }
+
+
+@router.get("/projects/{project_id}/grey-sources")
+def list_grey_sources(project_id: int, session: Session = Depends(get_session)):
+    """Retrieval provenance for the project's grey papers, joined on `paper_id`.
+
+    Everything a grey citation needs that a `Paper` row has no column for: when
+    the source was read, the digest of what was read, and where those bytes are
+    archived.
+    """
+    _require_project(project_id, session)
+    return session.exec(
+        select(GreySource).where(GreySource.project_id == project_id)
+    ).all()
+
+
+@router.get("/projects/{project_id}/grey-imports")
+def list_grey_imports(project_id: int, session: Session = Depends(get_session)):
+    """The packages this project's grey literature came from."""
+    _require_project(project_id, session)
+    return session.exec(
+        select(GreyImport).where(GreyImport.project_id == project_id)
+    ).all()
 
 
 @router.get("/projects/{project_id}/import/stats")

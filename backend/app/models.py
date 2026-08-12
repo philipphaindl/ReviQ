@@ -106,7 +106,11 @@ class Paper(SQLModel, table=True):
     # by parsing `source` — that is how the two-stream assumption ossified.
     stream: str = "formal"      # formal | grey
     discovery: str = "search"   # search | snowball
-    dedup_status: str = "original"  # "original" or "duplicate_of:{citekey}"
+    # "original" for a record that counts, anything else for a duplicate. Test
+    # it with `!= "original"`, never a prefix: no importer can name the record
+    # it duplicates, so no back-reference is stored. The module docstring was
+    # corrected when that was standardised; this line was missed.
+    dedup_status: str = "original"
     language: Optional[str] = None
     full_text_url: Optional[str] = None
     full_text_inaccessible: bool = False
@@ -206,3 +210,76 @@ class PaperDatabaseLink(SQLModel, table=True):
     project_id: int = Field(foreign_key="project.id", index=True)
     paper_id: int = Field(foreign_key="paper.id", index=True)
     db_name: str  # canonical database name
+
+
+class GreyImport(SQLModel, table=True):
+    """One `glr export-json` package taken into a project.
+
+    Kept because a grey search is only reproducible if the package it came from
+    can be named. `canonicalization` in particular: glr pins the algorithm that
+    produced every canonical URL in a package and warns a consumer never to
+    re-canonicalise with its own copy, so two imports made under different
+    versions are not joinable — and this is what lets a later reader notice
+    that rather than silently joining them.
+
+    `documents_reported` and `usable_reported` are the package's own counts.
+    Storing them next to what was actually imported is the reconciliation check
+    a PRISMA diagram needs: if they disagree, the diagram is wrong and someone
+    has to know which side moved.
+    """
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id", index=True)
+    schema_version: Optional[str] = None
+    canonicalization: Optional[str] = None
+    tool_name: Optional[str] = None
+    tool_version: Optional[str] = None
+    exported_at_utc: Optional[str] = None
+    scope_kind: Optional[str] = None      # "run" or "batch" on the glr side
+    scope_id: Optional[str] = None        # the run_id or batch_id retrieved
+    filename: Optional[str] = None
+    queries: Optional[int] = None
+    records_in_package: Optional[int] = None
+    documents_reported: Optional[int] = None
+    usable_reported: Optional[int] = None
+    imported_count: int = 0
+    duplicate_count: int = 0
+    imported_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class GreySource(SQLModel, table=True):
+    """The retrieval provenance of one grey paper.
+
+    Beside `Paper` rather than inside it, because it belongs to the retrieval
+    and not to the review: a paper is a paper whether it came from Scopus or
+    from a ministry's website, and only the grey one has a payload digest and
+    an archive offset. For a grey source those are not metadata — a retrieval
+    timestamp, a SHA-256 over the bytes read, and where those bytes are
+    archived *are* the citation, because the page itself may be edited or gone
+    by the time anyone checks.
+
+    `retrieval_reason` carries glr's vocabulary for why a source yielded
+    nothing: `origin_unreachable` (commonly publisher access control),
+    `no_article_text` (a platform post that was never a document),
+    `not_found` (link rot), and so on. They are different exclusion criteria
+    and a review that reports them as one number cannot defend any of them.
+    """
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id", index=True)
+    paper_id: int = Field(foreign_key="paper.id", index=True)
+    grey_import_id: Optional[int] = Field(default=None, foreign_key="greyimport.id", index=True)
+    record_key: str
+    canonical_url: str = Field(index=True)   # the identity, and the dedup key
+    source_url: Optional[str] = None         # after redirects
+    host: Optional[str] = None
+    retrieved_at_utc: Optional[str] = None
+    sha256: Optional[str] = Field(default=None, index=True)
+    media_type: Optional[str] = None         # html | pdf | other
+    content_length: Optional[int] = None
+    word_count: Optional[int] = None
+    archive_filename: Optional[str] = None   # the WARC holding the bytes
+    archive_offset: Optional[int] = None     # seek straight to the record
+    archive_record_id: Optional[str] = None
+    retrieval_status: Optional[str] = None   # ok | blocked | failed | empty | not_fetched
+    retrieval_reason: Optional[str] = None   # why, when it is not "ok"
+    search_observations: int = 0             # how many queries returned this document
+    best_rank: Optional[int] = None          # best position across those queries

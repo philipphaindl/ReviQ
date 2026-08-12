@@ -25,6 +25,38 @@ from app.main import app
 from app.models import Reviewer
 
 
+# A retrievable glr record with every field a real package carries. Tests
+# override only the field under examination, so a new field in the format is
+# added here once rather than in every fixture.
+GREY_RECORD_DEFAULTS: dict[str, Any] = {
+    "record_key": "oecd-org-3f2a91c07be4",
+    "canonical_url": "https://oecd.org/ai-maturity",
+    "host": "oecd.org",
+    "discovery": "serp",
+    "discovery_depth": 0,
+    "retrieval_status": "ok",
+    "retrieval_reason": None,
+    "title": "AI Maturity in the Public Sector",
+    "source_url": "https://www.oecd.org/ai-maturity/",
+    "raw_url": "https://oecd.org/ai-maturity",
+    "retrieved_at_utc": "2026-08-11T19:36:06Z",
+    "sha256": "a" * 64,
+    "media_type": "html",
+    "content_length": 51234,
+    "author": "OECD",
+    "publication_date": "2024-03-15",
+    "language": "en",
+    "word_count": 4210,
+    "snippet": "A five-level model for assessing AI maturity in government.",
+    "warc": {
+        "run_id": "r1", "filename": "snapshots.warc.gz", "offset": 56108,
+        "record_id": "<urn:uuid:fefa3433>",
+        "recorded_path": "data/runs/r1/snapshots.warc.gz",
+    },
+    "observations": [{"query": "AI maturity model", "global_rank": 3, "run_id": "r1"}],
+}
+
+
 @dataclass
 class Instance:
     """One ReviQ deployment's HTTP-level handle. Backed by an in-memory DB."""
@@ -86,6 +118,42 @@ class Instance:
         )
         r.raise_for_status()
         return r.json()
+
+    # ── Grey literature import (a glr-interchange-v1 package) ────────────────
+
+    def import_grey(self, pid: int, records: list[dict], *,
+                    engine: str = "google", counts: Optional[dict] = None,
+                    schema: str = "glr-interchange-v1",
+                    filename: str = "records.json") -> dict:
+        """Post a glr package. `records` are partial; defaults fill the rest."""
+        full = [{**GREY_RECORD_DEFAULTS, **r} for r in records]
+        payload = {
+            "_schema": schema,
+            "_exported_at": "2026-08-12T13:41:52Z",
+            "tool": {"name": "glr", "version": "0.1.0"},
+            "canonicalization": "glr.urls.canonicalize/1",
+            "runs": [{"run_id": "r1", "engine": engine, "query": "AI maturity model"}],
+            "archive": [],
+            "counts": counts or {
+                "documents": len(full),
+                "ok": sum(1 for r in full if r.get("retrieval_status") == "ok"),
+            },
+            "records": full,
+            "scope": {"kind": "batch", "id": "batch-1"},
+        }
+        r = self.client.post(
+            f"/api/projects/{pid}/import/grey",
+            files={"file": (filename, json.dumps(payload).encode("utf-8"),
+                            "application/json")},
+        )
+        r.raise_for_status()
+        return r.json()
+
+    def grey_sources(self, pid: int) -> list[dict]:
+        return self.client.get(f"/api/projects/{pid}/grey-sources").json()
+
+    def grey_imports(self, pid: int) -> list[dict]:
+        return self.client.get(f"/api/projects/{pid}/grey-imports").json()
 
     def papers(self, pid: int) -> list[dict]:
         return self.client.get(f"/api/projects/{pid}/papers").json()
