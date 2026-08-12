@@ -8,7 +8,7 @@ import json
 
 import pytest
 
-from glr import db, interchange
+from app.retrieval import db, interchange
 
 
 @pytest.fixture

@@ -10,7 +10,7 @@ import sqlite3
 
 import pytest
 
-from glr import db, urls
+from app.retrieval import db, urls
 
 
 @pytest.fixture

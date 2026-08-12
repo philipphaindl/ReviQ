@@ -3,7 +3,16 @@
 Werkzeug zur Unterstützung von Grey-Literature- und Multivocal-Literature-Reviews
 nach Garousi, Felizardo & Mäntylä (IST, 2019).
 
-Stand: 2026-08-11 · Status: Plan, noch nicht implementiert
+Stand: 2026-08-11 · Status: umgesetzt; historisches Dokument
+
+> **Nachtrag, 2026-08-12.** Dieser Plan entstand, als der Abruf ein eigenständiges
+> Werkzeug (`glr`) in einem eigenen Repository unter MIT werden sollte, mit einer
+> SoftwareX-Einreichung als Ziel. Beides ist überholt: publiziert ist ReviQ, der Abruf
+> ist ein Teil davon und steht unter GPL-3.0. Die Passagen, die daran hingen, sind unten
+> als überholt gekennzeichnet statt gelöscht — sie begründen technische Entscheidungen,
+> die weiterhin gelten, und ein Plan, aus dem die Prämissen herausgeschnitten wurden,
+> lässt sich nicht mehr nachvollziehen. Die Entscheidungen selbst stehen in
+> `decisions.md` (D1–D26).
 
 ---
 
@@ -71,8 +80,9 @@ Deine Annahme trägt, und zwar aus einem stärkeren Grund als der Bibliothekslag
   mit einer selbstgebauten BeautifulSoup-Heuristik nicht.
 - **warcio** kommt von Webrecorder, also aus der Web-Archiving-Community selbst.
 - **SQLite** ist in der Standardbibliothek (`sqlite3`), kein ORM nötig.
-- Nachnutzbarkeit: Forschende in Software Engineering lesen Python. Ein Reviewer bei
-  SoftwareX soll das Repo klonen und in fünf Minuten verstehen.
+- Nachnutzbarkeit: Forschende in Software Engineering lesen Python. Wer das Repo klont,
+  soll den Abrufteil in fünf Minuten verstehen. *(Ursprünglich mit einem SoftwareX-Reviewer
+  als Adressat begründet — überholt, das Argument trägt ohne ihn.)*
 
 Gegenargument, das ich geprüft und verworfen habe: Go oder Rust wären für die
 Netzwerk-Nebenläufigkeit angenehmer. Bei ~50 URLs pro Lauf und einem ScrapingBee-Limit
@@ -126,7 +136,7 @@ schreibe.
 
 ## 4. Bibliotheken
 
-Alle Lizenzen sind permissiv und mit MIT/Apache-2.0-Release kompatibel.
+Alle Lizenzen sind permissiv und fließen einseitig in ein GPL-3.0-Werk. *(Stand damals: Kompatibilität mit einem MIT-Release — die Anforderung ist seither strenger, das Ergebnis dasselbe.)*
 
 | Zweck | Wahl | Lizenz | Begründung |
 |---|---|---|---|
@@ -143,9 +153,9 @@ Alle Lizenzen sind permissiv und mit MIT/Apache-2.0-Release kompatibel.
 
 ### Bewusst abgelehnt
 
-**PyMuPDF — abgelehnt wegen Lizenz.** PyMuPDF steht unter **AGPL-3.0**. Für eine
-Original Software Publication, die nachgenutzt werden soll, hieße das: entweder das
-gesamte Werkzeug unter AGPL stellen, oder eine kommerzielle Lizenz von Artifex kaufen
+**PyMuPDF — abgelehnt wegen Lizenz.** PyMuPDF steht unter **AGPL-3.0**. Für ein Werkzeug,
+das weitergegeben und nachgenutzt werden soll, hieße das: entweder das gesamte Werkzeug
+unter AGPL stellen, oder eine kommerzielle Lizenz von Artifex kaufen
 (Größenordnung fünfstellig pro Jahr). Beides ist für dieses Vorhaben inakzeptabel.
 Technisch wäre PyMuPDF 10–50× schneller — bei ~50 PDFs pro Lauf ist das irrelevant.
 **Diese Entscheidung sollte im Repo dokumentiert werden**, weil sie sonst später jemand
@@ -205,9 +215,8 @@ Skelett Ballast.
 ```
 glr/
 ├── README.md                  # Installation, ein Beispielaufruf, Datenmodell-Skizze
-├── LICENSE                    # MIT (Annahme, siehe §9)
-├── CITATION.cff               # für SoftwareX ohnehin nötig, kostet 5 Minuten
-├── pyproject.toml
+├── LICENSE                    # überholt: liegt heute bei ReviQ, GPL-3.0
+├── pyproject.toml             # überholt: heute backend/requirements.txt
 ├── uv.lock
 ├── .env.example               # SEARCHAPI_API_KEY=, SCRAPINGBEE_API_KEY=
 ├── .gitignore                 # .env, data/, __pycache__
@@ -397,7 +406,7 @@ lässt sich in einer Zeile ändern:
 |---|---|---|
 | 1 | **SERP-Tiefe:** `engine=google` + Page-Loop, `--pages` (Default 5 = 50 Treffer) | `google_rank_tracking` wäre ein anderes Antwortschema in `serp.py` |
 | 2 | **Re-Fetch:** bekannte URLs werden nicht erneut abgerufen, `--refetch` erzwingt es | eine `if`-Bedingung in `cli.py` |
-| 3 | **Lizenz: MIT** — kürzeste permissive Lizenz, in Forschungssoftware am verbreitetsten, mit allen gewählten Abhängigkeiten kompatibel | `LICENSE` austauschen |
+| 3 | ~~**Lizenz: MIT**~~ — überholt. Der Abruf ist Teil von ReviQ und damit GPL-3.0; alle gewählten Abhängigkeiten sind damit weiterhin verträglich | erledigt |
 | 4 | **Tooling: `uv` + `uv.lock`** | `requirements.txt` stattdessen |
 
 ---
@@ -463,7 +472,7 @@ Skelett:
 4. **LLM-gestütztes Screening** — ausdrücklich Nicht-Ziel, aber das Datenmodell ist
    vorbereitet: eine Tabelle `screenings(document_id, run_id, verdict, rationale)` würde
    genügen, ohne Bestehendes anzufassen.
-5. **`CITATION.cff` und Zenodo-DOI** vor der SoftwareX-Einreichung.
+5. ~~**`CITATION.cff` und Zenodo-DOI**~~ — überholt. Zitiert wird ReviQ (SoftwareX 35, 2026, `10.1016/j.softx.2026.102814`); der Abruf ist ein Teil davon.
 6. **Deduplizierung über Near-Duplicates** (SimHash/MinHash) — exakte SHA-256-Gleichheit
    findet nur identische Bytes; dieselbe Pressemitteilung auf drei Portalen bleibt
    dreimal drin.

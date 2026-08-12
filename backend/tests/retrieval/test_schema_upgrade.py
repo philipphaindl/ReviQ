@@ -5,7 +5,7 @@ tables added in between must not make a read-only command fail. These tests
 simulate that by dropping tables from a current database and reopening it.
 
 The concrete failure this pins: a pilot corpus retrieved before `figures` and
-`figure_descriptions` existed made both `glr export-json` and `glr report` die
+`figure_descriptions` existed made both `export-json` and `report` die
 with `sqlite3.OperationalError: no such table: figures` — on a database whose
 only fault was being older than the code.
 """
@@ -14,7 +14,7 @@ import sqlite3
 
 import pytest
 
-from glr import db, interchange, report
+from app.retrieval import db, interchange, report
 
 LATER_TABLES = ("figure_descriptions", "figures")
 

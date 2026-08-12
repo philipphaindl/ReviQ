@@ -58,7 +58,7 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
 
 
 def init_db(conn: sqlite3.Connection) -> None:
-    """Create the schema. Kept distinct from `ensure_schema` so that `glr init`
+    """Create the schema. Kept distinct from `ensure_schema` so that `init`
     reads as a deliberate act rather than a side effect of connecting."""
     ensure_schema(conn)
 
@@ -181,7 +181,7 @@ def best_snapshot(conn: sqlite3.Connection, document_id: int) -> sqlite3.Row | N
     wins among equals. Deliberately not restricted to any run: a document
     observed in one batch may have been archived by an earlier one (see
     `has_snapshot`), and reporting "not fetched" for a document sitting in the
-    archive would be false. It is also what lets `glr refetch` improve an
+    archive would be false. It is also what lets `refetch` improve an
     existing corpus — re-exporting the original batch afterwards picks up the
     snapshot the retry produced, without rewriting a single earlier row.
 

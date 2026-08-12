@@ -1,7 +1,9 @@
-backend/app/__pycache__
-backend/app/routers/__pycache__
-backend/app/services/__pycache__
-backend/tests/__pycache__
+# Python bytecode. One pattern rather than one line per directory: the
+# per-directory list silently stopped covering anything when app/retrieval and
+# tests/retrieval were added, and 34 .pyc files went into the staging area.
+__pycache__/
+*.py[cod]
+
 frontend/node_modules
 frontend/dist/assets
 .DS_Store
@@ -12,5 +14,7 @@ frontend/dist/assets
 .env.*
 !.env.example
 
-# Grey-literature run directory: WARC archives and the glr database.
+# Retrieved data: WARC archives and the retrieval database. Under DATA_DIR in
+# Docker, here for a checkout run without it.
 glr_runs/
+backend/data/

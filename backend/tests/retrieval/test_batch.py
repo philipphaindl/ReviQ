@@ -6,7 +6,7 @@ unknown keys are errors rather than warnings. These tests pin that.
 
 import pytest
 
-from glr.batch import ConfigError, parse_config
+from app.retrieval.batch import ConfigError, parse_config
 
 
 def _toml(text):
@@ -94,7 +94,7 @@ def test_queries_are_stripped():
 
 
 def test_the_shipped_example_parses():
-    from glr.batch import EXAMPLE
+    from app.retrieval.batch import EXAMPLE
 
     specs = parse_config(_toml(EXAMPLE))
     assert len(specs) == 3

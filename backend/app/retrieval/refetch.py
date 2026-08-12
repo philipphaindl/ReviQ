@@ -79,7 +79,7 @@ def select(
     """The documents in scope whose recorded cause `action` could change.
 
     `reasons`, when given, narrows the selection further — that is what backs
-    `glr refetch --only`, for retrying one cause at a time rather than paying
+    `refetch --only`, for retrying one cause at a time rather than paying
     for every candidate at once.
     """
     out: list[Candidate] = []

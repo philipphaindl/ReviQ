@@ -14,7 +14,7 @@ import gzip
 import pytest
 from warcio.archiveiterator import ArchiveIterator
 
-from glr.archive import (ArchiveReadError, SnapshotArchive, read_payload,
+from app.retrieval.archive import (ArchiveReadError, SnapshotArchive, read_payload,
                          sha256_hex)
 
 PAYLOAD = b"<!DOCTYPE html><html><body><p>archived content</p></body></html>"

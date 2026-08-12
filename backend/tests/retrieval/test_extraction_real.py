@@ -9,7 +9,7 @@ trafilatura.
 No network, no API keys.
 """
 
-from glr.extract import extract, extract_html
+from app.retrieval.extract import extract, extract_html
 
 ARTICLE = b"""<!DOCTYPE html>
 <html lang="en">

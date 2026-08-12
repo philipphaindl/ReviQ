@@ -21,7 +21,7 @@ decision about money.
 **Classification happens at read time, not at fetch time.** A reason is an
 interpretation of facts already recorded — proxy status, blocked reason, media
 type, host, extractor message — and the facts are immutable. Deriving it in
-`glr report` and `glr export-json` rather than storing it means a corpus
+`report` and `export-json` rather than storing it means a corpus
 retrieved months ago reclassifies under an improved classifier without a single
 byte being fetched again, which is the same property `extractions` already has
 against the WARC. It also needs no new column, and D20 is explicit that

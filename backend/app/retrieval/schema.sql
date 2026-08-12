@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS runs (
     tool_version       TEXT NOT NULL,
     status             TEXT NOT NULL CHECK (status IN ('running', 'completed', 'failed')),
     notes              TEXT,
-    -- Groups the runs of one `glr batch` invocation. A run is still exactly
+    -- Groups the runs of one `batch` invocation. A run is still exactly
     -- one query, so every existing guarantee holds unchanged; the batch is
     -- just the protocol that issued them together.
     batch_id           TEXT

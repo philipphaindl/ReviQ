@@ -5,7 +5,7 @@ because the filter decides what enters the corpus: too permissive and a review
 drowns in navigation links, too strict and real sources are never seen.
 """
 
-from glr.links import extract_anchors, select_snowball_links
+from app.retrieval.links import extract_anchors, select_snowball_links
 
 BASE = "https://example.org/reports/ai-maturity"
 

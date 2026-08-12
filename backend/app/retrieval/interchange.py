@@ -248,7 +248,7 @@ def _archive_entries(conn: sqlite3.Connection, referenced: set[tuple[str, str]])
     Built from the snapshots the records resolved to, not from the runs in
     scope. The two are not the same set: `db.best_snapshot` deliberately looks
     across all runs, so a document observed in this batch may carry a snapshot
-    archived by an earlier run — or by a later `glr refetch`. Listing archives
+    archived by an earlier run — or by a later `refetch`. Listing archives
     by run left those files out, and a reader following `warc.recorded_path`
     found a file with no digest to check it against. Eight of 424 records in
     the pilot corpus pointed at an unlisted file that way.

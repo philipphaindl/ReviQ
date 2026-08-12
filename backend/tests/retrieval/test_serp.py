@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from glr.serp import parse_organic, search_id_of
+from app.retrieval.serp import parse_organic, search_id_of
 
 FIXTURE = json.loads(
     (Path(__file__).parent / "fixtures" / "searchapi_google_page1.json").read_text()
@@ -52,7 +52,7 @@ def test_google_redirect_wrappers_are_dropped():
 
 
 def test_other_search_plumbing_is_dropped():
-    from glr.serp import is_non_source
+    from app.retrieval.serp import is_non_source
 
     assert is_non_source("https://www.google.com/url?q=x")
     assert is_non_source("https://webcache.googleusercontent.com/search?q=cache:x")

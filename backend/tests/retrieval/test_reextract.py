@@ -13,9 +13,9 @@ re-read, and what happens to the extraction that is replaced.
 
 import pytest
 
-from glr import db, refetch
+from app.retrieval import db, refetch
 
-from test_report_causes import make_document
+from .test_report_causes import make_document
 
 FIRST_RUN = "2026-08-11T09:00:00Z"
 
@@ -46,7 +46,7 @@ def corpus(tmp_path):
 
 
 def scope_ids(conn):
-    from glr import interchange
+    from app.retrieval import interchange
     return interchange.document_ids(conn, ["run-1"])
 
 
@@ -231,7 +231,7 @@ def test_every_extraction_column_is_carried_into_the_history(corpus):
 def test_a_re_extraction_reaches_the_export(corpus):
     """The point of the exercise: filling a field across an existing corpus
     without re-fetching anything."""
-    from glr import interchange
+    from app.retrieval import interchange
 
     before = interchange.build_package(corpus, ["run-1"])
     assert {r["language"] for r in before["records"] if r.get("language")} == set()
@@ -254,7 +254,7 @@ def test_a_re_extraction_reaches_the_export(corpus):
 def test_a_re_extraction_that_finds_text_moves_a_document_out_of_empty(corpus):
     """The scanned PDF, once OCR is available. `empty` becomes `ok` without a
     single credit being spent."""
-    from glr import interchange
+    from app.retrieval import interchange
 
     before = interchange.build_package(corpus, ["run-1"])
     assert before["counts"]["empty"] == 1

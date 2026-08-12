@@ -126,7 +126,7 @@ def load_config(path: Path) -> list[QuerySpec]:
 EXAMPLE = '''\
 # glr query set — the search protocol for one review, in one file.
 #
-#   uv run glr batch queries.toml --out results.csv
+#   python -m app.retrieval batch queries.toml --out results.csv
 #
 # Every key in [defaults] can be overridden per query.
 

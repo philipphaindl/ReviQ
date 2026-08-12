@@ -1,0 +1,20 @@
+# Optional retrieval extras. Not installed by the Dockerfile: each is needed
+# only for a flag that is off by default, and together they roughly double the
+# image size.
+#
+#   pip install -r requirements-optional.txt
+#
+# --- OCR: `python -m app.retrieval run ... --ocr` -------------------------
+# For PDFs with no text layer, which are recorded as an extraction error
+# rather than as an empty document when this is absent. Needs a tesseract
+# binary on the system as well (macOS: brew install tesseract).
+# pypdfium2 rather than PyMuPDF for rasterising — BSD/Apache, not AGPL (D2).
+pypdfium2>=4.30
+pytesseract>=0.3.10
+
+# --- Figure descriptions: `... --describe-figures` ------------------------
+# The one feature that sends content to a third party and costs money per
+# item, which is why it stays behind its own dependency. Needs
+# ANTHROPIC_API_KEY. Descriptions are model output and are stored apart from
+# source text — see docs/retrieval/decisions.md D13.
+anthropic>=0.40

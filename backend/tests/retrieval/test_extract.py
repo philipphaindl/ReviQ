@@ -5,7 +5,7 @@ prevent a silent mis-extraction: trusting Content-Type instead would turn a
 PDF served as text/html into an empty document rather than an error.
 """
 
-from glr.extract import Extraction, detect_media_type
+from app.retrieval.extract import Extraction, detect_media_type
 
 
 def test_pdf_is_detected_by_magic_bytes():
@@ -41,7 +41,7 @@ def test_word_count_is_derived_not_stored():
 
 
 def test_unsupported_media_type_reports_an_error():
-    from glr.extract import extract
+    from app.retrieval.extract import extract
 
     result = extract(b"\x89PNG", "other")
     assert result.text is None
@@ -66,7 +66,7 @@ CLOUDFLARE_BLOCK = (
 
 
 def test_f5_block_page_is_detected():
-    from glr.extract import detect_block_page
+    from app.retrieval.extract import detect_block_page
 
     text = "The requested URL was rejected. Please consult with your administrator."
     reason = detect_block_page(F5_BLOCK, text)
@@ -75,14 +75,14 @@ def test_f5_block_page_is_detected():
 
 
 def test_cloudflare_challenge_is_detected():
-    from glr.extract import detect_block_page
+    from app.retrieval.extract import detect_block_page
 
     assert detect_block_page(CLOUDFLARE_BLOCK, "Checking your browser") is not None
 
 
 def test_block_marker_only_in_raw_bytes_is_still_caught():
     """Boilerplate removal can strip a <title> that carries the only marker."""
-    from glr.extract import detect_block_page
+    from app.retrieval.extract import detect_block_page
 
     assert detect_block_page(CLOUDFLARE_BLOCK, "") is not None
 
@@ -90,14 +90,14 @@ def test_block_marker_only_in_raw_bytes_is_still_caught():
 def test_a_real_document_is_not_flagged():
     """The length ceiling protects genuine sources. Missing a block page costs
     one flagged row next run; discarding a real source costs a source."""
-    from glr.extract import detect_block_page
+    from app.retrieval.extract import detect_block_page
 
     text = " ".join(["Organisations progress through five levels of AI maturity."] * 60)
     assert detect_block_page(b"<html><body>...</body></html>", text) is None
 
 
 def test_a_long_article_mentioning_access_denied_is_not_flagged():
-    from glr.extract import detect_block_page
+    from app.retrieval.extract import detect_block_page
 
     text = ("Access denied errors are a common symptom of misconfigured "
             "permissions in enterprise deployments. ") * 30
@@ -105,6 +105,6 @@ def test_a_long_article_mentioning_access_denied_is_not_flagged():
 
 
 def test_ordinary_short_page_is_not_flagged():
-    from glr.extract import detect_block_page
+    from app.retrieval.extract import detect_block_page
 
     assert detect_block_page(b"<html><body>Short note.</body></html>", "Short note.") is None

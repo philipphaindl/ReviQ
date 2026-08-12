@@ -9,10 +9,10 @@ import json
 
 import pytest
 
-from glr import db, interchange, refetch, report
-from glr.refetch import estimated_credits
+from app.retrieval import db, interchange, refetch, report
+from app.retrieval.refetch import estimated_credits
 
-from test_report_causes import make_document
+from .test_report_causes import make_document
 
 
 # The original retrieval happens before any retry. Stated explicitly rather

@@ -6,7 +6,7 @@ silently merges distinct documents, which is invisible in the output.
 
 import pytest
 
-from glr.urls import canonicalize, host_of, is_fetchable
+from app.retrieval.urls import canonicalize, host_of, is_fetchable
 
 
 @pytest.mark.parametrize(

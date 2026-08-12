@@ -8,7 +8,7 @@ the distribution the classifier has to reproduce to be worth anything.
 
 import pytest
 
-from glr.outcome import (
+from app.retrieval.outcome import (
     BLOCKED,
     EMPTY,
     FAILED,
@@ -273,7 +273,7 @@ def test_sqlite_rows_work_not_only_dicts():
 
 def test_every_reason_the_classifier_can_produce_has_a_remedy():
     """A reason with no entry silently reads as terminal, which would quietly
-    drop retryable documents out of `glr refetch`."""
+    drop retryable documents out of `refetch`."""
     produced = {
         "bot_challenge", "origin_unreachable", "access_denied", "quota_exhausted",
         "transport_error", "not_found", "bad_request", "fetch_failed",
@@ -293,7 +293,7 @@ def test_remedies_are_actionable(reason, remedy):
 def test_platform_hosts_are_a_subset_of_the_snowball_noise_list():
     """One list, two readers. If a host is not worth following as a link, it is
     also not worth re-fetching for text — and the two must not drift apart."""
-    from glr.links import NOISE_HOSTS, PLATFORM_HOSTS
+    from app.retrieval.links import NOISE_HOSTS, PLATFORM_HOSTS
 
     assert PLATFORM_HOSTS <= NOISE_HOSTS
 

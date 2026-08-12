@@ -6,8 +6,8 @@ wrote — the schema enforces that by keeping them in different tables, and
 these tests pin the selection that decides what gets described at all.
 """
 
-from glr.figures import Figure, media_type_of, looks_describable, select_figures
-from glr.vision import DEFAULT_PROMPT, NO_CONTENT, Description
+from app.retrieval.figures import Figure, media_type_of, looks_describable, select_figures
+from app.retrieval.vision import DEFAULT_PROMPT, NO_CONTENT, Description
 
 BASE = "https://example.org/reports/ai-maturity"
 

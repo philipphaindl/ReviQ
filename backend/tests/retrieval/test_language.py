@@ -9,7 +9,7 @@ silent hole in the protocol.
 
 import pytest
 
-from glr.extract import declared_language
+from app.retrieval.extract import declared_language
 
 
 def page(head: str, html_attrs: str = "") -> bytes:

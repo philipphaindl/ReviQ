@@ -1,6 +1,6 @@
 """Credential scrubbing. No network, no keys needed."""
 
-from glr.redact import MIN_SECRET_LENGTH, REDACTED, scrub
+from app.retrieval.redact import MIN_SECRET_LENGTH, REDACTED, scrub
 
 
 def test_a_secret_is_replaced_everywhere_it_appears():

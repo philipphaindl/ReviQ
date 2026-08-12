@@ -25,7 +25,7 @@ ReviQ walks you through the full SLR pipeline in eight phases:
 | # | Phase | What happens |
 |---|-------|-------------|
 | 1 | **Setup** | Project metadata, up to 5 reviewers, inclusion/exclusion criteria, QA scoring schema, taxonomy categories, database search strings |
-| 2 | **Import** | BibTeX upload per database, cross-database deduplication (DOI + normalised title/venue), duplicate override log; grey literature from a [glr](https://github.com/philipphaindl/glr) package, carrying its retrieval provenance |
+| 2 | **Import** | BibTeX upload per database, cross-database deduplication (DOI + normalised title/venue), duplicate override log; grey literature retrieved by `app/retrieval`, carrying its retrieval provenance |
 | 3 | **Screening** | Title/abstract decisions (Include / Exclude / Uncertain), per-criterion rationale, automatic conflict detection, Cohen's κ with 95% CI and PABAK |
 | 4 | **Eligibility** | Full-text assessment with the same decision workflow, full-text URL tracking |
 | 5 | **Snowballing** | Iteration-based forward/backward citation chasing (Wohlin 2014), saturation tracking |
@@ -66,22 +66,30 @@ bib_data/
 
 A multivocal literature review covers grey literature as well as peer-reviewed
 work (Garousi, Felizardo & Mäntylä 2019), and the two are reported separately
-throughout. Grey sources come from [glr](https://github.com/philipphaindl/glr),
-which retrieves them and archives each one as it looked at retrieval time:
+throughout. The retrieval lives in `backend/app/retrieval/`: it queries a
+search engine, canonicalises and deduplicates the hits, fetches each source
+through a scraping proxy, and archives the bytes as a WARC snapshot with a
+SHA-256 before a single word is extracted.
 
 ```bash
-glr batch queries.toml                       # retrieve
-glr export-json <run_id|batch_id> --out records.json
+cd backend
+python -m app.retrieval init
+python -m app.retrieval batch queries.toml                     # retrieve
+python -m app.retrieval export-json <run_id|batch_id> --out records.json
 ```
 
-Then `POST /api/projects/{id}/import/grey` with that file.
+Then `POST /api/projects/{id}/import/grey` with that file. Needs
+`SEARCHAPI_API_KEY` and `SCRAPINGBEE_API_KEY`; both have free tiers large
+enough to try it out. A batch of twenty queries runs for tens of minutes — one
+concurrent request, with a delay between fetches — so it is a command, not an
+HTTP request, and `docs/retrieval/` explains why in detail.
 
 Every record is imported, including the ones that could not be retrieved. That
 is deliberate on both sides: the package reports blocked, failed and empty
-retrievals so a consumer's "records identified" reconciles with glr's own
-retrieval report, and a review that cannot say how much of its grey literature
-had rotted or sat behind a publisher's wall is hiding a limitation rather than
-not having one. Those papers arrive with `full_text_inaccessible` set, still
+retrievals so a consumer's "records identified" reconciles with the retrieval
+report, and a review that cannot say how much of its grey literature had rotted
+or sat behind a publisher's wall is hiding a limitation rather than not having
+one. Those papers arrive with `full_text_inaccessible` set, still
 screenable on title and snippet, and the response breaks them down by cause:
 
 ```json
@@ -141,7 +149,8 @@ frontend chart-data helpers + component snapshots.
 ```bash
 # Backend (FastAPI + SQLModel)
 cd backend
-pytest                                # full suite, ~4 s — runs unit + integration
+pytest                                # full suite — review + retrieval
+pytest tests/retrieval/              # grey literature retrieval only
 pytest tests/test_integration_*.py   # integration tests only
 pytest -k "not integration"          # unit tests only
 
@@ -183,7 +192,7 @@ isolated FastAPI `TestClient`s against in-memory SQLite databases.
 |----------|-----------|-----------------|
 | Cross-instance reviewer decision exchange | `backend/tests/test_integration_decision_exchange.py` | Reviewer A exports their JSON file from instance A → reviewer B imports it into instance B; Cohen's κ + 95 % CI + PABAK + Pₒ on B match a monolithic reference; PRISMA partition stays self-consistent (`included + excluded + undecided = unique`); conflicts are logged for disagreements only; re-importing the same file is idempotent (no duplicate decisions, no duplicate conflicts); a corrected re-export propagates correctly through κ; foreign citekeys are skipped; importing for a new reviewer name auto-creates the reviewer; malformed payloads are rejected with HTTP 400 |
 | End-to-end SLR pipeline | `backend/tests/test_integration_slr_pipeline.py` | Walks Setup → BibTeX Import → Screening (with conflicts) → Conflict Resolution → Full-Text → Quality Assessment → Data Extraction → Results; verifies κ at each stage, that per-phase κ is independent of other phases, that conflict resolution clears the open-conflict count, that QA summary only lists included papers, that custom QA thresholds reclassify papers correctly, that the extraction summary reflects only filled values |
-| Grey literature import | `backend/tests/test_integration_grey_import.py` | A glr package becomes grey papers that stay out of the formal stream and out of the PRISMA database box; search hits and snowballed documents separate; unretrievable records import flagged, stay screenable on title and snippet, and keep their cause per source; the retrieval timestamp, payload digest and archive offset survive the round trip and join to their paper; the package's own counts are kept for reconciliation; re-importing an overlapping package creates no second paper; byte-identical content under two URLs is one source while two documents sharing a generic title are two; a package predating `retrieval_reason` still imports; foreign and future-versioned files are refused with HTTP 400 |
+| Grey literature import | `backend/tests/test_integration_grey_import.py` | A retrieval package becomes grey papers that stay out of the formal stream and out of the PRISMA database box; search hits and snowballed documents separate; unretrievable records import flagged, stay screenable on title and snippet, and keep their cause per source; the retrieval timestamp, payload digest and archive offset survive the round trip and join to their paper; the package's own counts are kept for reconciliation; re-importing an overlapping package creates no second paper; byte-identical content under two URLs is one source while two documents sharing a generic title are two; a package predating `retrieval_reason` still imports; foreign and future-versioned files are refused with HTTP 400 |
 | Replication round-trip — derived numbers | `backend/tests/test_integration_replication_drift.py` | Builds a fully populated project (taxonomy, extraction schema, screening + full-text decisions with conflicts resolved, QA scores, extraction values), exports the replication ZIP, re-imports into a fresh instance, then asserts every reviewer-visible derived statistic (PRISMA counts, both κ phases with CI/PABAK/Pₒ, QA aggregation by level, extraction value distributions) matches the source bit-for-bit within numerical tolerance — including after a double round-trip |
 
 The backend uses `pytest` 8 with FastAPI's `TestClient`; the frontend uses

@@ -11,8 +11,8 @@ import json
 
 import pytest
 
-from glr import db, interchange, report
-from glr.outcome import LABELS
+from app.retrieval import db, interchange, report
+from app.retrieval.outcome import LABELS
 
 
 def make_document(conn, run_id, url, host, *, rank=1, query_title="A title",
@@ -99,7 +99,7 @@ def test_a_platform_page_and_a_render_candidate_do_not_share_a_bucket(corpus, tm
 
     assert "youtube.com" in text and "studenttheses.uu.nl" in text
     assert "Not recoverable by retrying" in text   # the platform page
-    assert "glr refetch` selects exactly these" in text  # the render candidate
+    assert "refetch` selects exactly these" in text  # the render candidate
 
 
 def test_report_and_export_agree_on_the_corpus_size(corpus, tmp_path):

@@ -1,9 +1,9 @@
 """Command line interface.
 
-    glr init
-    glr run "AI maturity assessment model" --pages 5 --out results.csv
-    glr refetch <run_id> --dry-run --render-js
-    glr export <run_id> --out results.csv
+    python -m app.retrieval init
+    python -m app.retrieval run "AI maturity assessment model" --pages 5
+    python -m app.retrieval refetch <run_id> --dry-run --render-js
+    python -m app.retrieval export <run_id> --out results.csv
 """
 
 from __future__ import annotations
@@ -25,8 +25,14 @@ from .archive import ArchiveReadError, SnapshotArchive, sha256_hex
 from .archive import read_payload as archive_read_payload
 from .fetch import fetch_url
 
-DEFAULT_DB = Path("data/glr.sqlite3")
-DEFAULT_RUNS_DIR = Path("data/runs")
+# Rooted at DATA_DIR, which is the Docker volume ReviQ already keeps its own
+# database in. Relative to the working directory it would land in the image at
+# /app/data/ instead, outside the volume — and the next `docker compose up
+# --build` would take a retrieved corpus with it. `data` as the fallback keeps
+# a checkout usable without Docker, as before.
+DATA_DIR = Path(os.environ.get("DATA_DIR", "data"))
+DEFAULT_DB = DATA_DIR / "glr.sqlite3"
+DEFAULT_RUNS_DIR = DATA_DIR / "runs"
 
 
 def _require_key(name: str) -> str:
@@ -473,7 +479,7 @@ def cmd_init_config(args: argparse.Namespace) -> int:
     if args.path.exists():
         sys.exit(f"error: {args.path} already exists")
     args.path.write_text(batch.EXAMPLE, encoding="utf-8")
-    print(f"wrote {args.path} — edit it, then: glr batch {args.path}")
+    print(f"wrote {args.path} — edit it, then: python -m app.retrieval batch {args.path}")
     return 0
 
 
@@ -660,8 +666,8 @@ def cmd_refetch(args: argparse.Namespace) -> int:
         # The retry wrote a separate run, so the original scope only shows the
         # improvement once it is re-exported.
         print(f"\nre-export the original scope to pick these up:")
-        print(f"  glr export-json {args.id} --out records.json")
-        print(f"  glr report {args.id} --out report.md")
+        print(f"  python -m app.retrieval export-json {args.id} --out records.json")
+        print(f"  python -m app.retrieval report {args.id} --out report.md")
     conn.close()
     return 0
 
@@ -841,10 +847,10 @@ def _install_termination_handler() -> None:
 def main(argv: list[str] | None = None) -> int:
     _install_termination_handler()
     parser = argparse.ArgumentParser(
-        prog="glr",
+        prog="python -m app.retrieval",
         description="Provenance-preserving retrieval for grey literature reviews.",
     )
-    parser.add_argument("--version", action="version", version=f"glr {__version__}")
+    parser.add_argument("--version", action="version", version=f"ReviQ retrieval {__version__}")
     parser.add_argument("--db", type=Path, default=DEFAULT_DB, help="SQLite database path")
     subparsers = parser.add_subparsers(dest="command", required=True)
 

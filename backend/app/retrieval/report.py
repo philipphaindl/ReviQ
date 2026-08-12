@@ -29,7 +29,7 @@ from .outcome import LABELS, OK, REMEDIES, classify
 #     fetched belongs in the report as such, not missing from it.
 #
 #   * The best snapshot is not restricted to the runs in scope. A retrieval
-#     that failed in this batch and succeeded in a later `glr refetch` is one
+#     that failed in this batch and succeeded in a later `refetch` is one
 #     document with a better snapshot, and reporting the stale failure would
 #     contradict the export, which resolves it with `db.best_snapshot`. The
 #     ordering below is that same rule, expressed as a window function so a few
@@ -210,7 +210,7 @@ def _build(conn: sqlite3.Connection, scope: str, key: str, title: str) -> str:
             w(f"### {LABELS.get(reason, reason)} — {len(group)}\n")
             if remedy and remedy.action == "refetch":
                 w(f"Retrievable in principle: {remedy.hint}. "
-                  f"`glr refetch` selects exactly these.\n")
+                  f"`refetch` selects exactly these.\n")
             elif remedy and remedy.action == "reextract":
                 w(f"Recoverable from the archive without re-fetching: {remedy.hint}.\n")
             else:
