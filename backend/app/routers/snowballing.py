@@ -166,6 +166,7 @@ async def import_snowballing_papers(
     if not it or it.project_id != project_id:
         raise HTTPException(404, "Iteration not found")
 
+    from app.services import paper_import
     from app.services.bibtex_service import (
         parse_bib_content, detect_duplicates, entry_to_paper_dict, normalize_title,
     )
@@ -190,52 +191,18 @@ async def import_snowballing_papers(
 
     unique, duplicates, _, _ = detect_duplicates(entries, existing_dois, existing_title_venues)
 
-    imported = []
-    dup_citekeys = []
-
-    for entry in unique:
-        data = entry_to_paper_dict(entry, source=source)
-        if not data["citekey"] or not data["title"]:
-            continue
-        existing = session.exec(
-            select(Paper)
-            .where(Paper.project_id == project_id)
-            .where(Paper.citekey == data["citekey"])
-        ).first()
-        if existing:
-            continue
-        paper = Paper(project_id=project_id, discovery="snowball", **data)
-        session.add(paper)
-        imported.append(data["citekey"])
-
-    for entry in duplicates:
-        data = entry_to_paper_dict(entry, source=source)
-        if not data["citekey"] or not data["title"]:
-            continue
-        dup_citekeys.append(data.get("citekey", "?"))
-        existing = session.exec(
-            select(Paper)
-            .where(Paper.project_id == project_id)
-            .where(Paper.citekey == data["citekey"])
-        ).first()
-        if not existing:
-            paper = Paper(
-                project_id=project_id,
-                discovery="snowball",
-                # "duplicate_of:existing" was never a citekey, so it read as a
-                # back-reference while carrying none. Same marker as the BibTeX
-                # importer; readers test `!= "original"`.
-                **{**data, "dedup_status": "duplicate"},
-            )
-            session.add(paper)
-
+    # The same loop as the database-search importer, from the same module.
+    # They were separate copies, and they had drifted: this one counted a
+    # duplicate whether or not a row was written, the other only when one was,
+    # so `detected_duplicates` meant two different things in the same UI tile.
+    outcome = paper_import.apply_entries(
+        session, project_id, unique, duplicates,
+        to_paper_dict=lambda entry: entry_to_paper_dict(entry, source=source),
+        extra_fields={"discovery": "snowball"},
+    )
     session.commit()
-    return {
-        "source": source,
-        "imported_unique": len(imported),
-        "detected_duplicates": len(dup_citekeys),
-        "imported_citekeys": imported,
-    }
+
+    return {"source": source, **outcome.counts(len(entries))}
 
 
 def _require_project(project_id: int, session: Session):

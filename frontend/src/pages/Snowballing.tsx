@@ -12,6 +12,7 @@ import {
   importSnowballingBib, getPapers, getReviewers, getInclusionCriteria,
   getExclusionCriteria, addDecision,
 } from '../api/client'
+import type { PaperImportResult } from '../api/client'
 import {
   Card, CardHeader, StatBar, StatCell, Modal, FormField,
   DecisionBadge, EmptyState, Badge,
@@ -271,7 +272,7 @@ function IterationCard({ iteration, pid, expanded, onToggle }: {
   const qc = useQueryClient()
   const fileRef = useRef<HTMLInputElement>(null)
   const [importing, setImporting] = useState(false)
-  const [importResult, setImportResult] = useState<{ imported_unique: number; detected_duplicates: number } | null>(null)
+  const [importResult, setImportResult] = useState<PaperImportResult | null>(null)
   const [editing, setEditing] = useState(false)
   const [editType, setEditType] = useState<'forward' | 'backward'>(iteration.iteration_type as 'forward' | 'backward')
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -382,7 +383,10 @@ function IterationCard({ iteration, pid, expanded, onToggle }: {
             </button>
             {importResult && (
               <span className="text-xs text-ink-muted">
-                {importResult.imported_unique} imported · {importResult.detected_duplicates} cross-corpus duplicates
+                {importResult.imported_unique} imported · {importResult.imported_duplicates} cross-corpus duplicates
+                {importResult.already_present > 0 && ` · ${importResult.already_present} already in project`}
+                {importResult.skipped_incomplete > 0 && ` · ${importResult.skipped_incomplete} skipped`}
+                {' · of '}{importResult.total_in_file} in file
               </span>
             )}
           </div>

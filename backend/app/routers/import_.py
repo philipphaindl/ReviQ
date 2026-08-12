@@ -28,7 +28,7 @@ import json
 
 from app.database import get_session
 from app.models import Paper, ReviewerDecision, Reviewer, GreyImport, GreySource
-from app.services import grey_service
+from app.services import grey_service, paper_import
 from app.services.bibtex_service import parse_bib_content, detect_duplicates, entry_to_paper_dict
 from app.services.decision_service import sync_decision_state
 
@@ -69,55 +69,13 @@ async def import_bib_file(
 
     unique, duplicates, _, _ = detect_duplicates(entries, existing_dois, existing_title_venues)
 
-    imported = []
-    duplicate_records = []
-
-    for entry in unique:
-        data = entry_to_paper_dict(entry, source=db_name)
-        if not data["citekey"] or not data["title"]:
-            continue
-        # Avoid re-importing same citekey
-        existing = session.exec(
-            select(Paper)
-            .where(Paper.project_id == project_id)
-            .where(Paper.citekey == data["citekey"])
-        ).first()
-        if existing:
-            continue
-        paper = Paper(project_id=project_id, **data)
-        session.add(paper)
-        imported.append(data["citekey"])
-
-    for entry in duplicates:
-        data = entry_to_paper_dict(entry, source=db_name)
-        # Anything other than "original" counts as a duplicate. Do not invent a
-        # `duplicate_of:<citekey>` back-reference here: detect_duplicates does
-        # not report which existing record matched, so the citekey would be a
-        # fiction. Readers must test `!= "original"`, never a prefix.
-        data["dedup_status"] = "duplicate"
-        if not data["citekey"] or not data["title"]:
-            continue
-        existing = session.exec(
-            select(Paper)
-            .where(Paper.project_id == project_id)
-            .where(Paper.citekey == data["citekey"])
-        ).first()
-        if existing:
-            continue
-        paper = Paper(project_id=project_id, **data)
-        session.add(paper)
-        duplicate_records.append(data["citekey"])
-
+    outcome = paper_import.apply_entries(
+        session, project_id, unique, duplicates,
+        to_paper_dict=lambda entry: entry_to_paper_dict(entry, source=db_name),
+    )
     session.commit()
 
-    return {
-        "db_name": db_name,
-        "total_in_file": len(entries),
-        "imported_unique": len(imported),
-        "detected_duplicates": len(duplicate_records),
-        "imported_citekeys": imported,
-        "duplicate_citekeys": duplicate_records,
-    }
+    return {"db_name": db_name, **outcome.counts(len(entries))}
 
 
 @router.post("/projects/{project_id}/import/grey")
@@ -382,7 +340,15 @@ async def import_reviewer_decisions(
         session.commit()
         session.refresh(reviewer)
 
+    # Disjoint outcomes again, and `unknown_citekey` is the one that matters
+    # most here: without it, a decision file belonging to a different project
+    # reports "0 decisions, 0 conflicts" — indistinguishable from a file that
+    # had already been applied. A reviewer could not tell "nothing to do" from
+    # "nothing matched".
     imported_count = 0
+    updated_count = 0
+    unknown_citekeys: list[str] = []
+    skipped_incomplete = 0
     conflict_count = 0
     new_conflicts = []
 
@@ -394,6 +360,7 @@ async def import_reviewer_decisions(
         rationale = dec.get("rationale")
 
         if not citekey or not decision:
+            skipped_incomplete += 1
             continue
 
         paper = session.exec(
@@ -402,6 +369,7 @@ async def import_reviewer_decisions(
             .where(Paper.citekey == citekey)
         ).first()
         if not paper:
+            unknown_citekeys.append(citekey)
             continue
 
         # Upsert: if reviewer already has a decision, update it
@@ -420,6 +388,10 @@ async def import_reviewer_decisions(
             existing_dec.timestamp = datetime.utcnow()
             existing_dec.source_file = source_file
             session.add(existing_dec)
+            # Counted, unlike before. Re-importing a corrected file updated N
+            # decisions and reported 0, which reads as "nothing happened" for
+            # an operation that changed every one of them.
+            updated_count += 1
         else:
             new_dec = ReviewerDecision(
                 project_id=project_id,
@@ -445,7 +417,17 @@ async def import_reviewer_decisions(
 
     return {
         "reviewer_name": reviewer_name,
+        # These four partition the file exactly, so a reviewer can see where
+        # every entry went. `test_the_decision_outcomes_add_up` holds them to it.
+        "total_in_file": len(decisions_list),
         "imported_decisions": imported_count,
+        "updated_decisions": updated_count,
+        "unknown_citekey": len(unknown_citekeys),
+        "skipped_incomplete": skipped_incomplete,
+        # Capped: a file for the wrong project makes every entry unknown, and
+        # the count already says so — the sample is for recognising *which*
+        # project it belongs to.
+        "unknown_citekeys": unknown_citekeys[:10],
         "new_conflicts_detected": conflict_count,
         "conflict_papers": new_conflicts,
     }

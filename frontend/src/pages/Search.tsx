@@ -213,6 +213,9 @@ export default function Search() {
           {importResult && (
             <div className="bg-green-50 border border-green-200 rounded-md p-3 text-sm">
               <p className="font-semibold text-include mb-1">Import complete — {importResult.db_name}</p>
+              {/* The four below add up to "In file". Showing all of them is the
+                  point: these are the PRISMA numbers, and an entry that landed
+                  in none of them used to leave the total unaccounted for. */}
               <div className="grid grid-cols-3 gap-2 text-xs">
                 <div>
                   <p className="text-ink-muted">In file</p>
@@ -224,7 +227,15 @@ export default function Search() {
                 </div>
                 <div>
                   <p className="text-ink-muted">Duplicates</p>
-                  <p className="font-semibold text-uncertain">{importResult.detected_duplicates}</p>
+                  <p className="font-semibold text-uncertain">{importResult.imported_duplicates}</p>
+                </div>
+                <div>
+                  <p className="text-ink-muted">Already in project</p>
+                  <p className="font-semibold text-ink-light">{importResult.already_present}</p>
+                </div>
+                <div>
+                  <p className="text-ink-muted">Skipped (no key or title)</p>
+                  <p className="font-semibold text-ink-light">{importResult.skipped_incomplete}</p>
                 </div>
               </div>
             </div>
@@ -266,8 +277,22 @@ export default function Search() {
           <div className="mt-3 bg-blue-50 border border-blue-200 rounded-md p-3 text-sm">
             <p className="font-semibold text-info mb-1">Decisions imported — {importDecResult.reviewer_name}</p>
             <p className="text-xs text-ink-light">
-              {importDecResult.imported_decisions} decisions · {importDecResult.new_conflicts_detected} new conflicts
+              {importDecResult.imported_decisions} new · {importDecResult.updated_decisions} updated
+              {' · '}{importDecResult.new_conflicts_detected} new conflicts
+              {' · '}of {importDecResult.total_in_file} in file
             </p>
+            {/* The line that separates "already applied" from "wrong project".
+                Both used to show as "0 decisions" and nothing else. */}
+            {importDecResult.unknown_citekey > 0 && (
+              <p className="text-xs text-exclude mt-1">
+                {importDecResult.unknown_citekey} decision{importDecResult.unknown_citekey === 1 ? '' : 's'}
+                {' '}reference papers this project does not have
+                {importDecResult.unknown_citekeys.length > 0 && (
+                  <> — e.g. {importDecResult.unknown_citekeys.slice(0, 3).join(', ')}</>
+                )}
+                . Is this file for a different project?
+              </p>
+            )}
             {importDecResult.conflict_papers?.length > 0 && (
               <p className="text-xs text-uncertain mt-1">
                 Conflicts on: {importDecResult.conflict_papers.slice(0, 5).join(', ')}

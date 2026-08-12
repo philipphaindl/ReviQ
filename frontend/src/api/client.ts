@@ -63,32 +63,65 @@ export const deleteSearchString = (pid: number, sid: number) => api.delete(`/pro
 
 // ── Import ────────────────────────────────────────────────────────────────────
 
+/** What became of the entries in an imported file.
+ *
+ * The four counts are disjoint and add up to `total_in_file`. They are where a
+ * PRISMA "records identified" and "duplicates removed" come from, so an entry
+ * that belonged to none of them used to make those numbers unreconcilable.
+ * `already_present` is deliberately not folded into `imported_duplicates`: such
+ * a paper was never newly identified, and counting it as a removed duplicate
+ * would inflate that box on every re-import.
+ */
+export interface PaperImportResult {
+  total_in_file: number
+  imported_unique: number
+  imported_duplicates: number
+  already_present: number
+  skipped_incomplete: number
+  imported_citekeys: string[]
+  duplicate_citekeys: string[]
+  already_present_citekeys: string[]
+}
+
 export const importBibFile = (pid: number, dbName: string, file: File) => {
   const formData = new FormData()
   formData.append('db_name', dbName)
   formData.append('file', file)
-  return api.post<{
-    db_name: string
-    total_in_file: number
-    imported_unique: number
-    detected_duplicates: number
-    imported_citekeys: string[]
-    duplicate_citekeys: string[]
-  }>(`/projects/${pid}/import/bib`, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  }).then(r => r.data)
+  return api.post<PaperImportResult & { db_name: string }>(
+    `/projects/${pid}/import/bib`, formData,
+    { headers: { 'Content-Type': 'multipart/form-data' } },
+  ).then(r => r.data)
 }
 
 export const getImportStats = (pid: number) => api.get<ImportStats>(`/projects/${pid}/import/stats`).then(r => r.data)
 export const getDuplicates = (pid: number) => api.get<Paper[]>(`/projects/${pid}/import/duplicates`).then(r => r.data)
 export const overrideDedup = (pid: number, paperId: number) => api.post(`/projects/${pid}/papers/${paperId}/override-dedup`).then(r => r.data)
 
+/** What became of the entries in a reviewer's decision file.
+ *
+ * `unknown_citekey` is the one worth showing: without it, a file belonging to a
+ * different project reports zero everywhere, which is indistinguishable from a
+ * file that had already been applied.
+ */
+export interface DecisionImportResult {
+  reviewer_name: string
+  total_in_file: number
+  imported_decisions: number
+  updated_decisions: number
+  unknown_citekey: number
+  skipped_incomplete: number
+  unknown_citekeys: string[]
+  new_conflicts_detected: number
+  conflict_papers: string[]
+}
+
 export const importReviewerDecisions = (pid: number, file: File) => {
   const formData = new FormData()
   formData.append('file', file)
-  return api.post(`/projects/${pid}/import/reviewer-decisions`, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  }).then(r => r.data)
+  return api.post<DecisionImportResult>(
+    `/projects/${pid}/import/reviewer-decisions`, formData,
+    { headers: { 'Content-Type': 'multipart/form-data' } },
+  ).then(r => r.data)
 }
 
 // ── Papers ────────────────────────────────────────────────────────────────────
@@ -187,7 +220,9 @@ export const revokeSaturation = (pid: number, iterationId: number) =>
 export const importSnowballingBib = (pid: number, iterationId: number, file: File) => {
   const formData = new FormData()
   formData.append('file', file)
-  return api.post<{ source: string; imported_unique: number; detected_duplicates: number; imported_citekeys: string[] }>(
+  // Same shape as the database-search import, from the same backend helper:
+  // the two used to count duplicates differently under one field name.
+  return api.post<PaperImportResult & { source: string }>(
     `/projects/${pid}/snowballing/${iterationId}/import`,
     formData,
     { headers: { 'Content-Type': 'multipart/form-data' } },
