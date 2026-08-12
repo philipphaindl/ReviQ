@@ -126,10 +126,24 @@ of a formal paper is not recognised as a duplicate of it.
 
 ```bash
 cd backend
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+uv venv --python 3.12 && source .venv/bin/activate
+uv pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
+
+**Python 3.12, not whatever `python` points at.** `scipy` and `pandas` are
+pinned to versions from early 2024, which predate Python 3.13 and ship no
+wheels for it — on a newer interpreter `pip` falls back to building `scipy`
+from source, which needs a Fortran toolchain. The pins stay as they are on
+purpose: ReviQ's published results were computed with these versions, so the
+interpreter is what gets pinned, not the libraries. `backend/.python-version`
+and the `python:3.12-slim` base image say the same thing.
+
+Without `uv`: `python3.12 -m venv .venv && source .venv/bin/activate && pip
+install -r requirements.txt`.
+
+For OCR and figure descriptions, add `uv pip install -r
+requirements-optional.txt` — both are off by default.
 
 ### Frontend (React 18 + TypeScript + Vite + Tailwind CSS)
 
@@ -147,7 +161,7 @@ aggregation, API endpoints, cross-instance integration) and `vitest` for the
 frontend chart-data helpers + component snapshots.
 
 ```bash
-# Backend (FastAPI + SQLModel)
+# Backend (FastAPI + SQLModel) — needs the 3.12 venv from above
 cd backend
 pytest                                # full suite — review + retrieval
 pytest tests/retrieval/              # grey literature retrieval only
