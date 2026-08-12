@@ -77,6 +77,11 @@ export interface Paper {
   entry_type?: string
   venue_category_override?: string | null
   source: string
+  // Optional so that Paper literals in tests and responses from an older
+  // backend stay valid. Read them through src/components/streams.ts, which
+  // supplies the legacy fallback — never test the `source` string directly.
+  stream?: string
+  discovery?: string
   dedup_status: string
   language?: string
   full_text_url?: string

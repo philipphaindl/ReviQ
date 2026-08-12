@@ -5,7 +5,11 @@ services:
       dockerfile: Dockerfile
     container_name: reviq-backend
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      # Bound to loopback deliberately. ReviQ has no authentication, so a
+      # port on 0.0.0.0 lets anyone on the same network read every project —
+      # and, once grey-literature retrieval is configured, spend the API
+      # credits attached to it. Override BIND_HOST only if you know why.
+      - "${BIND_HOST:-127.0.0.1}:${BACKEND_PORT:-8000}:8000"
     volumes:
       - db-data:/data
       - ${BIB_BASE_DIR:-./bib_data}:/bib_data:ro
@@ -25,7 +29,7 @@ services:
       dockerfile: Dockerfile
     container_name: reviq-frontend
     ports:
-      - "${FRONTEND_PORT:-3000}:80"
+      - "${BIND_HOST:-127.0.0.1}:${FRONTEND_PORT:-3000}:80"
     depends_on:
       - slr-backend
     restart: unless-stopped

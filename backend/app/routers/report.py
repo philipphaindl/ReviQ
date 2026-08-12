@@ -23,6 +23,7 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from ..database import get_session
+from ..services import streams
 from ..models import (
     ConflictLog, DatabaseSearchString, ExclusionCriterion, ExtractionField,
     ExtractionRecord, FinalDecision, InclusionCriterion, Paper,
@@ -1133,12 +1134,20 @@ def _build_pdf(
     research_type_svg=None, contribution_type_svg=None, venue_types_svg=None,
 ):
     # ── Stats ────────────────────────────────────────────────────────────────
-    # Partition papers by origin: database searches vs. snowballing iterations.
-    # Snowballing papers have source "snowballing:<iteration_number>".
-    db_papers   = [p for p in papers if not p.source.startswith("snowballing:")]
-    snow_papers = [p for p in papers if p.source.startswith("snowballing:")]
-    dupes       = sum(1 for p in db_papers if p.dedup_status.startswith("duplicate_of:"))
+    # Partition papers by stream and discovery mode. Never test the `source`
+    # string here: it has no third case, so grey literature would be counted
+    # as a database hit and inflate "records identified" — see app.services.streams.
+    _by_stream  = streams.by_stream(papers)
+    grey_papers = _by_stream[streams.GREY]
+    _formal     = _by_stream[streams.FORMAL]
+    db_papers   = [p for p in _formal if streams.discovery_of(p) == streams.SEARCH]
+    snow_papers = [p for p in _formal if streams.discovery_of(p) == streams.SNOWBALL]
+    # `dedup_status` is "original" or "duplicate_of:<citekey>". Testing for the
+    # prefix missed rows written as plain "duplicate", which made this report
+    # disagree with /export/stats on the same project.
+    dupes       = sum(1 for p in db_papers if p.dedup_status != "original")
     after_dedup = len(db_papers) - dupes
+    grey_dupes  = sum(1 for p in grey_papers if p.dedup_status != "original")
     scr_inc_ids = {d.paper_id for d in final_decisions if d.phase=="screening" and d.decision=="I"}
     scr_exc_ids = {d.paper_id for d in final_decisions if d.phase=="screening" and d.decision=="E"}
     ft_inc_ids  = {d.paper_id for d in final_decisions if d.phase=="full-text" and d.decision=="I"}
@@ -1363,6 +1372,10 @@ def _build_pdf(
         ("Total records retrieved (all sources)", f"{len(papers):,}"),
         ("Duplicates removed", f"{dupes:,}"),
         ("Records after deduplication", f"{after_dedup:,}"),
+    ] + ([
+        ("Grey literature records retrieved", f"{len(grey_papers):,}"),
+        ("Grey literature after deduplication", f"{len(grey_papers) - grey_dupes:,}"),
+    ] if grey_papers else []) + [
         ("Excluded at title/abstract screening", f"{len(scr_exc_ids):,}"),
         ("Included at screening (to full-text)", f"{len(scr_inc_ids):,}"),
         ("Excluded at full-text eligibility", f"{len(ft_exc_ids):,}"),

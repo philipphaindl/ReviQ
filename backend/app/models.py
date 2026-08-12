@@ -9,8 +9,13 @@ The schema mirrors the SLR process phases (Kitchenham & Charters 2007):
 Key conventions:
   - `decision` fields use single-letter codes: I (Include), E (Exclude), U (Uncertain)
   - `phase` is either "screening" (title/abstract) or "full-text"
-  - `source` on Paper is the database name or "snowballing:<N>" for snowballed papers
-  - `dedup_status` is "original" or "duplicate_of:<citekey>"
+  - `source` on Paper is the database name, "snowballing:<N>" for snowballed
+    papers, or "grey:<engine>" for grey literature
+  - `stream` is "formal" or "grey"; `discovery` is "search" or "snowball".
+    These are authoritative — `source` is a display label, not a stream test.
+  - `dedup_status` is "original" for a record that counts, anything else for a
+    duplicate. Test it with `!= "original"` — never a prefix: the importers
+    cannot name the record they duplicate, so no back-reference is stored.
 """
 from sqlmodel import SQLModel, Field
 from typing import Optional
@@ -93,7 +98,14 @@ class Paper(SQLModel, table=True):
     keywords: Optional[str] = None
     entry_type: Optional[str] = None
     venue_category_override: Optional[str] = None  # user-set: Journal/Conference/Workshop/…
-    source: str  # db_name or "snowballing:N"
+    source: str  # db_name, "snowballing:N", or "grey:<engine>"
+    # `stream` and `discovery` are two columns rather than one four-valued
+    # field because they are orthogonal: an MLR must separate formal from grey
+    # literature *and* database search from snowballing, and grey literature
+    # has its own snowballing. Read them through app.services.streams, never
+    # by parsing `source` — that is how the two-stream assumption ossified.
+    stream: str = "formal"      # formal | grey
+    discovery: str = "search"   # search | snowball
     dedup_status: str = "original"  # "original" or "duplicate_of:{citekey}"
     language: Optional[str] = None
     full_text_url: Optional[str] = None

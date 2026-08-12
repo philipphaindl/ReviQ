@@ -96,7 +96,15 @@ def _snapshot(session, project_id):
         "qa_criteria":        rows(QACriterion, "label", "description", "max_score"),
         "taxonomy":           rows(TaxonomyEntry, "taxonomy_type", "value", "sort_order"),
         "extraction_fields":  rows(ExtractionField, "field_name", "field_label", "field_type", "sort_order"),
-        "papers": rows(Paper, "citekey", "title", "year", "source", "dedup_status"),
+        # Every Paper column, enumerated from the model rather than listed by
+        # hand: a hand-written list is exactly how `venue_category_override`
+        # came to be dropped on every import with this test still green. `id`
+        # and `project_id` are re-bound by the importer and `created_at` is the
+        # insert time, so those three are the only legitimate exclusions.
+        "papers": rows(Paper, *[
+            f for f in Paper.model_fields
+            if f not in {"id", "project_id", "created_at"}
+        ]),
         "final_decisions": rows(FinalDecision, "phase", "decision"),
         "qa_scores": rows(QAScore, "score", "rationale"),
         "extraction_records": rows(ExtractionRecord, "field_name", "field_value"),

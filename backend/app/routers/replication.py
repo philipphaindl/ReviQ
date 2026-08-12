@@ -31,6 +31,13 @@ router = APIRouter(prefix="/projects", tags=["replication"])
 
 SCHEMA_VERSION = "reviq-replication-v1"
 
+# Paper fields carried through an import. Derived from the model so that adding
+# a column does not silently drop it from every replication package; the three
+# excluded fields are re-assigned per import (identity and insert time).
+PAPER_IMPORT_FIELDS = [
+    f for f in Paper.model_fields if f not in {"id", "project_id", "created_at"}
+]
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
@@ -257,19 +264,20 @@ async def import_replication_package(
     session.flush()
 
     # ── Papers ────────────────────────────────────────────────────────────────
+    # Fields come from the model, not from a hand-written list. The hand-written
+    # list silently omitted `venue_category_override`, so every replication
+    # import discarded it — and the round-trip test could not see it, because it
+    # compared five fields. A package that claims to be the archival artefact
+    # must not quietly drop provenance, so new columns are carried by default.
     for p in pkg.get("papers", []):
         np = Paper(
-            project_id=pid, citekey=p["citekey"],
-            doi=p.get("doi"), title=p["title"],
-            authors=p.get("authors"), year=p.get("year"),
-            venue=p.get("venue"), abstract=p.get("abstract"),
-            keywords=p.get("keywords"), entry_type=p.get("entry_type"),
-            source=p.get("source", "unknown"),
-            dedup_status=p.get("dedup_status", "original"),
-            language=p.get("language"),
-            full_text_url=p.get("full_text_url"),
-            full_text_inaccessible=p.get("full_text_inaccessible", False),
+            project_id=pid,
             created_at=datetime.utcnow(),
+            **{
+                "source": "unknown",
+                "dedup_status": "original",
+                **{f: p[f] for f in PAPER_IMPORT_FIELDS if f in p},
+            },
         )
         session.add(np); session.flush()
         paper_map[p["id"]] = np.id

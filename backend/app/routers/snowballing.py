@@ -204,7 +204,7 @@ async def import_snowballing_papers(
         ).first()
         if existing:
             continue
-        paper = Paper(project_id=project_id, **data)
+        paper = Paper(project_id=project_id, discovery="snowball", **data)
         session.add(paper)
         imported.append(data["citekey"])
 
@@ -221,7 +221,11 @@ async def import_snowballing_papers(
         if not existing:
             paper = Paper(
                 project_id=project_id,
-                **{**data, "dedup_status": "duplicate_of:existing"},
+                discovery="snowball",
+                # "duplicate_of:existing" was never a citekey, so it read as a
+                # back-reference while carrying none. Same marker as the BibTeX
+                # importer; readers test `!= "original"`.
+                **{**data, "dedup_status": "duplicate"},
             )
             session.add(paper)
 

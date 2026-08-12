@@ -76,6 +76,10 @@ async def import_bib_file(
 
     for entry in duplicates:
         data = entry_to_paper_dict(entry, source=db_name)
+        # Anything other than "original" counts as a duplicate. Do not invent a
+        # `duplicate_of:<citekey>` back-reference here: detect_duplicates does
+        # not report which existing record matched, so the citekey would be a
+        # fiction. Readers must test `!= "original"`, never a prefix.
         data["dedup_status"] = "duplicate"
         if not data["citekey"] or not data["title"]:
             continue
