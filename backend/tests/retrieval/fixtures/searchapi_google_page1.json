@@ -1,0 +1,40 @@
+{
+  "search_metadata": {
+    "id": "search_abc123",
+    "status": "Success",
+    "created_at": "2026-08-11T09:00:00Z",
+    "request_time_taken": 1.23,
+    "total_time_taken": 1.45
+  },
+  "search_parameters": {
+    "engine": "google",
+    "q": "AI maturity assessment model",
+    "page": 1
+  },
+  "organic_results": [
+    {
+      "position": 1,
+      "title": "An AI Maturity Model for Organisations",
+      "link": "https://example.org/ai-maturity-model",
+      "domain": "example.org",
+      "displayed_link": "https://example.org › ai-maturity-model",
+      "snippet": "A five-level maturity model for assessing organisational AI capability."
+    },
+    {
+      "position": 2,
+      "title": "Assessing AI Readiness: A Practitioner Report",
+      "link": "https://www.example.com/reports/ai-readiness.pdf?utm_source=newsletter",
+      "domain": "example.com",
+      "displayed_link": "https://www.example.com › reports",
+      "snippet": "Industry whitepaper on AI readiness assessment."
+    },
+    {
+      "position": 3,
+      "title": "AI Maturity Model (duplicate URL, different position)",
+      "link": "https://example.org/ai-maturity-model#overview",
+      "domain": "example.org",
+      "displayed_link": "https://example.org › ai-maturity-model",
+      "snippet": "Same document reached through a fragment link."
+    }
+  ]
+}
