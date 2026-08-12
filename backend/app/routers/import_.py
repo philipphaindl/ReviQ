@@ -167,13 +167,23 @@ async def import_grey_package(
     session.commit()
     session.refresh(grey_import)
 
+    # Four disjoint outcomes, and every record lands in exactly one. They have
+    # to add up to the number of records in the package: this response is where
+    # a PRISMA "records identified" and "duplicates removed" come from, and a
+    # record that falls out of all of them cannot be reconciled by anyone
+    # reading the diagram afterwards. An earlier version returned early for a
+    # record already in the project without counting it anywhere, so re-importing
+    # an overlapping package reported one record fewer than it had read.
     imported: list[str] = []
     duplicate_citekeys: list[str] = []
+    already_present: list[str] = []
+    skipped_no_citekey = 0
     unretrievable = 0
 
     for record, is_duplicate in [(r, False) for r in unique] + [(r, True) for r in duplicates]:
         data = grey_service.record_to_paper_dict(record, engine)
         if not data["citekey"]:
+            skipped_no_citekey += 1
             continue
         if is_duplicate:
             # Anything other than "original" counts as a duplicate; no
@@ -181,14 +191,18 @@ async def import_grey_package(
             data["dedup_status"] = "duplicate"
 
         # A citekey is derived from the canonical URL, so a collision here is
-        # the same document arriving again. `partition` has already caught that
-        # for anything with a GreySource row; this covers the rest.
+        # the same document arriving again — not a different one with the same
+        # name. `partition` catches that for anything carrying a GreySource row;
+        # this covers the rest, and is a separate outcome from a duplicate
+        # *within* this package: the document was not newly identified at all,
+        # so counting it as a removed duplicate would inflate that box.
         existing = session.exec(
             select(Paper)
             .where(Paper.project_id == project_id)
             .where(Paper.citekey == data["citekey"])
         ).first()
         if existing:
+            already_present.append(data["citekey"])
             continue
 
         paper = Paper(project_id=project_id, **data)
@@ -212,6 +226,8 @@ async def import_grey_package(
 
     grey_import.imported_count = len(imported)
     grey_import.duplicate_count = len(duplicate_citekeys)
+    grey_import.already_present_count = len(already_present)
+    grey_import.skipped_count = skipped_no_citekey
     session.add(grey_import)
     session.commit()
 
@@ -221,13 +237,23 @@ async def import_grey_package(
         "engine": engine,
         "scope": package.get("scope"),
         "queries": len(package.get("runs") or []),
+        # The four below partition this exactly. `test_the_four_outcomes_add_up`
+        # holds them to it.
         "total_in_package": len(records),
         "imported_unique": len(imported),
-        "detected_duplicates": len(duplicate_citekeys),
+        # Recognised as a duplicate *within this package* — a row was written
+        # with dedup_status="duplicate", which is what a PRISMA "duplicates
+        # removed" box counts.
+        "imported_duplicates": len(duplicate_citekeys),
+        # Already in the project from an earlier import. No row was written and
+        # none should be: these were not newly identified, and folding them into
+        # the duplicates above would inflate that box on every re-import.
+        "already_present": len(already_present),
+        "skipped_no_citekey": skipped_no_citekey,
         # Imported and not readable: identified by the search, excluded at the
         # retrieval stage rather than at screening. This is the number a PRISMA
         # "reports not retrieved" box wants, and the breakdown below is what
-        # makes it defensible.
+        # makes it defensible. Counts only records this import wrote a row for.
         "imported_unretrievable": unretrievable,
         "unretrievable_by_reason": grey_service.reason_breakdown(records),
         # The package's own totals, so a disagreement surfaces here rather than
@@ -238,6 +264,7 @@ async def import_grey_package(
         },
         "imported_citekeys": imported,
         "duplicate_citekeys": duplicate_citekeys,
+        "already_present_citekeys": already_present,
     }
 
 

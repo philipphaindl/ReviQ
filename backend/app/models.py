@@ -241,8 +241,15 @@ class GreyImport(SQLModel, table=True):
     records_in_package: Optional[int] = None
     documents_reported: Optional[int] = None
     usable_reported: Optional[int] = None
+    # What became of the records, in the same four disjoint categories the
+    # import response reports. Together with `records_in_package` they have to
+    # add up: this row is the stored version of a PRISMA "records identified",
+    # and a category missing here makes the number unreconcilable later for the
+    # same reason it did in the response.
     imported_count: int = 0
-    duplicate_count: int = 0
+    duplicate_count: int = 0            # duplicates *within* the package
+    already_present_count: int = 0      # the project already had the document
+    skipped_count: int = 0              # no record_key, unusable
     imported_at: datetime = Field(default_factory=datetime.utcnow)
 
 

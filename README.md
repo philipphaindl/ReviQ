@@ -94,8 +94,11 @@ screenable on title and snippet, and the response breaks them down by cause:
 
 ```json
 {
+  "total_in_package": 424,
   "imported_unique": 423,
-  "detected_duplicates": 1,
+  "imported_duplicates": 1,
+  "already_present": 0,
+  "skipped_no_citekey": 0,
   "imported_unretrievable": 66,
   "unretrievable_by_reason": {
     "origin_unreachable": 32, "no_main_content": 14, "no_article_text": 7,
@@ -107,6 +110,15 @@ screenable on title and snippet, and the response breaks them down by cause:
 Those are seven different exclusion criteria, not one failure count — a
 publisher's access control, a platform post that was never a document and a
 dead link do not belong in the same PRISMA box.
+
+The first four counts partition the package exactly, and a test holds them to
+it: this response is where a PRISMA "records identified" and "duplicates
+removed" come from, so a record that fell out of every bucket could not be
+reconciled by anyone reading the diagram later. `imported_duplicates` is a
+duplicate *within this package* — a row was written and marked as such.
+`already_present` is a document an earlier import already brought in: no row is
+written, and it is deliberately not counted as a removed duplicate, because it
+was never newly identified.
 
 What a `Paper` has no column for is kept beside it in `GreySource`: the
 retrieval timestamp, the SHA-256 over the bytes retrieved, and the WARC file

@@ -215,7 +215,12 @@ def test_the_packages_own_counts_are_kept_for_reconciliation(project):
 
 def test_re_importing_an_overlapping_package_creates_no_second_paper(project):
     """Two query sets return the same document. The second import must
-    recognise it, not duplicate the review's unit of work."""
+    recognise it, not duplicate the review's unit of work.
+
+    It is `already_present`, not a removed duplicate: the document was not
+    newly identified at all, and counting it as one would inflate the PRISMA
+    "duplicates removed" box on every re-import.
+    """
     inst, pid = project
     inst.import_grey(pid, [grey("oecd-1", "https://oecd.org/a")])
     second = inst.import_grey(pid, [
@@ -224,7 +229,8 @@ def test_re_importing_an_overlapping_package_creates_no_second_paper(project):
     ])
 
     assert second["imported_unique"] == 1
-    assert second["detected_duplicates"] == 1
+    assert second["already_present"] == 1
+    assert second["imported_duplicates"] == 0
     originals = [p for p in inst.papers(pid) if p["dedup_status"] == "original"]
     assert len(originals) == 2
 
@@ -239,7 +245,89 @@ def test_byte_identical_content_under_two_urls_is_one_source(project):
     ])
 
     assert result["imported_unique"] == 1
-    assert result["detected_duplicates"] == 1
+    assert result["imported_duplicates"] == 1
+
+
+OUTCOMES = ("imported_unique", "imported_duplicates", "already_present",
+            "skipped_no_citekey")
+
+
+@pytest.mark.parametrize("first,second", [
+    # nothing at all
+    ([], []),
+    # only new records
+    ([], [grey("a-1", "https://a.example/1"), grey("b-2", "https://b.example/2")]),
+    # a duplicate within the package
+    ([], [grey("a-1", "https://a.example/1", sha256="d" * 64),
+          grey("b-2", "https://b.example/2", sha256="d" * 64)]),
+    # a record the project already has
+    ([grey("a-1", "https://a.example/1")],
+     [grey("a-1", "https://a.example/1"), grey("b-2", "https://b.example/2")]),
+    # a record with no key at all
+    ([], [grey("", "https://a.example/1"), grey("b-2", "https://b.example/2")]),
+    # every kind at once
+    ([grey("a-1", "https://a.example/1")],
+     [grey("a-1", "https://a.example/1"),
+      grey("b-2", "https://b.example/2", sha256="e" * 64),
+      grey("c-3", "https://c.example/3", sha256="e" * 64),
+      grey("", "https://d.example/4")]),
+])
+def test_the_four_outcomes_add_up(project, first, second):
+    """Every record lands in exactly one bucket, and the buckets total the
+    package.
+
+    The regression guard for the defect this replaced: a record already in the
+    project returned early without being counted anywhere, so an overlapping
+    re-import reported one record fewer than it had read. This response is
+    where a PRISMA "records identified" comes from, and a record that falls out
+    of every bucket cannot be reconciled by anyone reading the diagram later.
+    """
+    inst, pid = project
+    if first:
+        inst.import_grey(pid, first)
+    result = inst.import_grey(pid, second)
+
+    assert sum(result[k] for k in OUTCOMES) == result["total_in_package"]
+    assert result["total_in_package"] == len(second)
+
+
+def test_the_citekey_lists_match_their_counts(project):
+    """The lists are what a reviewer inspects when a number looks wrong."""
+    inst, pid = project
+    inst.import_grey(pid, [grey("a-1", "https://a.example/1")])
+    result = inst.import_grey(pid, [
+        grey("a-1", "https://a.example/1"),
+        grey("b-2", "https://b.example/2", sha256="f" * 64),
+        grey("c-3", "https://c.example/3", sha256="f" * 64),
+    ])
+
+    assert len(result["imported_citekeys"]) == result["imported_unique"]
+    assert len(result["duplicate_citekeys"]) == result["imported_duplicates"]
+    assert len(result["already_present_citekeys"]) == result["already_present"]
+    assert result["already_present_citekeys"] == ["a-1"]
+
+
+def test_the_stored_import_row_adds_up_like_the_response(project):
+    """`GreyImport` is the stored version of the same PRISMA number. A category
+    missing there makes it unreconcilable months later, when the response is
+    long gone."""
+    inst, pid = project
+    inst.import_grey(pid, [grey("a-1", "https://a.example/1")])
+    result = inst.import_grey(pid, [
+        grey("a-1", "https://a.example/1"),
+        grey("b-2", "https://b.example/2", sha256="f" * 64),
+        grey("c-3", "https://c.example/3", sha256="f" * 64),
+        grey("", "https://d.example/4"),
+    ])
+
+    row = [i for i in inst.grey_imports(pid) if i["id"] == result["grey_import_id"]][0]
+    assert row["imported_count"] == result["imported_unique"]
+    assert row["duplicate_count"] == result["imported_duplicates"]
+    assert row["already_present_count"] == result["already_present"]
+    assert row["skipped_count"] == result["skipped_no_citekey"]
+    assert (row["imported_count"] + row["duplicate_count"]
+            + row["already_present_count"] + row["skipped_count"]
+            == row["records_in_package"])
 
 
 def test_two_sources_sharing_a_generic_title_are_both_kept(project):
