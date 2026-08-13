@@ -19,7 +19,7 @@ from pathlib import Path
 
 import httpx
 
-from . import (__version__, batch, db, export, extract, figures,
+from . import (__version__, adopt, batch, db, export, extract, figures,
                interchange, links, redact, refetch, report, serp, urls, vision)
 from .archive import ArchiveReadError, SnapshotArchive, sha256_hex
 from .archive import read_payload as archive_read_payload
@@ -31,8 +31,28 @@ from .fetch import fetch_url
 # --build` would take a retrieved corpus with it. `data` as the fallback keeps
 # a checkout usable without Docker, as before.
 DATA_DIR = Path(os.environ.get("DATA_DIR", "data"))
-DEFAULT_DB = DATA_DIR / "glr.sqlite3"
 DEFAULT_RUNS_DIR = DATA_DIR / "runs"
+
+
+def default_db() -> Path:
+    """Where a retrieval writes when `--db` is not given: ReviQ's own database.
+
+    Derived from `DATABASE_URL` so that the CLI and the API cannot end up
+    holding different files — which is what a separate `glr.sqlite3` was, and
+    why the pilot corpus needs `adopt` to come across at all.
+
+    Falls back to `DATA_DIR/reviq.db` when there is no usable `DATABASE_URL`,
+    so a bare checkout still works. Importing the app package lazily keeps the
+    CLI runnable without FastAPI installed.
+    """
+    try:
+        from app.database import retrieval_db_path
+    except Exception:                       # pragma: no cover - no app package
+        return DATA_DIR / "reviq.db"
+    try:
+        return retrieval_db_path()
+    except Exception:
+        return DATA_DIR / "reviq.db"
 
 
 def _require_key(name: str) -> str:
@@ -79,10 +99,12 @@ def cmd_run(args: argparse.Namespace) -> int:
         "max_figures": args.max_figures,
         "refetch": args.refetch,
     }
+    project_id = getattr(args, "project", None)
     db.start_run(
         conn, run_id, args.query, args.engine,
         json.dumps(search_params, sort_keys=True), __version__,
         batch_id=getattr(args, "batch_id", None),
+        project_id=project_id,
     )
     print(f"run {run_id}")
     print(f'query "{args.query}" on {args.engine}, {args.pages} page(s)')
@@ -125,7 +147,8 @@ def cmd_run(args: argparse.Namespace) -> int:
                     seen_documents.add(document_id)
                     if not urls.is_fetchable(hit.raw_url):
                         continue
-                    if not args.refetch and db.has_snapshot(conn, document_id):
+                    if not args.refetch and db.has_snapshot(conn, document_id,
+                                                            project_id):
                         continue
                     pending.append((document_id, canonical, hit.raw_url))
                 conn.commit()
@@ -239,7 +262,8 @@ def cmd_run(args: argparse.Namespace) -> int:
                         if target_id in seen_documents:
                             continue
                         seen_documents.add(target_id)
-                        if not args.refetch and db.has_snapshot(conn, target_id):
+                        if not args.refetch and db.has_snapshot(conn, target_id,
+                                                                project_id):
                             continue
                         frontier.append((target_id, link.resolved_url, depth + 1))
 
@@ -449,6 +473,7 @@ def cmd_batch(args: argparse.Namespace) -> int:
             describe_figures=args.describe_figures,
             vision_model=args.vision_model,
             max_figures=args.max_figures,
+            project=getattr(args, "project", None),
         )
         try:
             cmd_run(run_args)
@@ -480,6 +505,51 @@ def cmd_init_config(args: argparse.Namespace) -> int:
         sys.exit(f"error: {args.path} already exists")
     args.path.write_text(batch.EXAMPLE, encoding="utf-8")
     print(f"wrote {args.path} — edit it, then: python -m app.retrieval batch {args.path}")
+    return 0
+
+
+def cmd_adopt(args: argparse.Namespace) -> int:
+    """Bring a corpus from a separate retrieval database into this one.
+
+    Reads the source read-only and writes the target in a single transaction.
+    The dry run performs the identical work and rolls it back, so its counts are
+    the outcome rather than a prediction of it.
+    """
+    try:
+        source = adopt.open_source(args.source)
+    except adopt.AdoptError as exc:
+        sys.exit(f"error: {exc}")
+
+    conn = db.connect(args.db)
+    try:
+        result = adopt.adopt(
+            source, conn, project_id=args.project, runs_dir=args.runs_dir,
+            dry_run=args.dry_run,
+        )
+    except adopt.AdoptError as exc:
+        source.close()
+        conn.close()
+        sys.exit(f"error: {exc}")
+    finally:
+        source.close()
+
+    conn.close()
+    print(f"source: {args.source}")
+    print(f"target: {args.db}")
+    for line in adopt.describe(result, dry_run=args.dry_run):
+        print(line)
+
+    if not result.runs:
+        print("nothing to do — every run in the source is already here")
+        return 0
+    if args.project is None:
+        print("note: adopted without --project, so these runs belong to no "
+              "review and their snapshots stay visible to all of them")
+    if args.dry_run:
+        print("dry run: rolled back, nothing written")
+    else:
+        print(f"{result.rows} row(s) adopted. Verify with: "
+              f"python -m app.retrieval report <batch_id> --out r.md")
     return 0
 
 
@@ -574,6 +644,9 @@ def cmd_refetch(args: argparse.Namespace) -> int:
     db.start_run(
         conn, run_id, f"refetch of {scope.kind} {args.id}", "none",
         json.dumps(search_params, sort_keys=True), __version__,
+        # From the runs being repaired, not from --project: a retry belongs to
+        # the search it repairs, and asking again is a chance to answer wrong.
+        project_id=scope.project_id,
     )
     print(f"run {run_id}")
 
@@ -692,14 +765,19 @@ def cmd_reextract(args: argparse.Namespace) -> int:
         sys.exit(f"error: {exc}")
 
     ids = interchange.document_ids(conn, run_ids)
+    # Same rule as the report and the export: the review is derived from the
+    # runs asked for, so all three see the same snapshot per document.
+    project_id = db.project_of_runs(conn, run_ids)
     if args.all:
-        targets = refetch.archived(conn, ids)
+        targets = refetch.archived(conn, ids, project_id)
         selection = "every archived document"
     else:
         only = set(args.only) if args.only else None
-        candidates = refetch.select(conn, ids, reasons=only, action="reextract")
+        candidates = refetch.select(conn, ids, reasons=only, action="reextract",
+                                    project_id=project_id)
         wanted = {c.document_id for c in candidates}
-        targets = [a for a in refetch.archived(conn, ids) if a.document_id in wanted]
+        targets = [a for a in refetch.archived(conn, ids, project_id)
+                   if a.document_id in wanted]
         selection = "documents whose recorded cause was an extraction failure"
 
     print(f"{kind} {args.id}: {len(ids)} document(s) in scope, "
@@ -707,7 +785,7 @@ def cmd_reextract(args: argparse.Namespace) -> int:
     print(f"selection: {selection}")
     if not args.all:
         for label, count, hint in refetch.summarise(
-            refetch.select(conn, ids, action="reextract")
+            refetch.select(conn, ids, action="reextract", project_id=project_id)
         ):
             print(f"  {count:4}  {label}")
             print(f"        {hint}")
@@ -736,6 +814,7 @@ def cmd_reextract(args: argparse.Namespace) -> int:
                     "only": sorted(args.only) if args.only else None},
                    sort_keys=True),
         __version__,
+        project_id=project_id,
     )
     print(f"run {run_id}")
 
@@ -851,7 +930,13 @@ def main(argv: list[str] | None = None) -> int:
         description="Provenance-preserving retrieval for grey literature reviews.",
     )
     parser.add_argument("--version", action="version", version=f"ReviQ retrieval {__version__}")
-    parser.add_argument("--db", type=Path, default=DEFAULT_DB, help="SQLite database path")
+    parser.add_argument("--db", type=Path, default=None,
+                        help="SQLite database path (default: ReviQ's own, from "
+                             "DATABASE_URL)")
+    parser.add_argument("--project", type=int, default=None, metavar="ID",
+                        help="the review this retrieval belongs to. Recorded on "
+                             "the run, and confines snapshot reuse to that "
+                             "review's own retrievals")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     p_init = subparsers.add_parser("init", help="create the database")
@@ -981,6 +1066,20 @@ def main(argv: list[str] | None = None) -> int:
     p_rep.add_argument("--out", type=Path, default=Path("report.md"))
     p_rep.set_defaults(func=cmd_report)
 
+    p_adopt = subparsers.add_parser(
+        "adopt",
+        help="take a corpus from a separate retrieval database into this one",
+    )
+    p_adopt.add_argument("source", type=Path,
+                         help="the old SQLite file, e.g. data/glr.sqlite3")
+    p_adopt.add_argument("--dry-run", action="store_true",
+                         help="do the work and roll it back; reports exactly "
+                              "what the real run would write")
+    p_adopt.add_argument("--runs-dir", type=Path, default=DEFAULT_RUNS_DIR,
+                         help="where the WARC files are expected, as "
+                              "<runs-dir>/<run_id>/. Checked, never written")
+    p_adopt.set_defaults(func=cmd_adopt)
+
     p_export = subparsers.add_parser("export", help="re-export an earlier run")
     p_export.add_argument("run_id")
     p_export.add_argument("--out", type=Path, default=Path("results.csv"))
@@ -1002,6 +1101,8 @@ def main(argv: list[str] | None = None) -> int:
     p_json.set_defaults(func=cmd_export_json)
 
     args = parser.parse_args(argv)
+    if args.db is None:
+        args.db = default_db()
     return args.func(args)
 
 

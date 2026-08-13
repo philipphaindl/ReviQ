@@ -26,8 +26,9 @@ from pydantic import BaseModel
 from typing import Optional
 import json
 
-from app.database import get_session
+from app.database import get_retrieval_conn, get_session
 from app.models import Paper, ReviewerDecision, Reviewer, GreyImport, GreySource
+from app.retrieval import db, interchange
 from app.services import grey_service, paper_import
 from app.services.bibtex_service import parse_bib_content, detect_duplicates, entry_to_paper_dict
 from app.services.decision_service import sync_decision_state
@@ -84,10 +85,16 @@ async def import_grey_package(
     file: UploadFile = File(...),
     session: Session = Depends(get_session),
 ):
-    """Import a `glr-interchange-v1` package into the grey literature stream.
+    """Import a `glr-interchange-v1` package file into the grey stream.
+
+    The path for a package from a co-reviewer, or from a retrieval made
+    elsewhere. Retrieval run by this installation goes through
+    `/import/grey/from-retrieval` below and needs no file at all — but this one
+    stays: handing a colleague a corpus is a real thing to do, and the
+    interchange format is how.
 
     Every record becomes a paper, including the ones that could not be
-    retrieved. That is deliberate on both sides: glr exports them so a
+    retrieved. That is deliberate on both sides: the exporter includes them so a
     consumer's "records identified" reconciles with its retrieval report, and a
     review that cannot say how much of its grey literature had rotted or sat
     behind a publisher's wall is hiding a limitation rather than not having
@@ -103,6 +110,89 @@ async def import_grey_package(
     except grey_service.GreyImportError as exc:
         raise HTTPException(400, str(exc))
 
+    # No join keys. A package from elsewhere names documents by URL and digest;
+    # its integer ids belonged to another database and mean nothing here.
+    return _apply_grey_package(session, project_id, package,
+                               filename=file.filename)
+
+
+class RetrievalImport(BaseModel):
+    """A run id or a batch id this installation retrieved itself."""
+    scope_id: str
+
+
+@router.post("/projects/{project_id}/import/grey/from-retrieval")
+def import_grey_from_retrieval(
+    project_id: int,
+    body: RetrievalImport,
+    session: Session = Depends(get_session),
+    retrieval=Depends(get_retrieval_conn),
+):
+    """Import a retrieval this installation made, without the file detour.
+
+    The primary path now that both halves live in one database. It builds the
+    same `glr-interchange-v1` package the exporter writes and applies it through
+    the same function the upload endpoint uses — the format is not bypassed,
+    only the round trip through disk.
+
+    Because the package is assembled from the very database it is imported
+    into, the retrieval keys are known exactly rather than guessed from a URL,
+    and each `GreySource` gets them. That is what turns "show me the archived
+    text of this source" from re-parsing a package into a join.
+    """
+    _require_project(project_id, session)
+
+    try:
+        kind, run_ids = interchange.resolve_scope(retrieval, body.scope_id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc))
+
+    package = interchange.build_package(retrieval, run_ids)
+    package["scope"] = {"kind": kind, "id": body.scope_id}
+
+    return _apply_grey_package(
+        session, project_id, package,
+        filename=f"{kind}:{body.scope_id}",
+        locate=_retrieval_keys(retrieval, db.project_of_runs(retrieval, run_ids)),
+    )
+
+
+def _retrieval_keys(conn, project_id: int | None):
+    """A lookup from canonical URL to (document_id, snapshot_id) in this database.
+
+    The snapshot is resolved through `db.best_snapshot` with the same project
+    scope the export used, so the row a `GreySource` points at is the row the
+    package described. Resolving it any other way would let the stored keys and
+    the stored digest describe two different retrievals.
+    """
+    def locate(canonical_url: str) -> tuple[int | None, int | None]:
+        row = conn.execute(
+            "SELECT document_id FROM documents WHERE canonical_url = ?",
+            (canonical_url,),
+        ).fetchone()
+        if row is None:
+            return None, None
+        document_id = int(row["document_id"])
+        snapshot = db.best_snapshot(conn, document_id, project_id)
+        return document_id, (int(snapshot["snapshot_id"]) if snapshot else None)
+
+    return locate
+
+
+def _apply_grey_package(session: Session, project_id: int, package: dict, *,
+                        filename: str | None, locate=None) -> dict:
+    """Turn a parsed package into papers and provenance, and count what happened.
+
+    One implementation for both entry points. The four outcomes below are where
+    a PRISMA "records identified" and "duplicates removed" come from, and having
+    the upload path and the internal path count them separately is precisely how
+    two importers of the same thing ended up meaning different things by
+    `detected_duplicates`.
+
+    `locate` maps a canonical URL to this database's `(document_id,
+    snapshot_id)`, or is None when the package came from elsewhere and there is
+    nothing honest to fill them with.
+    """
     records = package["records"]
     engine = grey_service.engine_of(package)
 
@@ -119,7 +209,7 @@ async def import_grey_package(
 
     grey_import = GreyImport(
         project_id=project_id,
-        **grey_service.package_metadata(package, filename=file.filename),
+        **grey_service.package_metadata(package, filename=filename),
     )
     session.add(grey_import)
     session.commit()
@@ -168,11 +258,16 @@ async def import_grey_package(
         session.commit()
         session.refresh(paper)
 
+        provenance = grey_service.record_to_provenance_dict(record)
+        if locate is not None:
+            document_id, snapshot_id = locate(provenance["canonical_url"])
+            provenance["document_id"] = document_id
+            provenance["snapshot_id"] = snapshot_id
         session.add(GreySource(
             project_id=project_id,
             paper_id=paper.id,
             grey_import_id=grey_import.id,
-            **grey_service.record_to_provenance_dict(record),
+            **provenance,
         ))
 
         if is_duplicate:

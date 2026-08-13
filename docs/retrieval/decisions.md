@@ -690,3 +690,104 @@ reports and moves past.
 **A re-extraction that loses text is reported as a warning, not a statistic.**
 If a document had 2,400 words and now has none, the extractor has regressed on
 it and the corpus just lost a source. That is louder than a changed count.
+
+## D27 — One database, and the retrieval side upgrades its own columns
+
+Retrieval kept its own SQLite file while it was a separate tool. It does not
+any more: it opens ReviQ's, at the path derived from `DATABASE_URL`. The reason
+is not tidiness. The replication package bundles `project.json` *plus the raw
+`.bib` files* — it deliberately carries the source material, not only the
+derived state. For grey literature the counterpart is the retrieval itself, and
+two databases mean two backup stories and a package that omits the evidence it
+exists to document.
+
+Two access layers on one file — SQLAlchemy for the review, raw `sqlite3` for
+the retrieval — are safe under WAL, which `db.connect` sets. The table names do
+not collide: SQLModel names its tables from class names and gets `project`,
+`paper`, `greysource`; `schema.sql` names its own and gets `runs`, `documents`,
+`snapshots`.
+
+**`retrieval_db_path` raises for an in-memory URL rather than falling back.**
+The test suite builds instances on `sqlite://` with a StaticPool, which a raw
+sqlite3 connection cannot join. Quietly opening some default file instead would
+hand a test a retrieval side belonging to nobody, and the test would pass.
+`make_instance(db_path=...)` is how a test that needs both halves asks for a
+real file; `tests/test_integration_one_database.py` is the one that does.
+
+**Columns are upgraded by `db.COLUMN_UPGRADES`, not by `schema.sql` and not by
+ReviQ's `MIGRATIONS`.** D20 left column changes manual, which held while there
+were none; `runs.project_id` is the first. Neither obvious home works:
+
+* `schema.sql` cannot express it — it is `CREATE ... IF NOT EXISTS` throughout,
+  and any statement referencing a column an older database lacks (an index, most
+  obviously) raises inside `executescript` and abandons the rest of the script.
+  A missing column would become missing tables.
+* ReviQ's `MIGRATIONS` runs only when the API boots. The CLI is still how a
+  batch is run, and a corpus only ever opened that way would never get the
+  column.
+
+So the retrieval side owns its own upgrades, applied on every connection like
+the rest of `ensure_schema`, guarded by `PRAGMA table_info`. Deliberately small:
+a table, a column, a type. Anything with a backfill or a rewrite belongs in a
+real migration and should be visible as one.
+
+## D28 — A run belongs to a review; a document belongs to nobody
+
+`runs.project_id` is the only place this package admits that reviews exist, and
+it is the only workable place. A `document` is a canonical URL: it is the same
+URL for every review that finds it, and it exists once, forever (D3). A *search*
+is something a project carried out and has to be able to report.
+
+**Snapshot reuse is confined to the project's own runs.** Checked globally,
+project B would silently inherit the snapshot project A pulled six months ago:
+one credit saved, and B's retrieval report naming a date on which nothing was
+retrieved for B, citing bytes fetched under someone else's protocol. One credit
+against the one thing the credit buys. Reversible with a `WHERE` clause if it
+proves too expensive in practice.
+
+**Both snapshot readers take the scope, not just `has_snapshot`.** Scoping only
+the reuse check leaves the leak open in a worse form: B pays for its own fetch,
+B's fetch is blocked, and `best_snapshot` hands B project A's clean snapshot
+with A's date on it. D23 still holds — one rule for all readers — it now takes
+one more parameter.
+
+**Readers derive the project from what they were asked to read.** `report
+<batch_id>` confines itself to that batch's own review without the caller naming
+it again, because naming it again is a chance to name it wrong. Runs spanning
+more than one project cannot come from one run id or one batch id, so a mix
+means the ids were assembled by hand; the global view is the answer there, since
+showing a few rows too many beats silently dropping another project's.
+
+The report expresses `best_snapshot` as a window function for speed. The project
+is computed once by `db.project_of_runs` and *bound* into that query rather than
+re-derived in SQL, so the two cannot drift apart. A report and an export
+disagreeing about the size of one corpus has happened once already.
+
+## D29 — Adoption remaps, never renumbers; the dry run is the real run
+
+`adopt` brings a corpus out of a database written by the standalone tool. What
+makes it more than `INSERT ... SELECT` is that integer keys are database-local:
+a `snapshot_id` copied verbatim lands on whatever row holds that number in the
+target, and the extraction attached to it now describes a stranger's document.
+Every integer key is remapped, and a row whose reference does not resolve is
+skipped and counted rather than written pointing somewhere plausible.
+
+`run_id` is a UUID and survives, which is what makes the command idempotent: a
+run the target already holds is skipped whole, with everything hanging off it.
+An interrupted first attempt is safe to repeat. `documents.canonical_url` is
+UNIQUE and a URL is a URL, so a document the target already holds is reused —
+the same rule the grey import applies.
+
+**The dry run performs the work and rolls it back.** A second implementation
+that predicts what the first would do is exactly how a report and an export came
+to disagree about one corpus; here the two cannot disagree, because there is
+only one.
+
+**The archive is verified, never moved.** Every WARC a snapshot or figure points
+into must be in place, and if one is not, nothing is written.
+`archive.read_payload` verifies digests on read, so a wrong path is loud
+eventually — but by then the corpus has been adopted and the review has moved
+on. Copying 207 MB is not an import command's job: it would fail halfway on a
+full disk and leave a half-migrated archive behind. The source is opened
+read-only in SQLite's sense rather than by convention, because `db.connect`
+would otherwise apply the current schema to it on the way in.

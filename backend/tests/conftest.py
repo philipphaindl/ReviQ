@@ -13,6 +13,7 @@ import io
 import json
 import zipfile
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Optional
 
 import pytest
@@ -20,7 +21,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
-from app.database import get_session
+from app.database import get_retrieval_conn, get_session
 from app.main import app
 from app.models import Reviewer
 
@@ -241,23 +242,50 @@ class Instance:
         return r.json()
 
 
-def make_instance(label: str = "instance") -> Instance:
+def make_instance(label: str = "instance", db_path=None) -> Instance:
     """Build an isolated ReviQ deployment for cross-instance tests.
 
-    Each call creates a fresh in-memory engine + session and registers a
-    dependency override on the shared `app` object. Tests that need two
-    instances at once should call this from inside a fixture that also
-    clears `app.dependency_overrides` at teardown so the second instance's
-    override doesn't leak into other tests.
+    Each call creates a fresh engine + session and registers a dependency
+    override on the shared `app` object. Tests that need two instances at once
+    should call this from inside a fixture that also clears
+    `app.dependency_overrides` at teardown so the second instance's override
+    doesn't leak into other tests.
+
+    `db_path` builds the instance on a real file instead of in memory, which is
+    what the retrieval side needs: it opens the database with plain sqlite3 and
+    cannot join SQLAlchemy's shared in-memory connection. Only the tests that
+    exercise both halves at once pay for the file; everything else stays in
+    memory and fast.
     """
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
+    if db_path is None:
+        engine = create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+    else:
+        engine = create_engine(
+            f"sqlite:///{db_path}",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
     SQLModel.metadata.create_all(engine)
     session = Session(engine)
     app.dependency_overrides[get_session] = lambda: session
+    if db_path is not None:
+        # The other half of the same file. `retrieval.db.connect` applies
+        # `schema.sql` on every connection, so this both creates the retrieval
+        # tables and hands the request a connection to them.
+        from app.retrieval import db as retrieval_db
+
+        def retrieval_conn():
+            conn = retrieval_db.connect(Path(db_path))
+            try:
+                yield conn
+            finally:
+                conn.close()
+
+        app.dependency_overrides[get_retrieval_conn] = retrieval_conn
     return Instance(client=TestClient(app), session=session, label=label)
 
 

@@ -16,7 +16,7 @@ import sqlite3
 from pathlib import Path
 
 from . import __version__
-from .db import utc_now
+from .db import project_of_runs, utc_now
 from .outcome import LABELS, OK, REMEDIES, classify
 
 # One row per document in scope, carrying its best snapshot from *any* run.
@@ -34,6 +34,12 @@ from .outcome import LABELS, OK, REMEDIES, classify
 #     contradict the export, which resolves it with `db.best_snapshot`. The
 #     ordering below is that same rule, expressed as a window function so a few
 #     hundred documents cost one query rather than one query each.
+#
+#     It is restricted to the scope's *project*, though, and by the same rule
+#     `db.best_snapshot` applies — the `:project` parameter is computed once by
+#     `db.project_of_runs` and bound here, rather than re-derived in SQL, so the
+#     two cannot drift apart. A report and an export disagreeing about how large
+#     the corpus is has happened once already.
 _SOURCES = """
 , scoped AS (
     SELECT document_id FROM serp_results
@@ -51,6 +57,8 @@ _SOURCES = """
     ) AS rank_in_document
     FROM snapshots s
     WHERE s.document_id IN (SELECT document_id FROM scoped)
+      AND (:project IS NULL
+           OR s.run_id IN (SELECT run_id FROM runs WHERE project_id = :project))
 )
 SELECT
     d.document_id, d.canonical_url, d.host, d.discovery_source, d.discovery_depth,
@@ -78,7 +86,9 @@ def _scope_cte(scope: str) -> str:
     return f"WITH scope AS (SELECT run_id FROM runs WHERE {scope})\n"
 
 
-def _rows(conn: sqlite3.Connection, scope: str, key: str) -> list[sqlite3.Row]:
+def _rows(
+    conn: sqlite3.Connection, scope: str, key: str, project_id: int | None
+) -> list[sqlite3.Row]:
     """One row per document in scope, with the snapshot that best represents it.
 
     A document can hold more than one snapshot even within a single batch: a
@@ -87,15 +97,17 @@ def _rows(conn: sqlite3.Connection, scope: str, key: str) -> list[sqlite3.Row]:
     a failure as archived. Returning both would count that document twice and
     list it as failed and usable at once.
     """
-    return conn.execute(_scope_cte(scope) + _SOURCES, (key,)).fetchall()
+    return conn.execute(
+        _scope_cte(scope) + _SOURCES, {"key": key, "project": project_id}
+    ).fetchall()
 
 
 def _runs(conn: sqlite3.Connection, scope: str, key: str) -> list[sqlite3.Row]:
     return conn.execute(
         f"""SELECT run_id, query, engine, search_params_json, started_at_utc,
-                   finished_at_utc, status, tool_version
+                   finished_at_utc, status, tool_version, project_id
             FROM runs WHERE {scope} ORDER BY started_at_utc""",
-        (key,),
+        {"key": key},
     ).fetchall()
 
 
@@ -106,7 +118,9 @@ def _escape(value) -> str:
 
 def _build(conn: sqlite3.Connection, scope: str, key: str, title: str) -> str:
     runs = _runs(conn, scope, key)
-    rows = _rows(conn, scope, key)
+    # Derived from the runs in scope, not passed in: see `db.project_of_runs`.
+    project_id = project_of_runs(conn, [r["run_id"] for r in runs])
+    rows = _rows(conn, scope, key, project_id)
 
     # `_rows` returns one row per document, joining its best snapshot to that
     # snapshot's extraction — so the same row answers both of `classify`'s
@@ -140,7 +154,7 @@ def _build(conn: sqlite3.Connection, scope: str, key: str, title: str) -> str:
         + """SELECT COUNT(*) FROM figure_descriptions fd
              JOIN figures f ON f.figure_id = fd.figure_id
              WHERE f.run_id IN (SELECT run_id FROM scope) AND fd.error IS NULL""",
-        (key,),
+        {"key": key},
     ).fetchone()[0]
 
     out: list[str] = []
@@ -269,14 +283,14 @@ def _build(conn: sqlite3.Connection, scope: str, key: str, title: str) -> str:
 def report_run(conn: sqlite3.Connection, run_id: str, out_path: Path) -> Path:
     row = conn.execute("SELECT query FROM runs WHERE run_id = ?", (run_id,)).fetchone()
     query = row["query"] if row else run_id
-    text = _build(conn, "run_id = ?", run_id, f"Retrieval report — “{query}”")
+    text = _build(conn, "run_id = :key", run_id, f"Retrieval report — “{query}”")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(text, encoding="utf-8")
     return out_path
 
 
 def report_batch(conn: sqlite3.Connection, batch_id: str, out_path: Path) -> Path:
-    text = _build(conn, "batch_id = ?", batch_id, "Retrieval report")
+    text = _build(conn, "batch_id = :key", batch_id, "Retrieval report")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(text, encoding="utf-8")
     return out_path

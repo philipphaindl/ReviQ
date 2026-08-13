@@ -35,6 +35,22 @@ def connect(db_path: Path) -> sqlite3.Connection:
     return conn
 
 
+# Columns added to tables that already existed in an earlier version.
+#
+# schema.sql cannot express these: it is `CREATE ... IF NOT EXISTS` throughout
+# and SQLite has no `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`. D20 left such
+# changes manual, which held while there were none. `runs.project_id` is the
+# first, and leaving it manual would mean a corpus opened only through the CLI
+# never gets it — the CLI is still the primary way a batch is run.
+#
+# Kept deliberately small and additive: a column, a type, no defaults to
+# backfill and nothing dropped. Anything beyond that belongs in a real
+# migration and should be visible as one.
+COLUMN_UPGRADES: tuple[tuple[str, str, str], ...] = (
+    ("runs", "project_id", "INTEGER"),
+)
+
+
 def ensure_schema(conn: sqlite3.Connection) -> None:
     """Bring an existing database up to the current schema.
 
@@ -49,12 +65,30 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
     "no such table". Creating an empty table is the honest answer — the corpus
     genuinely has no figures in it.
 
-    What this does NOT do is add *columns* to tables that already exist; SQLite
-    has no `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`. Column-level changes stay
-    manual and are called out in docs/decisions.md.
+    Columns come after the script and go through `COLUMN_UPGRADES`, guarded by
+    `PRAGMA table_info`. They cannot go in schema.sql itself: a statement that
+    referenced a column an older database lacks — an index, most obviously —
+    would raise inside `executescript` and abandon the rest of the script,
+    turning a missing column into missing tables.
     """
     conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+    ensure_columns(conn)
     conn.commit()
+
+
+def ensure_columns(conn: sqlite3.Connection) -> None:
+    """Add any column in `COLUMN_UPGRADES` the database does not have yet."""
+    for table, column, decl in COLUMN_UPGRADES:
+        present = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        # An empty result means the table does not exist at all, which cannot
+        # happen after the script above — but a wrong table name here would
+        # otherwise fail silently for years.
+        if not present:
+            raise sqlite3.OperationalError(
+                f"COLUMN_UPGRADES names a table that does not exist: {table}"
+            )
+        if column not in present:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
 
 
 def init_db(conn: sqlite3.Connection) -> None:
@@ -74,14 +108,44 @@ def start_run(
     search_params_json: str,
     tool_version: str,
     batch_id: str | None = None,
+    project_id: int | None = None,
 ) -> None:
     conn.execute(
         """INSERT INTO runs (run_id, query, engine, search_params_json,
-                             started_at_utc, tool_version, status, batch_id)
-           VALUES (?, ?, ?, ?, ?, ?, 'running', ?)""",
-        (run_id, query, engine, search_params_json, utc_now(), tool_version, batch_id),
+                             started_at_utc, tool_version, status, batch_id,
+                             project_id)
+           VALUES (?, ?, ?, ?, ?, ?, 'running', ?, ?)""",
+        (run_id, query, engine, search_params_json, utc_now(), tool_version,
+         batch_id, project_id),
     )
     conn.commit()
+
+
+def project_of_runs(conn: sqlite3.Connection, run_ids) -> int | None:
+    """The review these runs were issued for, or None if they were not.
+
+    Readers derive their project from what they were asked to read rather than
+    taking it as an argument: `report <batch_id>` should confine itself to that
+    batch's own review without the caller naming it a second time, and a second
+    naming is a chance to name it wrong.
+
+    Runs belonging to more than one project cannot come from one run id or one
+    batch id, so a mix means the ids were assembled by hand. Falling back to the
+    global view is the answer there — picking one of several projects would
+    silently drop the others' snapshots, and a report that quietly lost rows is
+    worse than one that shows a few too many.
+    """
+    run_ids = list(run_ids)
+    if not run_ids:
+        return None
+    marks = ", ".join("?" for _ in run_ids)
+    values = {
+        row["project_id"]
+        for row in conn.execute(
+            f"SELECT DISTINCT project_id FROM runs WHERE run_id IN ({marks})", run_ids
+        )
+    }
+    return values.pop() if len(values) == 1 else None
 
 
 def finish_run(conn: sqlite3.Connection, run_id: str, status: str, notes: str | None = None) -> None:
@@ -156,46 +220,75 @@ def insert_serp_result(
 # --- snapshots ----------------------------------------------------------
 
 
-def has_snapshot(conn: sqlite3.Connection, document_id: int) -> bool:
-    """True if this document was ever *usefully* fetched, in any run.
+def _project_scope(project_id: int | None) -> tuple[str, tuple]:
+    """The clause that confines a snapshot lookup to one review's runs.
+
+    Both snapshot readers take it, and they have to take the same one. If only
+    `has_snapshot` were project-scoped, project B would pay for a fetch of a URL
+    project A already held, and then `best_snapshot` would hand B project A's
+    snapshot with project A's date on it whenever B's own attempt was blocked —
+    which is the exact silent coupling scoping is meant to prevent.
+    """
+    if project_id is None:
+        return "", ()
+    return " AND run_id IN (SELECT run_id FROM runs WHERE project_id = ?)", (project_id,)
+
+
+def has_snapshot(
+    conn: sqlite3.Connection, document_id: int, project_id: int | None = None
+) -> bool:
+    """True if this document was ever *usefully* fetched.
 
     Drives the default no-refetch behaviour: a document already archived does
     not cost ScrapingBee credits again. Failed fetches and block pages both
     fall through deliberately, so the next run retries them — that is how a
     later run with --premium-proxy picks up exactly the sources that were
     blocked, and nothing else.
+
+    With `project_id`, only that review's own runs count. A snapshot another
+    project pulled six months ago saves a credit but costs the thing the credit
+    was spent on: this review's report would name a retrieval date on which
+    nothing was retrieved for it. `None` keeps the global meaning, which is what
+    the CLI outside a project asks for.
     """
+    clause, extra = _project_scope(project_id)
     row = conn.execute(
-        """SELECT 1 FROM snapshots
-           WHERE document_id = ? AND fetch_error IS NULL AND blocked_reason IS NULL
-           LIMIT 1""",
-        (document_id,),
+        "SELECT 1 FROM snapshots "
+        "WHERE document_id = ? AND fetch_error IS NULL AND blocked_reason IS NULL"
+        + clause + " LIMIT 1",
+        (document_id, *extra),
     ).fetchone()
     return row is not None
 
 
-def best_snapshot(conn: sqlite3.Connection, document_id: int) -> sqlite3.Row | None:
-    """The snapshot that best represents this document, across all runs.
+def best_snapshot(
+    conn: sqlite3.Connection, document_id: int, project_id: int | None = None
+) -> sqlite3.Row | None:
+    """The snapshot that best represents this document.
 
     A clean retrieval wins over a blocked or failed one, and the most recent
-    wins among equals. Deliberately not restricted to any run: a document
+    wins among equals. Deliberately not restricted to any *run*: a document
     observed in one batch may have been archived by an earlier one (see
     `has_snapshot`), and reporting "not fetched" for a document sitting in the
-    archive would be false. It is also what lets `refetch` improve an
-    existing corpus — re-exporting the original batch afterwards picks up the
-    snapshot the retry produced, without rewriting a single earlier row.
+    archive would be false. It is also what lets `refetch` improve an existing
+    corpus — re-exporting the original batch afterwards picks up the snapshot
+    the retry produced, without rewriting a single earlier row.
+
+    `project_id` narrows it to one review, for the reason in `_project_scope`.
+    A refetch belongs to the same project as the run it repairs, so the
+    cross-run guarantee above survives the narrowing intact.
 
     Every reader must use this one rule. When the export resolved a document
     one way and the retrieval report another, the two disagreed about how large
     the corpus was.
     """
+    clause, extra = _project_scope(project_id)
     return conn.execute(
-        """SELECT * FROM snapshots
-           WHERE document_id = ?
-           ORDER BY (fetch_error IS NULL AND blocked_reason IS NULL) DESC,
-                    fetched_at_utc DESC
-           LIMIT 1""",
-        (document_id,),
+        "SELECT * FROM snapshots WHERE document_id = ?" + clause +
+        " ORDER BY (fetch_error IS NULL AND blocked_reason IS NULL) DESC,"
+        "          fetched_at_utc DESC"
+        " LIMIT 1",
+        (document_id, *extra),
     ).fetchone()
 
 

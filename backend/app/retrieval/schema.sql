@@ -27,7 +27,22 @@ CREATE TABLE IF NOT EXISTS runs (
     -- Groups the runs of one `batch` invocation. A run is still exactly
     -- one query, so every existing guarantee holds unchanged; the batch is
     -- just the protocol that issued them together.
-    batch_id           TEXT
+    batch_id           TEXT,
+    -- The review this run was issued for, and the one place where this package
+    -- admits that reviews exist. It is also the only workable place: a
+    -- `document` is a URL and belongs to nobody, while a search is something a
+    -- project carried out and has to be able to report.
+    --
+    -- No foreign key. The review side owns `project`, and a retrieval database
+    -- lifted out for inspection must still open.
+    --
+    -- NULL means "issued outside a project" — what the CLI does without
+    -- --project, and what every run predating this column is.
+    --
+    -- Deliberately not indexed: `runs` holds one row per query, and an index
+    -- here would have to be created by this file, which cannot run against a
+    -- database whose `runs` predates the column (see `db.COLUMN_UPGRADES`).
+    project_id         INTEGER
 );
 
 -- The stable entity: one row per canonical URL.

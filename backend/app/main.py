@@ -8,13 +8,24 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.database import create_db_and_tables, run_migrations
+from app.database import create_db_and_tables, ensure_retrieval_schema, run_migrations
 from app.routers import projects, papers, import_, decisions, kappa, export, qa, snowballing, extraction, replication, report
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Bring the one database up to date — both halves of it.
+
+    The review tables come from SQLModel plus `run_migrations`; the retrieval
+    tables come from `app/retrieval/schema.sql`, which owns its own upgrades so
+    that the CLI — which never boots this app — gets them too.
+
+    A `DATABASE_URL` the retrieval side cannot open stops the boot instead of
+    degrading quietly: the API would otherwise accept retrieval work it has
+    nowhere to record.
+    """
     create_db_and_tables()
+    ensure_retrieval_schema()
     run_migrations()
     yield
 

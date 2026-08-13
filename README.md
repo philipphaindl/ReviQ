@@ -71,18 +71,57 @@ search engine, canonicalises and deduplicates the hits, fetches each source
 through a scraping proxy, and archives the bytes as a WARC snapshot with a
 SHA-256 before a single word is extracted.
 
+Retrieval writes into the same SQLite file as the review — the path comes from
+`DATABASE_URL`, and `--db` overrides it. That is what lets a replication package
+carry the retrieval it rests on, rather than pointing at a second database
+somebody has to be sent separately.
+
 ```bash
 cd backend
-python -m app.retrieval init
-python -m app.retrieval batch queries.toml                     # retrieve
-python -m app.retrieval export-json <run_id|batch_id> --out records.json
+python -m app.retrieval --project 1 batch queries.toml          # retrieve
+python -m app.retrieval report <run_id|batch_id> --out report.md
 ```
 
-Then `POST /api/projects/{id}/import/grey` with that file. Needs
-`SEARCHAPI_API_KEY` and `SCRAPINGBEE_API_KEY`; both have free tiers large
+Then `POST /api/projects/1/import/grey/from-retrieval` with
+`{"scope_id": "<run_id|batch_id>"}`. No file changes hands: the package is built
+and applied in one step, and the grey sources come out carrying join keys
+straight into the retrieval tables.
+
+`--project` records which review the runs belong to. It also confines snapshot
+reuse to that review: a second project asking for the same URL retrieves it
+again rather than inheriting a snapshot fetched months ago under someone else's
+protocol. Without it the runs belong to no review and stay visible to all of
+them, which is the behaviour that predates it.
+
+Needs `SEARCHAPI_API_KEY` and `SCRAPINGBEE_API_KEY`; both have free tiers large
 enough to try it out. A batch of twenty queries runs for tens of minutes — one
 concurrent request, with a delay between fetches — so it is a command, not an
 HTTP request, and `docs/retrieval/` explains why in detail.
+
+**Handing a corpus to a co-reviewer**, or importing one from them, still goes
+through the interchange format:
+
+```bash
+python -m app.retrieval export-json <run_id|batch_id> --out records.json
+```
+
+and `POST /api/projects/{id}/import/grey` with that file. The keys into the
+retrieval tables stay empty for such an import — the integer ids in the package
+belonged to the other installation — while the canonical URL and payload digest,
+the identities that do travel, are carried across.
+
+**Taking over a corpus retrieved before the databases were merged:**
+
+```bash
+python -m app.retrieval adopt data/glr.sqlite3 --project 1 --dry-run
+python -m app.retrieval adopt data/glr.sqlite3 --project 1
+```
+
+Reads the old file read-only, remaps every integer key, reuses documents the
+target already holds under the same URL, and refuses if a WARC file it points
+into is not in place. Running it twice adds nothing twice. The dry run does the
+identical work and rolls it back, so its counts are the outcome rather than a
+prediction of it.
 
 Every record is imported, including the ones that could not be retrieved. That
 is deliberate on both sides: the package reports blocked, failed and empty
@@ -219,6 +258,9 @@ isolated FastAPI `TestClient`s against in-memory SQLite databases.
 | Cross-instance reviewer decision exchange | `backend/tests/test_integration_decision_exchange.py` | Reviewer A exports their JSON file from instance A → reviewer B imports it into instance B; Cohen's κ + 95 % CI + PABAK + Pₒ on B match a monolithic reference; PRISMA partition stays self-consistent (`included + excluded + undecided = unique`); conflicts are logged for disagreements only; re-importing the same file is idempotent (no duplicate decisions, no duplicate conflicts); a corrected re-export propagates correctly through κ; foreign citekeys are skipped; importing for a new reviewer name auto-creates the reviewer; malformed payloads are rejected with HTTP 400 |
 | End-to-end SLR pipeline | `backend/tests/test_integration_slr_pipeline.py` | Walks Setup → BibTeX Import → Screening (with conflicts) → Conflict Resolution → Full-Text → Quality Assessment → Data Extraction → Results; verifies κ at each stage, that per-phase κ is independent of other phases, that conflict resolution clears the open-conflict count, that QA summary only lists included papers, that custom QA thresholds reclassify papers correctly, that the extraction summary reflects only filled values |
 | Grey literature import | `backend/tests/test_integration_grey_import.py` | A retrieval package becomes grey papers that stay out of the formal stream and out of the PRISMA database box; search hits and snowballed documents separate; unretrievable records import flagged, stay screenable on title and snippet, and keep their cause per source; the retrieval timestamp, payload digest and archive offset survive the round trip and join to their paper; the package's own counts are kept for reconciliation; re-importing an overlapping package creates no second paper; byte-identical content under two URLs is one source while two documents sharing a generic title are two; a package predating `retrieval_reason` still imports; foreign and future-versioned files are refused with HTTP 400 |
+| One database, both halves | `backend/tests/test_integration_one_database.py` | The only test that runs on a real file rather than in memory, because that is the only way the retrieval side can be opened at all: a retrieval written with plain `sqlite3` is visible to a request served through SQLAlchemy; importing it needs no file passing through disk; the resulting grey source carries join keys into the retrieval tables, so the archived text is one join away; an uploaded package from elsewhere leaves those keys empty; one project's import does not pick up another's runs |
+| Adopting a separate corpus | `backend/tests/retrieval/test_adopt.py` | Every row arrives, a shared URL stays one document, and no row points at a key from the other database — checked against a target seeded with colliding ids; adopting twice changes nothing; WARC paths are rewritten and a missing file refuses without writing; the source is not modified; a source predating a table still adopts; the dry run reports exactly what the real run does |
+| One review's retrieval is its own | `backend/tests/retrieval/test_project_scope.py` | A project does not see another's snapshot through either reader — including the case where its own attempt was blocked and the other project's is clean; the cross-run rule survives the narrowing, so a refetch still improves the corpus it repairs; the project is derived from the runs in scope, and a hand-assembled mix falls back to the global view; report, export and refetch agree on what the corpus is |
 | Replication round-trip — derived numbers | `backend/tests/test_integration_replication_drift.py` | Builds a fully populated project (taxonomy, extraction schema, screening + full-text decisions with conflicts resolved, QA scores, extraction values), exports the replication ZIP, re-imports into a fresh instance, then asserts every reviewer-visible derived statistic (PRISMA counts, both κ phases with CI/PABAK/Pₒ, QA aggregation by level, extraction value distributions) matches the source bit-for-bit within numerical tolerance — including after a double round-trip |
 
 The backend uses `pytest` 8 with FastAPI's `TestClient`; the frontend uses

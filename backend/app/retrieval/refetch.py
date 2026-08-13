@@ -54,6 +54,11 @@ class Scope(NamedTuple):
     kind: str            # "run" or "batch"
     documents: int       # documents the original scope covers
     candidates: list[Candidate]
+    # The review the retried runs belong to. Carried out so the retry run can be
+    # recorded against the same one: repairing a project's search is part of
+    # that search, and a retry filed under no project would leave the recovered
+    # snapshots invisible to it.
+    project_id: int | None = None
 
 
 def for_scope(
@@ -66,7 +71,11 @@ def for_scope(
     """
     kind, run_ids = interchange.resolve_scope(conn, ident)
     ids = interchange.document_ids(conn, run_ids)
-    return Scope(kind, len(ids), select(conn, ids, reasons=reasons, action=action))
+    project_id = db.project_of_runs(conn, run_ids)
+    return Scope(kind, len(ids),
+                 select(conn, ids, reasons=reasons, action=action,
+                        project_id=project_id),
+                 project_id)
 
 
 def select(
@@ -75,12 +84,17 @@ def select(
     *,
     reasons: set[str] | None = None,
     action: str = "refetch",
+    project_id: int | None = None,
 ) -> list[Candidate]:
     """The documents in scope whose recorded cause `action` could change.
 
     `reasons`, when given, narrows the selection further — that is what backs
     `refetch --only`, for retrying one cause at a time rather than paying
     for every candidate at once.
+
+    `project_id` has to match what the report and the export see, or the retry
+    would be priced against a different set of snapshots than the one the
+    reviewer was shown.
     """
     out: list[Candidate] = []
     for document_id in document_ids:
@@ -91,7 +105,7 @@ def select(
         if doc is None:
             continue
 
-        snapshot = db.best_snapshot(conn, document_id)
+        snapshot = db.best_snapshot(conn, document_id, project_id)
         extraction = None
         if snapshot is not None:
             extraction = conn.execute(
@@ -127,7 +141,9 @@ class Archived(NamedTuple):
     media_type: str | None
 
 
-def archived(conn: sqlite3.Connection, document_ids: list[int]) -> list[Archived]:
+def archived(
+    conn: sqlite3.Connection, document_ids: list[int], project_id: int | None = None
+) -> list[Archived]:
     """Every document in scope whose bytes are in the archive, whatever its outcome.
 
     The selection for an extractor-wide re-run, as opposed to
@@ -145,7 +161,7 @@ def archived(conn: sqlite3.Connection, document_ids: list[int]) -> list[Archived
     """
     out: list[Archived] = []
     for document_id in document_ids:
-        snapshot = db.best_snapshot(conn, document_id)
+        snapshot = db.best_snapshot(conn, document_id, project_id)
         if snapshot is None or not snapshot["warc_path"]:
             continue
         if snapshot["fetch_error"] or snapshot["blocked_reason"]:

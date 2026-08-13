@@ -290,3 +290,12 @@ class GreySource(SQLModel, table=True):
     retrieval_reason: Optional[str] = None   # why, when it is not "ok"
     search_observations: int = 0             # how many queries returned this document
     best_rank: Optional[int] = None          # best position across those queries
+    # Join keys into the retrieval tables, filled when this installation made
+    # the retrieval itself. Nullable and without a foreign key on purpose: a
+    # package from a co-reviewer names documents this database may not hold, and
+    # the integer ids it was written with belonged to theirs. `canonical_url`
+    # and `sha256` above stay the identity that travels between installations;
+    # these two are the shortcut home, and what turns "show me the archived text
+    # of this source" into a join.
+    document_id: Optional[int] = Field(default=None, index=True)
+    snapshot_id: Optional[int] = None

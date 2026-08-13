@@ -15,6 +15,12 @@ services:
       - ${BIB_BASE_DIR:-./bib_data}:/bib_data:ro
     environment:
       - DATABASE_URL=sqlite:////data/reviq.db
+      # Where everything that has to survive a rebuild lives. Without it the
+      # retrieval CLI falls back to a relative `data/`, which inside the
+      # container is /app/data — outside the mounted volume. The WARC archive
+      # holding the retrieved bytes would then be discarded by the next
+      # `docker compose up --build`. replication.py already assumed /data.
+      - DATA_DIR=/data
       - BIB_BASE_DIR=/bib_data
     restart: unless-stopped
     healthcheck:

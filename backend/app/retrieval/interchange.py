@@ -301,6 +301,10 @@ def build_package(
     # Every archive a record points into, collected as the records are built so
     # the listing cannot drift from what they reference.
     referenced_archives: set[tuple[str, str]] = set()
+    # Which review's snapshots count, derived from the runs asked for rather
+    # than passed in — the same rule `report` applies, so the two go on
+    # agreeing about how large the corpus is.
+    project_id = db.project_of_runs(conn, run_ids)
 
     for document_id in document_ids(conn, run_ids):
         doc = conn.execute(
@@ -309,7 +313,7 @@ def build_package(
         if doc is None:
             continue
 
-        snapshot = db.best_snapshot(conn, document_id)
+        snapshot = db.best_snapshot(conn, document_id, project_id)
         extraction = None
         if snapshot is not None:
             extraction = conn.execute(
