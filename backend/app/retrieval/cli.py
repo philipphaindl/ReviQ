@@ -923,8 +923,27 @@ def _install_termination_handler() -> None:
         pass
 
 
-def main(argv: list[str] | None = None) -> int:
-    _install_termination_handler()
+# Offered by the three subcommands that record a run, and by no others.
+#
+# It was global once, which put it before the subcommand while every other
+# option goes after — `adopt data/glr.sqlite3 --project 1` failed outright. The
+# README managed to write it both ways in one file, which is evidence enough
+# that the position was the problem.
+#
+# The seven remaining subcommands are not missing it. `report`, `export-json`,
+# `refetch` and `reextract` derive the project from the runs they were asked to
+# read (D28), and taking it as an argument would be a second chance to get it
+# wrong; `init`, `init-config` and `export` have no project at all.
+_PROJECT_HELP = ("the review this retrieval belongs to. Recorded on the run, "
+                 "and confines snapshot reuse to that review's own retrievals")
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """The command line surface, buildable without running anything.
+
+    Separate from `main` so a test can inspect what the CLI accepts and where.
+    Nothing covered `cli.py` at all until a misplaced flag made that expensive.
+    """
     parser = argparse.ArgumentParser(
         prog="python -m app.retrieval",
         description="Provenance-preserving retrieval for grey literature reviews.",
@@ -933,10 +952,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--db", type=Path, default=None,
                         help="SQLite database path (default: ReviQ's own, from "
                              "DATABASE_URL)")
-    parser.add_argument("--project", type=int, default=None, metavar="ID",
-                        help="the review this retrieval belongs to. Recorded on "
-                             "the run, and confines snapshot reuse to that "
-                             "review's own retrievals")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     p_init = subparsers.add_parser("init", help="create the database")
@@ -944,6 +959,8 @@ def main(argv: list[str] | None = None) -> int:
 
     p_run = subparsers.add_parser("run", help="search, fetch, archive, extract, export")
     p_run.add_argument("query", help="the search string")
+    p_run.add_argument("--project", type=int, default=None, metavar="ID",
+                       help=_PROJECT_HELP)
     p_run.add_argument("--pages", type=int, default=5,
                        help="SERP pages to retrieve; 10 results each (default: 5)")
     p_run.add_argument("--engine", default="google")
@@ -988,6 +1005,8 @@ def main(argv: list[str] | None = None) -> int:
 
     p_batch = subparsers.add_parser("batch", help="run a whole query set from a TOML file")
     p_batch.add_argument("config", type=Path, help="path to the query set, e.g. queries.toml")
+    p_batch.add_argument("--project", type=int, default=None, metavar="ID",
+                         help=_PROJECT_HELP)
     p_batch.add_argument("--out", type=Path, default=Path("results.csv"))
     p_batch.add_argument("--runs-dir", type=Path, default=DEFAULT_RUNS_DIR)
     p_batch.add_argument("--delay", type=float, default=1.0)
@@ -1072,6 +1091,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_adopt.add_argument("source", type=Path,
                          help="the old SQLite file, e.g. data/glr.sqlite3")
+    p_adopt.add_argument("--project", type=int, default=None, metavar="ID",
+                         help="the review the adopted runs belong to. Without "
+                              "it they belong to none, and their snapshots stay "
+                              "visible to every project")
     p_adopt.add_argument("--dry-run", action="store_true",
                          help="do the work and roll it back; reports exactly "
                               "what the real run would write")
@@ -1100,7 +1123,12 @@ def main(argv: list[str] | None = None) -> int:
                              "will then no longer reconcile with the report")
     p_json.set_defaults(func=cmd_export_json)
 
-    args = parser.parse_args(argv)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    _install_termination_handler()
+    args = build_parser().parse_args(argv)
     if args.db is None:
         args.db = default_db()
     return args.func(args)
