@@ -37,22 +37,37 @@ DEFAULT_RUNS_DIR = DATA_DIR / "runs"
 def default_db() -> Path:
     """Where a retrieval writes when `--db` is not given: ReviQ's own database.
 
-    Derived from `DATABASE_URL` so that the CLI and the API cannot end up
-    holding different files — which is what a separate `glr.sqlite3` was, and
-    why the pilot corpus needs `adopt` to come across at all.
+    Taken from `DATABASE_URL` **when that variable is actually set**, so the CLI
+    and the API cannot end up holding different files — which is what a separate
+    `glr.sqlite3` was, and why the pilot corpus needs `adopt` at all.
 
-    Falls back to `DATA_DIR/reviq.db` when there is no usable `DATABASE_URL`,
-    so a bare checkout still works. Importing the app package lazily keeps the
-    CLI runnable without FastAPI installed.
+    When it is *not* set, `DATA_DIR/reviq.db` — relative in a checkout, the
+    volume under Docker. Reading `app.database.DATABASE_URL` instead would pick
+    up that module's own default, which is container-shaped
+    (`sqlite:////data/reviq.db`) because Compose always sets the variable
+    anyway; locally that is an absolute path on a read-only root, and the first
+    thing `db.connect` does is try to create it.
+
+    A `DATABASE_URL` that is set but unusable is *not* swallowed: somebody
+    configured it, and silently writing somewhere else is the two-databases
+    situation this whole step removed.
+
+    The import is deferred rather than module-level so that loading the
+    retrieval package does not drag in the review side — the boundary this
+    package keeps everywhere else. The parsing itself is not duplicated here:
+    one implementation, in `app.database`, or the two could disagree about
+    which file they mean.
     """
-    try:
-        from app.database import retrieval_db_path
-    except Exception:                       # pragma: no cover - no app package
-        return DATA_DIR / "reviq.db"
-    try:
-        return retrieval_db_path()
-    except Exception:
-        return DATA_DIR / "reviq.db"
+    url = os.environ.get("DATABASE_URL")
+    if not url:
+        return Path(os.environ.get("DATA_DIR", "data")) / "reviq.db"
+
+    from app.database import retrieval_db_path
+
+    # Passed explicitly rather than left to the module-level constant, which is
+    # frozen at import time — a CLI is invoked once, and what its environment
+    # says now is what it means.
+    return retrieval_db_path(url)
 
 
 def _require_key(name: str) -> str:
@@ -508,6 +523,44 @@ def cmd_init_config(args: argparse.Namespace) -> int:
     return 0
 
 
+def _check_target_project(conn, db_path: Path, project_id: int | None) -> None:
+    """Refuse a target whose review side does not hold that project.
+
+    The one place this package looks at a review table, and `adopt` is the one
+    command whose entire purpose is to bridge into one. It earns the exception
+    by catching a mistake that is otherwise silent and expensive: the target is
+    whatever `--db` or `DATABASE_URL` resolves to, and if ReviQ runs in Docker
+    while this command runs on the host, that is a *different file*. Adoption
+    would succeed, into a database nobody reads, and the corpus would appear to
+    have vanished.
+
+    A missing `project` table means the same thing one step earlier — the file
+    is not a ReviQ database at all, usually because it was just created empty by
+    this very invocation.
+    """
+    if project_id is None:
+        return
+    tables = {
+        row["name"] for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        )
+    }
+    if "project" not in tables:
+        sys.exit(
+            f"error: {db_path} holds no reviews — it has the retrieval tables "
+            f"and nothing else.\n"
+            f"       If ReviQ runs in Docker, its database is inside the volume, "
+            f"not here. Point --db at the file ReviQ actually opens, or run this "
+            f"inside the container."
+        )
+    known = [row["id"] for row in conn.execute("SELECT id FROM project ORDER BY id")]
+    if project_id not in known:
+        listed = ", ".join(str(i) for i in known) if known else "none"
+        sys.exit(
+            f"error: {db_path} has no project {project_id}. Projects there: {listed}"
+        )
+
+
 def cmd_adopt(args: argparse.Namespace) -> int:
     """Bring a corpus from a separate retrieval database into this one.
 
@@ -521,6 +574,7 @@ def cmd_adopt(args: argparse.Namespace) -> int:
         sys.exit(f"error: {exc}")
 
     conn = db.connect(args.db)
+    _check_target_project(conn, args.db, args.project)
     try:
         result = adopt.adopt(
             source, conn, project_id=args.project, runs_dir=args.runs_dir,

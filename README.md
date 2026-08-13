@@ -123,6 +123,22 @@ into is not in place. Running it twice adds nothing twice. The dry run does the
 identical work and rolls it back, so its counts are the outcome rather than a
 prediction of it.
 
+**Mind which database it writes to.** Without `--db` the target comes from
+`DATABASE_URL`, and without that from `DATA_DIR/reviq.db` — relative to the
+working directory. If ReviQ runs in Docker, its database is inside the volume
+and *not* the same file, so run the adoption in the container, with the old
+corpus mounted read-only:
+
+```bash
+docker compose run --rm -v "$PWD/backend/data:/import:ro" slr-backend \
+  python -m app.retrieval adopt /import/glr.sqlite3 --project 1 \
+  --runs-dir /import/runs --dry-run
+```
+
+`adopt` refuses a target that holds no reviews, or one without the project you
+named, so pointing it at the wrong file fails loudly rather than succeeding into
+a database nobody reads.
+
 Every record is imported, including the ones that could not be retrieved. That
 is deliberate on both sides: the package reports blocked, failed and empty
 retrievals so a consumer's "records identified" reconciles with the retrieval
@@ -259,8 +275,8 @@ isolated FastAPI `TestClient`s against in-memory SQLite databases.
 | End-to-end SLR pipeline | `backend/tests/test_integration_slr_pipeline.py` | Walks Setup → BibTeX Import → Screening (with conflicts) → Conflict Resolution → Full-Text → Quality Assessment → Data Extraction → Results; verifies κ at each stage, that per-phase κ is independent of other phases, that conflict resolution clears the open-conflict count, that QA summary only lists included papers, that custom QA thresholds reclassify papers correctly, that the extraction summary reflects only filled values |
 | Grey literature import | `backend/tests/test_integration_grey_import.py` | A retrieval package becomes grey papers that stay out of the formal stream and out of the PRISMA database box; search hits and snowballed documents separate; unretrievable records import flagged, stay screenable on title and snippet, and keep their cause per source; the retrieval timestamp, payload digest and archive offset survive the round trip and join to their paper; the package's own counts are kept for reconciliation; re-importing an overlapping package creates no second paper; byte-identical content under two URLs is one source while two documents sharing a generic title are two; a package predating `retrieval_reason` still imports; foreign and future-versioned files are refused with HTTP 400 |
 | One database, both halves | `backend/tests/test_integration_one_database.py` | The only test that runs on a real file rather than in memory, because that is the only way the retrieval side can be opened at all: a retrieval written with plain `sqlite3` is visible to a request served through SQLAlchemy; importing it needs no file passing through disk; the resulting grey source carries join keys into the retrieval tables, so the archived text is one join away; an uploaded package from elsewhere leaves those keys empty; one project's import does not pick up another's runs |
-| Adopting a separate corpus | `backend/tests/retrieval/test_adopt.py` | Every row arrives, a shared URL stays one document, and no row points at a key from the other database — checked against a target seeded with colliding ids; adopting twice changes nothing; WARC paths are rewritten and a missing file refuses without writing; the source is not modified; a source predating a table still adopts; the dry run reports exactly what the real run does |
-| The command line surface | `backend/tests/retrieval/test_cli_arguments.py` | `--project` parses after the three subcommands that record a run and is refused by the seven that would ignore it; `--db` stays global; and the subcommands offering `--project` are exactly the ones whose handler reads it — checked against `cli.py` itself, so a fourth reader breaks the test instead of silently seeing `None` forever |
+| Adopting a separate corpus | `backend/tests/retrieval/test_adopt.py` | Every row arrives, a shared URL stays one document, and no row points at a key from the other database — checked against a target seeded with colliding ids; adopting twice changes nothing; WARC paths are rewritten and a missing file refuses without writing; the source is not modified; a source predating a table still adopts; the dry run reports exactly what the real run does; and a target holding no reviews, or not the project named, is refused rather than adopted into |
+| The command line surface | `backend/tests/retrieval/test_cli_arguments.py` | `--project` parses after the three subcommands that record a run and is refused by the seven that would ignore it; `--db` stays global; the subcommands offering `--project` are exactly the ones whose handler reads it — checked against `cli.py` itself, so a fourth reader breaks the test instead of silently seeing `None` forever; and which file a retrieval writes to without `--db`, including that an unset `DATABASE_URL` stays relative instead of taking the container path literally |
 | One review's retrieval is its own | `backend/tests/retrieval/test_project_scope.py` | A project does not see another's snapshot through either reader — including the case where its own attempt was blocked and the other project's is clean; the cross-run rule survives the narrowing, so a refetch still improves the corpus it repairs; the project is derived from the runs in scope, and a hand-assembled mix falls back to the global view; report, export and refetch agree on what the corpus is |
 | Replication round-trip — derived numbers | `backend/tests/test_integration_replication_drift.py` | Builds a fully populated project (taxonomy, extraction schema, screening + full-text decisions with conflicts resolved, QA scores, extraction values), exports the replication ZIP, re-imports into a fresh instance, then asserts every reviewer-visible derived statistic (PRISMA counts, both κ phases with CI/PABAK/Pₒ, QA aggregation by level, extraction value distributions) matches the source bit-for-bit within numerical tolerance — including after a double round-trip |
 

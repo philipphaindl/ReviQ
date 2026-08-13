@@ -312,6 +312,67 @@ def test_a_source_that_does_not_exist_says_so(tmp_path):
 # --- an older source -------------------------------------------------------
 
 
+# --- the target ------------------------------------------------------------
+
+
+def adopt_via_cli(source_path, db_path, runs_dir, *, project=None):
+    """The command as a user runs it, so the guard around it is exercised too."""
+    from app.retrieval import cli
+
+    argv = ["--db", str(db_path), "adopt", str(source_path), "--dry-run",
+            "--runs-dir", str(runs_dir)]
+    if project is not None:
+        argv += ["--project", str(project)]
+    return cli.main(argv)
+
+
+def test_adopting_into_a_file_that_holds_no_reviews_is_refused(source, tmp_path, runs_dir):
+    """The expensive silent mistake. `--db` and `DATABASE_URL` decide the
+    target, and if ReviQ runs in Docker while this command runs on the host,
+    that is a different file — adoption would succeed into a database nobody
+    reads, and the corpus would look like it had vanished."""
+    with pytest.raises(SystemExit) as exit_:
+        adopt_via_cli(source, tmp_path / "wrong.db", runs_dir, project=1)
+
+    assert "holds no reviews" in str(exit_.value)
+    assert "Docker" in str(exit_.value)
+
+
+def test_adopting_under_a_project_that_does_not_exist_is_refused(source, tmp_path, runs_dir):
+    """A typo'd id would otherwise file the whole corpus under a review that
+    is not there, and every reader scoped to a real project would miss it."""
+    db_path = tmp_path / "reviq.db"
+    conn = db.connect(db_path)
+    conn.execute("CREATE TABLE project (id INTEGER PRIMARY KEY, title TEXT)")
+    conn.execute("INSERT INTO project (id, title) VALUES (2, 'MLR')")
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(SystemExit) as exit_:
+        adopt_via_cli(source, db_path, runs_dir, project=1)
+
+    assert "no project 1" in str(exit_.value)
+    assert "2" in str(exit_.value)      # says what is actually there
+
+
+def test_adopting_under_an_existing_project_proceeds(source, tmp_path, runs_dir):
+    db_path = tmp_path / "reviq.db"
+    conn = db.connect(db_path)
+    conn.execute("CREATE TABLE project (id INTEGER PRIMARY KEY, title TEXT)")
+    conn.execute("INSERT INTO project (id, title) VALUES (2, 'MLR')")
+    conn.commit()
+    conn.close()
+
+    assert adopt_via_cli(source, db_path, runs_dir, project=2) == 0
+
+
+def test_without_a_project_no_review_is_required(source, tmp_path, runs_dir):
+    """Deliberately still allowed: runs that belong to no review are the
+    pre-merge behaviour, and a retrieval database on its own is a valid thing
+    to hold."""
+    assert adopt_via_cli(source, tmp_path / "bare.db", runs_dir) == 0
+
+
 def test_a_source_predating_a_table_still_adopts(source, target, runs_dir):
     """The normal case for this command: the corpus was retrieved before some
     of today's tables existed."""

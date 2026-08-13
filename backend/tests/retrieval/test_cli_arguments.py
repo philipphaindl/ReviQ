@@ -12,11 +12,17 @@ exactly the ones that *read* it. A fourth reader added without a fourth
 declaration would otherwise take `None` forever and file its runs under no
 review at all — silently, because argparse has no opinion about a flag nobody
 declared.
+
+The second half of the file covers `default_db()`, which decides *which file*
+a retrieval writes to when `--db` is not given. That is the other thing the
+untested surface got wrong: taking `app.database`'s container-shaped default
+literally made every local invocation try to create `/data`.
 """
 
 import argparse
 import ast
 import inspect
+from pathlib import Path
 
 import pytest
 
@@ -111,6 +117,69 @@ def test_db_defaults_to_none_so_main_can_derive_it(parser):
     into the parser would read the environment at import time, before a test or
     a caller had a chance to set it."""
     assert parser.parse_args(["report", "run-1"]).db is None
+
+
+# --- which file the retrieval writes to -----------------------------------
+
+
+def test_without_a_database_url_the_default_is_relative(monkeypatch):
+    """The case that broke a real run. `app.database` defaults `DATABASE_URL`
+    to `sqlite:////data/reviq.db` because Compose always sets the variable
+    anyway — but taken literally in a checkout that is an absolute path on a
+    read-only root, and the first thing `db.connect` does is try to create it.
+    """
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("DATA_DIR", raising=False)
+
+    assert cli.default_db() == Path("data/reviq.db")
+
+
+def test_data_dir_moves_the_default_without_a_database_url(monkeypatch):
+    """What the container gets: Compose sets `DATA_DIR=/data`, so an
+    unconfigured retrieval still lands inside the volume rather than in the
+    image, where the next `--build` would discard it."""
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("DATA_DIR", "/data")
+
+    assert cli.default_db() == Path("/data/reviq.db")
+
+
+def test_a_configured_database_url_wins(monkeypatch):
+    """The point of the merge: configured once, the CLI and the API open the
+    same file. `DATA_DIR` must not pull the retrieval away from it."""
+    monkeypatch.setenv("DATABASE_URL", "sqlite:////srv/reviq.db")
+    monkeypatch.setenv("DATA_DIR", "/somewhere/else")
+
+    assert cli.default_db() == Path("/srv/reviq.db")
+
+
+def test_a_relative_database_url_stays_relative(monkeypatch):
+    """Three slashes is SQLAlchemy's relative form, four is absolute. Getting
+    that backwards would put a corpus one directory off and look like it had
+    vanished."""
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///./local.db")
+
+    assert cli.default_db() == Path("local.db")
+
+
+def test_a_misconfigured_database_url_is_not_swallowed(monkeypatch):
+    """Somebody set it. Quietly writing somewhere else instead is the
+    two-databases situation this step existed to remove."""
+    monkeypatch.setenv("DATABASE_URL", "sqlite://")
+
+    with pytest.raises(Exception, match="in-memory"):
+        cli.default_db()
+
+
+def test_the_environment_is_read_when_the_command_runs(monkeypatch):
+    """Not at import. `app.database.DATABASE_URL` is frozen the first time that
+    module loads; a CLI is invoked once, and what its environment says *now* is
+    what it means."""
+    monkeypatch.setenv("DATABASE_URL", "sqlite:////first.db")
+    assert cli.default_db() == Path("/first.db")
+
+    monkeypatch.setenv("DATABASE_URL", "sqlite:////second.db")
+    assert cli.default_db() == Path("/second.db")
 
 
 # --- the surface matches the code -----------------------------------------
