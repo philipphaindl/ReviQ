@@ -26,7 +26,7 @@ from app.main import app
 from app.models import Reviewer
 
 
-# A retrievable glr record with every field a real package carries. Tests
+# A retrievable retrieval-package record with every field a real package carries. Tests
 # override only the field under examination, so a new field in the format is
 # added here once rather than in every fixture.
 GREY_RECORD_DEFAULTS: dict[str, Any] = {
@@ -120,19 +120,20 @@ class Instance:
         r.raise_for_status()
         return r.json()
 
-    # ── Grey literature import (a glr-interchange-v1 package) ────────────────
+    # ── Grey literature import (a reviq-grey-v1 package) ─────────────────────
 
     def import_grey(self, pid: int, records: list[dict], *,
                     engine: str = "google", counts: Optional[dict] = None,
-                    schema: str = "glr-interchange-v1",
+                    schema: str = "reviq-grey-v1",
                     filename: str = "records.json") -> dict:
-        """Post a glr package. `records` are partial; defaults fill the rest."""
+        """Post a grey-literature retrieval package. `records` are partial;
+        defaults fill the rest."""
         full = [{**GREY_RECORD_DEFAULTS, **r} for r in records]
         payload = {
             "_schema": schema,
             "_exported_at": "2026-08-12T13:41:52Z",
-            "tool": {"name": "glr", "version": "0.1.0"},
-            "canonicalization": "glr.urls.canonicalize/1",
+            "tool": {"name": "reviq-retrieval", "version": "0.1.0"},
+            "canonicalization": "reviq.urls.canonicalize/1",
             "runs": [{"run_id": "r1", "engine": engine, "query": "AI maturity model"}],
             "archive": [],
             "counts": counts or {
@@ -277,6 +278,7 @@ def make_instance(label: str = "instance", db_path=None) -> Instance:
         # `schema.sql` on every connection, so this both creates the retrieval
         # tables and hands the request a connection to them.
         from app.retrieval import db as retrieval_db
+        from app.routers.replication import _optional_retrieval_conn
 
         def retrieval_conn():
             conn = retrieval_db.connect(Path(db_path))
@@ -286,6 +288,10 @@ def make_instance(label: str = "instance", db_path=None) -> Instance:
                 conn.close()
 
         app.dependency_overrides[get_retrieval_conn] = retrieval_conn
+        # Replication's own dependency degrades to None rather than raising
+        # when retrieval is unreachable, so it cannot share `get_retrieval_conn`'s
+        # override wiring above — it needs its own, pointed at the same file.
+        app.dependency_overrides[_optional_retrieval_conn] = retrieval_conn
     return Instance(client=TestClient(app), session=session, label=label)
 
 

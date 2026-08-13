@@ -791,3 +791,57 @@ on. Copying 207 MB is not an import command's job: it would fail halfway on a
 full disk and leave a half-migrated archive behind. The source is opened
 read-only in SQLite's sense rather than by convention, because `db.connect`
 would otherwise apply the current schema to it on the way in.
+
+## D30 — A replication package carries its own retrieval, adopted rather than re-derived
+
+`reviq-replication-v1` exported papers only. A grey paper arrived at the other
+installation with a title and an abstract but none of what makes it a *grey*
+source — no SHA-256, no archive pointer, no retrieval timestamp — because
+nothing in the package carried `GreySource`, let alone the retrieval rows its
+`document_id`/`snapshot_id` point at. v2 adds both: `grey_sources`,
+`grey_imports`, and `retrieval` — runs, documents, snapshots, and the rest —
+scoped to the exporting project's own runs (D28), because the shared
+installation's retrieval file holds every project's corpus and copying it
+wholesale would leak one review's sources into another's package.
+
+**The remapping reuses `adopt`, through a throwaway source database, rather
+than a second implementation.** `GreySource.document_id`/`snapshot_id` are
+integer keys with exactly the same problem D29 solves: copied verbatim, they
+land on whatever row holds that number in the target. The import writes the
+package's `retrieval` rows into a fresh SQLite file (`app.retrieval.db.connect`
+creates the schema; a few thousand rows costs nothing) and calls `adopt.adopt`
+against it — `require_archive=False`, because a package's WARC files do not
+travel with it by default (`--with-archive` bundles them; without it, a
+snapshot's SHA-256 and archive path are still a citation, just not the bytes
+yet), and `Result.document_map`/`snapshot_map` (added for this) are what let
+the caller translate `GreySource`'s own keys afterward.
+
+**`session.commit()` happens before the retrieval side is touched, not once at
+the end.** `retrieval` is a second SQLite connection to the same file `session`
+writes through, and SQLite serialises writers across every connection to a
+file — a write on one while the other still holds its transaction open (from
+the flushes earlier in the import) deadlocks with "database is locked",
+reliably, not occasionally. Committing the review side first releases it. The
+cost is real: a failure in the grey-literature section afterward leaves the
+rest of the import committed rather than rolling back with it. Accepted rather
+than solved, because SQLite offers no way to share one transaction across two
+connections to begin with.
+
+**The import endpoint is sync, not async.** FastAPI resolves a sync
+dependency for an `async def` endpoint in a thread pool and then runs the
+endpoint body on the event loop's own thread — a different thread — and
+sqlite3 refuses a connection outside the thread that opened it. `async def`
+here bought nothing but `await file.read()`, which `file.file.read()` does
+without it.
+
+**A `GreySource` with no SHA-256 falls back to "the document's only
+snapshot", not further.** A failed retrieval never got a hash, so the
+canonical-URL/SHA-256 fallback that handles an idempotent re-import (D29's
+"already present" case, where `adopt`'s maps come back empty) cannot apply.
+When a document was fetched exactly once, its one snapshot is the only
+candidate regardless of hash. When it was fetched more than once — several
+failed attempts across different runs — nothing here can tell which attempt
+the source described, and `snapshot_id` stays NULL rather than picking one
+that looks plausible. Verified against the adopted pilot corpus: 424 grey
+sources round-tripped through export → import, 414 resolved outright and the
+remaining 10 were every one of them a document retried more than once.

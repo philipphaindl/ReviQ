@@ -141,6 +141,28 @@ def test_the_shared_document_stays_one_document(source, target, runs_dir):
     assert rows == 1
 
 
+def test_the_id_maps_are_exposed_for_a_caller_that_needs_them(source, target, runs_dir):
+    """`GreySource.document_id`/`snapshot_id` on the replication side have to be
+    translated the same way every other foreign key in this module is — through
+    the map this call already built, not re-derived."""
+    src = adopt.open_source(source)
+    result = adopt.adopt(src, target, project_id=1, runs_dir=runs_dir)
+    src.close()
+
+    assert len(result.document_map) == 3   # a, shared, b
+    assert len(result.snapshot_map) == 4   # a, shared×2 runs, b
+    for old_id, new_id in result.document_map.items():
+        row = target.execute(
+            "SELECT canonical_url FROM documents WHERE document_id = ?", (new_id,)
+        ).fetchone()
+        assert row is not None
+    for old_id, new_id in result.snapshot_map.items():
+        row = target.execute(
+            "SELECT snapshot_id FROM snapshots WHERE snapshot_id = ?", (new_id,)
+        ).fetchone()
+        assert row is not None
+
+
 def test_no_row_points_at_a_key_from_the_other_database(source, target, runs_dir):
     """The failure this whole module exists for. An `extraction_id` means
     nothing outside the file that assigned it, so an extraction copied verbatim
@@ -247,6 +269,21 @@ def test_a_missing_archive_is_reported_by_the_dry_run_too(source, target, runs_d
     with pytest.raises(adopt.AdoptError):
         adopt.adopt(src, target, project_id=1, runs_dir=runs_dir, dry_run=True)
     src.close()
+
+
+def test_require_archive_false_writes_the_metadata_anyway(source, target, runs_dir):
+    """A replication package's WARC files do not travel with it — a few hundred
+    megabytes for one batch. The rows that describe them must still land."""
+    (runs_dir / "run-a" / "snapshots.warc.gz").unlink()
+    (runs_dir / "run-b" / "snapshots.warc.gz").unlink()
+
+    src = adopt.open_source(source)
+    result = adopt.adopt(src, target, project_id=1, runs_dir=runs_dir,
+                         require_archive=False)
+    src.close()
+
+    assert counts(target)["runs"] == 2
+    assert len(result.missing_archives) == 2
 
 
 # --- the project ----------------------------------------------------------

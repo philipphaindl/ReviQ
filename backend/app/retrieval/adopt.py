@@ -99,6 +99,12 @@ class Result:
     # (stored path, path it was rewritten to) for every archive referenced.
     archives: list[tuple[str, str]] = field(default_factory=list)
     missing_archives: list[str] = field(default_factory=list)
+    # Source id -> target id, for a caller that has to remap a reference of its
+    # own once the adopted rows land under new keys — the replication package
+    # importer, translating `GreySource.document_id`/`snapshot_id`, is the one
+    # so far. Empty unless the corresponding table was adopted.
+    document_map: dict[int, int] = field(default_factory=dict)
+    snapshot_map: dict[int, int] = field(default_factory=dict)
 
     @property
     def rows(self) -> int:
@@ -158,12 +164,22 @@ def _rewrite_warc(stored: str | None, run_id: str, runs_dir: Path) -> str | None
 
 
 def adopt(src: sqlite3.Connection, dst: sqlite3.Connection, *,
-          project_id: int | None, runs_dir: Path, dry_run: bool = False) -> Result:
+          project_id: int | None, runs_dir: Path, dry_run: bool = False,
+          require_archive: bool = True) -> Result:
     """Adopt every run the target does not already have.
 
     One transaction: the corpus arrives whole, or the target is untouched. A
     dry run does the same work and rolls it back, so what it reports is what
     would happen rather than a second opinion about it.
+
+    `require_archive` refuses (and writes nothing) when a referenced WARC is
+    not in place — the right default for the pilot-corpus migration this
+    command was built for, where the archive is expected to travel with the
+    database. A replication package's retrieval data passes `False`: its WARC
+    files do not travel with the package (a few hundred megabytes for one
+    batch), so the metadata must still land even when the bytes are not local
+    yet — the same tolerance `GreySource.archive_filename` already has for a
+    package from a co-reviewer.
     """
     if not _columns(src, "runs"):
         raise AdoptError("the source has no `runs` table — not a retrieval database")
@@ -182,11 +198,13 @@ def adopt(src: sqlite3.Connection, dst: sqlite3.Connection, *,
     try:
         _copy_runs(src, dst, adopted, project_id)
         maps = {"documents": _copy_documents(src, dst, result)}
+        result.document_map = maps["documents"]
         for spec in SPECS:
             result.tables.append(
                 _copy_table(src, dst, spec, adopted, maps, runs_dir, result)
             )
-        if result.missing_archives:
+        result.snapshot_map = maps.get("snapshots", {})
+        if require_archive and result.missing_archives:
             raise AdoptError(
                 "the archive is not in place, so nothing was written. Move the "
                 "WARC files into position and run this again. Missing:\n  "

@@ -1,35 +1,57 @@
 """
-Replication package export / import  (reviq-replication-v1)
+Replication package export / import  (reviq-replication-v2)
 
 ZIP layout:
-  project.json          – full SLR data in reviq-replication-v1 schema
+  project.json          – full SLR data in reviq-replication-v2 schema
   bibtex/
     <db_name>.bib       – one raw results file per database search string
+  archives/<run_id>/*   – WARC files, only when exported with --with-archive
+
+v2 adds the grey-literature side: `grey_sources`, `grey_imports`, and the
+retrieval rows behind them (`retrieval` — runs, documents, snapshots, and so
+on, scoped to this project's own runs per D28). v1 exported papers only, which
+silently dropped a grey paper's provenance — the SHA-256, the archive pointer,
+the retrieval timestamp — everything that makes it a citable grey source
+rather than just a URL. A v1 package still imports; its papers arrive without
+that provenance, exactly as before.
 """
 from __future__ import annotations
 
 import io
 import json
 import os
+import shutil
+import sqlite3
+import tempfile
 import zipfile
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, Query
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 
-from ..database import get_session
+from ..database import RetrievalDatabaseUnavailable, get_session, retrieval_db_path
 from ..models import (
     ConflictLog, DatabaseSearchString, ExclusionCriterion, ExtractionField,
-    ExtractionRecord, FinalDecision, InclusionCriterion, Paper,
-    PaperDatabaseLink, Project, QACriterion, QAScore, Reviewer,
+    ExtractionRecord, FinalDecision, GreyImport, GreySource, InclusionCriterion,
+    Paper, PaperDatabaseLink, Project, QACriterion, QAScore, Reviewer,
     ReviewerDecision, SnowballingIteration, TaxonomyEntry,
 )
+from ..retrieval import adopt as retrieval_adopt
+from ..retrieval import db as retrieval_db
 
 router = APIRouter(prefix="/projects", tags=["replication"])
 
-SCHEMA_VERSION = "reviq-replication-v1"
+SCHEMA_VERSION = "reviq-replication-v2"
+
+# Dependency order: every table after the ones it points at, so the retrieval
+# schema's foreign keys (PRAGMA foreign_keys = ON) hold at each insert.
+RETRIEVAL_TABLES = (
+    "runs", "documents", "serp_results", "snapshots", "extractions",
+    "extraction_history", "document_links", "figures", "figure_descriptions",
+)
 
 # Paper fields carried through an import. Derived from the model so that adding
 # a column does not silently drop it from every replication package; the three
@@ -51,12 +73,114 @@ def _safe_name(s: str) -> str:
     return "".join(c if c.isalnum() or c in "-_" else "_" for c in s)
 
 
+def _runs_dir() -> Path:
+    return Path(os.environ.get("DATA_DIR", "/data")) / "runs"
+
+
+def _optional_retrieval_conn():
+    """Like `app.database.get_retrieval_conn`, but yields None instead of
+    raising when the retrieval side is not reachable — an in-memory
+    `DATABASE_URL`, or a `DATA_DIR` this process cannot write to. The
+    grey-literature side of a replication package is additive: a package with
+    no grey papers, or built against a deployment where retrieval genuinely
+    cannot open, is still a valid package for everything else in it.
+    """
+    try:
+        path = retrieval_db_path()
+        conn = retrieval_db.connect(path)
+    except (RetrievalDatabaseUnavailable, OSError):
+        yield None
+        return
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+def _select_in(conn: sqlite3.Connection, table: str, column: str,
+               values) -> list[dict]:
+    """`SELECT * FROM table WHERE column IN (values)`, as plain dicts.
+
+    `values` is checked for emptiness first: SQLite has no empty `IN ()`, and
+    the values a caller here passes are usually the very set that has already
+    been proven possibly-empty (a project with grey papers but no snapshots).
+    """
+    values = list(values)
+    if not values:
+        return []
+    marks = ", ".join("?" for _ in values)
+    return [dict(r) for r in
+            conn.execute(f"SELECT * FROM {table} WHERE {column} IN ({marks})", values)]
+
+
+def _export_retrieval(retrieval: Optional[sqlite3.Connection], pid: int) -> Optional[dict]:
+    """The retrieval rows behind this project's grey sources.
+
+    Scoped to `runs.project_id = pid` (D28: a run belongs to a review, a
+    document belongs to nobody) — `retrieval` is one shared file across every
+    project on this installation, and copying documents wholesale would leak
+    another project's corpus into this one's package.
+
+    Returns None when the retrieval side is not reachable at all, or when this
+    project issued no runs of its own — the case for a project whose grey
+    papers arrived as a package from a co-reviewer, with no local retrieval
+    to export.
+    """
+    if retrieval is None:
+        return None
+    run_rows = [dict(r) for r in
+                retrieval.execute("SELECT * FROM runs WHERE project_id = ?", (pid,))]
+    if not run_rows:
+        return None
+    run_ids = [r["run_id"] for r in run_rows]
+
+    serp_results = _select_in(retrieval, "serp_results", "run_id", run_ids)
+    snapshots = _select_in(retrieval, "snapshots", "run_id", run_ids)
+    extractions = _select_in(retrieval, "extractions", "snapshot_id",
+                             [r["snapshot_id"] for r in snapshots])
+    # Scoped like `adopt.SPECS` scopes it: by the run that superseded the
+    # extraction, not the run that produced the snapshot it belongs to.
+    extraction_history = _select_in(retrieval, "extraction_history",
+                                    "superseded_by_run", run_ids)
+    document_links = _select_in(retrieval, "document_links", "run_id", run_ids)
+    figures = _select_in(retrieval, "figures", "run_id", run_ids)
+    figure_descriptions = _select_in(retrieval, "figure_descriptions", "figure_id",
+                                     [r["figure_id"] for r in figures])
+
+    document_ids = {r["document_id"] for r in serp_results if r["document_id"]}
+    document_ids.update(r["document_id"] for r in snapshots)
+    document_ids.update(r["document_id"] for r in figures)
+    for r in document_links:
+        document_ids.add(r["from_document_id"])
+        document_ids.add(r["to_document_id"])
+    documents = _select_in(retrieval, "documents", "document_id", document_ids)
+
+    return {
+        "runs": run_rows, "documents": documents, "serp_results": serp_results,
+        "snapshots": snapshots, "extractions": extractions,
+        "extraction_history": extraction_history,
+        "document_links": document_links, "figures": figures,
+        "figure_descriptions": figure_descriptions,
+    }
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # EXPORT
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.get("/{pid}/replication/export")
-def export_replication_package(pid: int, session: Session = Depends(get_session)):
+def export_replication_package(
+    pid: int,
+    with_archive: bool = Query(False, description=(
+        "Bundle the WARC files behind this project's grey sources into the "
+        "ZIP. Off by default: a few hundred megabytes for one batch. Without "
+        "it, snapshots and figures still carry their SHA-256 and archive "
+        "path — a citation, not the bytes — and the recipient's own installation "
+        "can supply the archive if it happens to hold it."
+    )),
+    session: Session = Depends(get_session),
+    retrieval: Optional[sqlite3.Connection] = Depends(_optional_retrieval_conn),
+):
     project = session.get(Project, pid)
     if not project:
         raise HTTPException(404, "Project not found")
@@ -79,6 +203,9 @@ def export_replication_package(pid: int, session: Session = Depends(get_session)
     qa_scores         = q(QAScore)
     snow_iterations   = q(SnowballingIteration)
     db_links          = q(PaperDatabaseLink)
+    grey_sources      = q(GreySource)
+    grey_imports      = q(GreyImport)
+    retrieval_pkg     = _export_retrieval(retrieval, pid)
 
     # Map db_name → path inside the ZIP
     bib_zip_paths: dict[str, str] = {}
@@ -108,12 +235,26 @@ def export_replication_package(pid: int, session: Session = Depends(get_session)
         "qa_scores":          [_row(s) for s in qa_scores],
         "snowballing_iterations": [_row(it) for it in snow_iterations],
         "paper_database_links":   [_row(l) for l in db_links],
+        "grey_sources":           [_row(g) for g in grey_sources],
+        "grey_imports":           [_row(g) for g in grey_imports],
+        "retrieval":              retrieval_pkg,
     }
 
     # Build the ZIP in memory
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("project.json", json.dumps(pkg, indent=2, default=str))
+
+        if with_archive and retrieval_pkg:
+            runs_dir = _runs_dir()
+            for run_id in {r["run_id"] for r in retrieval_pkg["runs"]}:
+                run_dir = runs_dir / run_id
+                if not run_dir.is_dir():
+                    continue
+                for fname in os.listdir(run_dir):
+                    fpath = run_dir / fname
+                    if fpath.is_file():
+                        zf.write(fpath, f"archives/{run_id}/{fname}")
 
         bib_base = os.environ.get("BIB_BASE_DIR", "/bib_data")
         data_dir = os.environ.get("DATA_DIR", "/data")
@@ -170,14 +311,20 @@ def export_replication_package(pid: int, session: Session = Depends(get_session)
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.post("/replication/import")
-async def import_replication_package(
+def import_replication_package(
     file: UploadFile = File(...),
     session: Session = Depends(get_session),
+    retrieval: Optional[sqlite3.Connection] = Depends(_optional_retrieval_conn),
 ):
     if not file.filename or not file.filename.endswith(".zip"):
         raise HTTPException(400, "Expected a .zip file")
 
-    raw = await file.read()
+    # Sync, not async, on purpose: FastAPI runs a sync endpoint and all of its
+    # sync dependencies (`retrieval` above) in the same worker thread. An
+    # `async def` here would resolve `retrieval` in a thread pool and then run
+    # this body on the event loop's own thread — a different thread — and
+    # sqlite3 refuses a connection used outside the thread that opened it.
+    raw = file.file.read()
     try:
         zf = zipfile.ZipFile(io.BytesIO(raw))
     except zipfile.BadZipFile:
@@ -407,6 +554,151 @@ async def import_replication_package(
                     fh.write(bib_content)
     except OSError:
         pass  # bib files are optional metadata; skip if filesystem is read-only
+
+    # Committed here, before the grey-literature section below, rather than
+    # once at the very end: `retrieval` is a second connection to the same
+    # SQLite file, and `adopt.adopt` writes through it. A write on one
+    # connection while `session` still holds this one's — from the flushes
+    # above — deadlocks (`database is locked`), because SQLite serialises
+    # writers across every connection to a file regardless of journal mode.
+    # Committing first releases it. The cost: if the grey-literature section
+    # below fails, this part of the import (papers, decisions, everything
+    # else) stays committed rather than rolling back with it — an acceptable
+    # trade against a guaranteed deadlock, and the one other place in this
+    # codebase that mixes the two connections (`import_grey_from_retrieval`)
+    # never writes through `retrieval`, so it never had to make this choice.
+    session.commit()
+
+    # ── Grey-literature retrieval (v2) ───────────────────────────────────────
+    # The rows behind `grey_sources`' document_id/snapshot_id — scoped, on the
+    # exporting side, to that project's own runs (D28). Remapped through
+    # `app.retrieval.adopt`, the same command this installation already uses
+    # to bring in the pilot corpus, rather than a second implementation of the
+    # same remapping.
+    document_map: dict[int, int] = {}
+    snapshot_map: dict[int, int] = {}
+    retrieval_pkg = pkg.get("retrieval")
+    if retrieval_pkg and retrieval is not None:
+        runs_dir = _runs_dir()
+        # Bundled WARC files, when this package was exported with --with-archive.
+        for zip_path in zf.namelist():
+            if zip_path.startswith("archives/") and not zip_path.endswith("/"):
+                dest = runs_dir / Path(zip_path).relative_to("archives")
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                with open(dest, "wb") as fh:
+                    fh.write(zf.read(zip_path))
+
+        tmp_dir = Path(tempfile.mkdtemp(prefix="reviq-replication-"))
+        try:
+            src = retrieval_db.connect(tmp_dir / "src.sqlite3")
+            for table in RETRIEVAL_TABLES:
+                rows = retrieval_pkg.get(table) or []
+                if not rows:
+                    continue
+                columns = list(rows[0].keys())
+                marks = ", ".join("?" for _ in columns)
+                src.executemany(
+                    f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({marks})",
+                    [[r[c] for c in columns] for r in rows],
+                )
+            src.commit()
+            adopt_result = retrieval_adopt.adopt(
+                src, retrieval, project_id=pid, runs_dir=runs_dir,
+                require_archive=False,
+            )
+            document_map = adopt_result.document_map
+            snapshot_map = adopt_result.snapshot_map
+        finally:
+            src.close()
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    # ── Grey imports ──────────────────────────────────────────────────────────
+    grey_import_map: dict[int, int] = {}
+    for gi in pkg.get("grey_imports", []):
+        ngi = GreyImport(
+            project_id=pid,
+            schema_version=gi.get("schema_version"),
+            canonicalization=gi.get("canonicalization"),
+            tool_name=gi.get("tool_name"),
+            tool_version=gi.get("tool_version"),
+            exported_at_utc=gi.get("exported_at_utc"),
+            scope_kind=gi.get("scope_kind"),
+            scope_id=gi.get("scope_id"),
+            filename=gi.get("filename"),
+            queries=gi.get("queries"),
+            records_in_package=gi.get("records_in_package"),
+            documents_reported=gi.get("documents_reported"),
+            usable_reported=gi.get("usable_reported"),
+            imported_count=gi.get("imported_count", 0),
+            duplicate_count=gi.get("duplicate_count", 0),
+            already_present_count=gi.get("already_present_count", 0),
+            skipped_count=gi.get("skipped_count", 0),
+            imported_at=datetime.utcnow(),
+        )
+        session.add(ngi); session.flush()
+        grey_import_map[gi["id"]] = ngi.id
+
+    # ── Grey sources ──────────────────────────────────────────────────────────
+    # `document_id`/`snapshot_id` resolve through the maps `adopt` just built.
+    # When they miss — the retrieval data was not part of this package, or the
+    # run was already present so nothing new was adopted for it this time — a
+    # lookup by `canonical_url` (the identity that travels regardless of which
+    # installation retrieved it) is the fallback, the same tolerance a package
+    # from a co-reviewer already needs.
+    for gs in pkg.get("grey_sources", []):
+        pid_old = gs.get("paper_id")
+        if pid_old not in paper_map:
+            continue
+        new_doc_id = document_map.get(gs.get("document_id"))
+        if new_doc_id is None and gs.get("canonical_url") and retrieval is not None:
+            row = retrieval.execute(
+                "SELECT document_id FROM documents WHERE canonical_url = ?",
+                (gs["canonical_url"],),
+            ).fetchone()
+            new_doc_id = row["document_id"] if row else None
+        new_snap_id = snapshot_map.get(gs.get("snapshot_id"))
+        if new_snap_id is None and new_doc_id is not None and retrieval is not None:
+            if gs.get("sha256"):
+                row = retrieval.execute(
+                    "SELECT snapshot_id FROM snapshots WHERE document_id = ? AND sha256 = ?",
+                    (new_doc_id, gs["sha256"]),
+                ).fetchone()
+                new_snap_id = row["snapshot_id"] if row else None
+            else:
+                # A failed retrieval has no SHA-256 to match on. Falling back
+                # to "the document's only snapshot" is still safe when there
+                # is exactly one — ambiguous only when a document was fetched
+                # more than once, and this installation cannot then tell which
+                # attempt the source described, so it leaves the field NULL
+                # rather than guessing.
+                rows = retrieval.execute(
+                    "SELECT snapshot_id FROM snapshots WHERE document_id = ?",
+                    (new_doc_id,),
+                ).fetchall()
+                new_snap_id = rows[0]["snapshot_id"] if len(rows) == 1 else None
+        session.add(GreySource(
+            project_id=pid,
+            paper_id=paper_map[pid_old],
+            grey_import_id=grey_import_map.get(gs.get("grey_import_id")),
+            record_key=gs.get("record_key", ""),
+            canonical_url=gs.get("canonical_url", ""),
+            source_url=gs.get("source_url"),
+            host=gs.get("host"),
+            retrieved_at_utc=gs.get("retrieved_at_utc"),
+            sha256=gs.get("sha256"),
+            media_type=gs.get("media_type"),
+            content_length=gs.get("content_length"),
+            word_count=gs.get("word_count"),
+            archive_filename=gs.get("archive_filename"),
+            archive_offset=gs.get("archive_offset"),
+            archive_record_id=gs.get("archive_record_id"),
+            retrieval_status=gs.get("retrieval_status"),
+            retrieval_reason=gs.get("retrieval_reason"),
+            search_observations=gs.get("search_observations", 0),
+            best_rank=gs.get("best_rank"),
+            document_id=new_doc_id,
+            snapshot_id=new_snap_id,
+        ))
 
     session.commit()
     session.refresh(project)
