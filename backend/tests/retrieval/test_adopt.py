@@ -373,6 +373,30 @@ def test_without_a_project_no_review_is_required(source, tmp_path, runs_dir):
     assert adopt_via_cli(source, tmp_path / "bare.db", runs_dir) == 0
 
 
+def test_a_runs_dir_outside_data_dir_is_called_out(source, tmp_path, runs_dir,
+                                                   monkeypatch, capsys):
+    """`--runs-dir` is not where the archive is read from — it is what gets
+    stored. Pointed at a mount that exists only for the duration of the
+    command, every adopted snapshot ends up naming a file that is gone by the
+    time anyone reads it."""
+    monkeypatch.setenv("DATA_DIR", str(tmp_path / "elsewhere"))
+
+    adopt_via_cli(source, tmp_path / "bare.db", runs_dir)
+
+    assert "outside DATA_DIR" in capsys.readouterr().out
+
+
+def test_a_runs_dir_inside_data_dir_says_nothing(source, tmp_path, runs_dir,
+                                                 monkeypatch, capsys):
+    """The normal case stays quiet. A note printed every time is a note nobody
+    reads on the one run where it matters."""
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+
+    adopt_via_cli(source, tmp_path / "bare.db", runs_dir)
+
+    assert "outside DATA_DIR" not in capsys.readouterr().out
+
+
 def test_a_source_predating_a_table_still_adopts(source, target, runs_dir):
     """The normal case for this command: the corpus was retrieved before some
     of today's tables existed."""

@@ -126,18 +126,28 @@ prediction of it.
 **Mind which database it writes to.** Without `--db` the target comes from
 `DATABASE_URL`, and without that from `DATA_DIR/reviq.db` — relative to the
 working directory. If ReviQ runs in Docker, its database is inside the volume
-and *not* the same file, so run the adoption in the container, with the old
-corpus mounted read-only:
+and *not* the same file, so the adoption belongs in the container. Rebuild
+first: an image built before the retrieval package moved in has no
+`app.retrieval` to run.
 
 ```bash
+docker compose build slr-backend
+
+# 1. the archive goes into the volume, because its path is what the database
+#    stores and every later read resolves that string
 docker compose run --rm -v "$PWD/backend/data:/import:ro" slr-backend \
-  python -m app.retrieval adopt /import/glr.sqlite3 --project 1 \
-  --runs-dir /import/runs --dry-run
+  sh -c 'mkdir -p /data/runs && cp -rn /import/runs/. /data/runs/'
+
+# 2. then the corpus, with --runs-dir at its default of /data/runs
+docker compose run --rm -v "$PWD/backend/data:/import:ro" slr-backend \
+  python -m app.retrieval adopt /import/glr.sqlite3 --project 1 --dry-run
 ```
 
 `adopt` refuses a target that holds no reviews, or one without the project you
 named, so pointing it at the wrong file fails loudly rather than succeeding into
-a database nobody reads.
+a database nobody reads. It also says so when `--runs-dir` is outside
+`DATA_DIR` — those paths are stored, and a directory that only exists for the
+duration of the command leaves every snapshot pointing nowhere.
 
 Every record is imported, including the ones that could not be retrieved. That
 is deliberate on both sides: the package reports blocked, failed and empty

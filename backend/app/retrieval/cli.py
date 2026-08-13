@@ -561,6 +561,25 @@ def _check_target_project(conn, db_path: Path, project_id: int | None) -> None:
         )
 
 
+def _warn_if_runs_dir_is_transient(runs_dir: Path) -> None:
+    """`--runs-dir` is not where the archive is read from — it is what gets
+    *stored*.
+
+    Every adopted snapshot keeps `DATA_DIR/runs/<run_id>/<file>` as its
+    `warc_path`, and every later read resolves that string. Pointing it at a
+    directory that only exists during this command — a read-only mount used to
+    hand the old corpus in, say — writes paths that stop resolving the moment
+    the command exits, and the failure surfaces much later as a document whose
+    bytes cannot be found. Worth one line now.
+    """
+    data_dir = Path(os.environ.get("DATA_DIR", "data")).resolve()
+    if not runs_dir.resolve().is_relative_to(data_dir):
+        print(f"note: --runs-dir {runs_dir} is outside DATA_DIR ({data_dir}).\n"
+              f"      That path is stored on every snapshot and has to keep "
+              f"resolving after this command exits — move the WARC files into "
+              f"place first if it will not.")
+
+
 def cmd_adopt(args: argparse.Namespace) -> int:
     """Bring a corpus from a separate retrieval database into this one.
 
@@ -575,6 +594,7 @@ def cmd_adopt(args: argparse.Namespace) -> int:
 
     conn = db.connect(args.db)
     _check_target_project(conn, args.db, args.project)
+    _warn_if_runs_dir_is_transient(args.runs_dir)
     try:
         result = adopt.adopt(
             source, conn, project_id=args.project, runs_dir=args.runs_dir,
