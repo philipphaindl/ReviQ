@@ -19,6 +19,8 @@ What it holds:
 """
 from __future__ import annotations
 
+import hashlib
+
 import pytest
 
 from app.retrieval import db as retrieval_db
@@ -45,7 +47,15 @@ def conn(tmp_path):
 
 
 def retrieve(conn, run_id, urls, *, project_id, batch_id="batch-1", clean=True):
-    """A retrieval as `python -m app.retrieval run` would leave it."""
+    """A retrieval as `python -m app.retrieval run` would leave it.
+
+    The digest is derived from the URL, not from the position in the run. A
+    digest stands for the content, and the grey import deduplicates on it: two
+    distinct documents sharing one would be recognised as byte-identical — which
+    is correct behaviour and is tested in `test_integration_grey_import.py`, but
+    it is not what any test here is about, and a per-run counter collides as
+    soon as a fixture uses two runs of one document each.
+    """
     retrieval_db.start_run(conn, run_id, "AI maturity model", "google", "{}",
                            "0.1.0", batch_id=batch_id, project_id=project_id)
     for position, url in enumerate(urls, start=1):
@@ -59,7 +69,10 @@ def retrieve(conn, run_id, urls, *, project_id, batch_id="batch-1", clean=True):
             conn, document_id=document_id, run_id=run_id, requested_url=url,
             final_url=url, origin_status_first=200, proxy_status=200,
             content_type="text/html", content_length=51234,
-            sha256=f"{position:064d}", media_type="html",
+            # NULL on a failed fetch, as the real path leaves it: there were no
+            # bytes to digest.
+            sha256=hashlib.sha256(url.encode("utf-8")).hexdigest() if clean else None,
+            media_type="html",
             fetched_at_utc=retrieval_db.utc_now(),
             warc_path=f"data/runs/{run_id}/snapshots.warc.gz", warc_offset=0,
             warc_record_id="urn:uuid:x", credits_cost=1,
