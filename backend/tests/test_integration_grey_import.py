@@ -1,4 +1,4 @@
-"""A glr package taken into a project, at the HTTP level.
+"""A grey-literature retrieval package taken into a project, at the HTTP level.
 
 `test_grey_service.py` covers the mapping as pure functions. What this file
 covers is what only shows up once a database is involved: that the two streams
@@ -189,9 +189,9 @@ def test_the_package_is_recorded_so_the_search_stays_reproducible(project):
     imports = inst.grey_imports(pid)
     assert len(imports) == 1
     record = imports[0]
-    # glr pins the algorithm that produced every canonical URL and warns a
-    # consumer never to re-canonicalise with its own copy.
-    assert record["canonicalization"] == "glr.urls.canonicalize/1"
+    # The retrieval tool pins the algorithm that produced every canonical URL
+    # and warns a consumer never to re-canonicalise with its own copy.
+    assert record["canonicalization"] == "reviq.urls.canonicalize/1"
     assert record["tool_version"] == "0.1.0"
     assert record["scope_id"] == "batch-1"
     assert record["filename"] == "records.json"
@@ -391,6 +391,15 @@ def test_a_future_schema_version_is_refused_rather_than_guessed(instance):
     with pytest.raises(Exception):
         instance.import_grey(pid, [grey("a-1", "https://a.example/1")],
                              schema="glr-interchange-v2")
+
+
+def test_a_legacy_glr_interchange_package_still_imports(instance):
+    """A package a co-reviewer exported before retrieval moved into ReviQ and
+    was renamed from `glr-interchange-v1` to `reviq-grey-v1`."""
+    pid = instance.create_project(title="P")["id"]
+    result = instance.import_grey(pid, [grey("a-1", "https://a.example/1")],
+                                  schema="glr-interchange-v1")
+    assert result["imported_unique"] == 1
 
 
 def test_an_unknown_project_is_a_404(instance):

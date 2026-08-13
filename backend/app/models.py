@@ -213,14 +213,14 @@ class PaperDatabaseLink(SQLModel, table=True):
 
 
 class GreyImport(SQLModel, table=True):
-    """One `glr export-json` package taken into a project.
+    """One `python -m app.retrieval export-json` package taken into a project.
 
     Kept because a grey search is only reproducible if the package it came from
-    can be named. `canonicalization` in particular: glr pins the algorithm that
-    produced every canonical URL in a package and warns a consumer never to
-    re-canonicalise with its own copy, so two imports made under different
-    versions are not joinable — and this is what lets a later reader notice
-    that rather than silently joining them.
+    can be named. `canonicalization` in particular: the retrieval tool pins the
+    algorithm that produced every canonical URL in a package and warns a
+    consumer never to re-canonicalise with its own copy, so two imports made
+    under different versions are not joinable — and this is what lets a later
+    reader notice that rather than silently joining them.
 
     `documents_reported` and `usable_reported` are the package's own counts.
     Storing them next to what was actually imported is the reconciliation check
@@ -234,7 +234,7 @@ class GreyImport(SQLModel, table=True):
     tool_name: Optional[str] = None
     tool_version: Optional[str] = None
     exported_at_utc: Optional[str] = None
-    scope_kind: Optional[str] = None      # "run" or "batch" on the glr side
+    scope_kind: Optional[str] = None      # "run" or "batch" on the retrieval side
     scope_id: Optional[str] = None        # the run_id or batch_id retrieved
     filename: Optional[str] = None
     queries: Optional[int] = None
@@ -264,7 +264,7 @@ class GreySource(SQLModel, table=True):
     archived *are* the citation, because the page itself may be edited or gone
     by the time anyone checks.
 
-    `retrieval_reason` carries glr's vocabulary for why a source yielded
+    `retrieval_reason` carries the retrieval package's vocabulary for why a source yielded
     nothing: `origin_unreachable` (commonly publisher access control),
     `no_article_text` (a platform post that was never a document),
     `not_found` (link rot), and so on. They are different exclusion criteria

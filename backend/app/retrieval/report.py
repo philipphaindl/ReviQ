@@ -161,7 +161,7 @@ def _build(conn: sqlite3.Connection, scope: str, key: str, title: str) -> str:
     w = out.append
 
     w(f"# {title}\n")
-    w(f"Generated {utc_now()} by glr {__version__}.\n")
+    w(f"Generated {utc_now()} by ReviQ retrieval {__version__}.\n")
 
     # --- summary ---------------------------------------------------------
     w("## Summary\n")

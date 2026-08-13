@@ -1,6 +1,6 @@
 """
-Paper import — BibTeX for the formal stream, glr packages for the grey one —
-and reviewer decision import.
+Paper import — BibTeX for the formal stream, retrieval packages for the grey
+one — and reviewer decision import.
 
 **BibTeX** deduplicates in two tiers (see bibtex_service.detect_duplicates):
   1. DOI match (exact, case-insensitive) — high confidence
@@ -8,7 +8,8 @@ and reviewer decision import.
 Both tiers run against the existing paper pool in the DB, so importing a second
 database's BibTeX will correctly flag cross-database duplicates.
 
-**Grey literature** arrives as a `glr-interchange-v1` package and deduplicates
+**Grey literature** arrives as a `reviq-grey-v1` package (or the legacy
+`glr-interchange-v1`) and deduplicates
 on canonical URL and payload hash only — exact identities, never a title. The
 reasoning is in `grey_service`; the short version is that a grey title is
 whatever a page's `<title>` said and a false duplicate removes a source from a
@@ -85,7 +86,7 @@ async def import_grey_package(
     file: UploadFile = File(...),
     session: Session = Depends(get_session),
 ):
-    """Import a `glr-interchange-v1` package file into the grey stream.
+    """Import a `reviq-grey-v1` package file into the grey stream.
 
     The path for a package from a co-reviewer, or from a retrieval made
     elsewhere. Retrieval run by this installation goes through
@@ -131,7 +132,7 @@ def import_grey_from_retrieval(
     """Import a retrieval this installation made, without the file detour.
 
     The primary path now that both halves live in one database. It builds the
-    same `glr-interchange-v1` package the exporter writes and applies it through
+    same `reviq-grey-v1` package the exporter writes and applies it through
     the same function the upload endpoint uses — the format is not bypassed,
     only the round trip through disk.
 

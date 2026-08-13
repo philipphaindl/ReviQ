@@ -107,8 +107,8 @@ class TestPackageShape:
     def test_envelope_pins_schema_tool_and_canonicalisation(self, conn):
         run = seed(conn)
         pkg = build(conn, [run])
-        assert pkg["_schema"] == "glr-interchange-v1"
-        assert pkg["tool"]["name"] == "glr"
+        assert pkg["_schema"] == interchange.SCHEMA
+        assert pkg["tool"]["name"] == "reviq-retrieval"
         assert pkg["tool"]["version"]
         # A consumer deduplicates on canonical_url and must never re-derive it
         # with its own copy of urls.py, which may be a different version.

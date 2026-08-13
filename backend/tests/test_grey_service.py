@@ -1,4 +1,4 @@
-"""Mapping a glr package into the grey literature stream.
+"""Mapping a retrieval package into the grey literature stream.
 
 Everything here is a pure function over dicts, so it runs without a database
 or an HTTP client. The fixtures mirror a real 424-document pilot corpus
@@ -54,10 +54,10 @@ def record(**fields) -> dict:
 
 def package(records=None, **fields) -> dict:
     base = {
-        "_schema": "glr-interchange-v1",
+        "_schema": gs.SCHEMA,
         "_exported_at": "2026-08-12T13:41:52Z",
-        "tool": {"name": "glr", "version": "0.1.0"},
-        "canonicalization": "glr.urls.canonicalize/1",
+        "tool": {"name": "reviq-retrieval", "version": "0.1.0"},
+        "canonicalization": "reviq.urls.canonicalize/1",
         "runs": [{"run_id": "r1", "engine": "google", "query": '"AI maturity model"'}],
         "archive": [],
         "counts": {"ok": 1, "documents": 1, "reasons": {}},
@@ -96,7 +96,21 @@ def test_a_future_schema_version_is_refused_rather_than_guessed():
 def test_the_error_says_how_to_produce_a_package():
     with pytest.raises(gs.GreyImportError) as exc:
         gs.parse_package("{}")
-    assert "glr export-json" in str(exc.value)
+    assert "python -m app.retrieval export-json" in str(exc.value)
+
+
+def test_a_legacy_schema_package_still_parses():
+    """A package a co-reviewer exported before retrieval moved into ReviQ."""
+    assert gs.parse_package(json.dumps(package(_schema=gs.LEGACY_SCHEMA)))
+
+
+def test_write_side_and_read_side_agree_on_the_schema_identifier():
+    """`interchange.SCHEMA` is what the exporter stamps on every package; if it
+    drifts from what this reader accepts, every export written after the drift
+    fails to import — silently, until the next upload. `dedup_status` and
+    `detected_duplicates` diverged exactly this way once already."""
+    from app.retrieval import interchange
+    assert interchange.SCHEMA in gs.ACCEPTED_SCHEMAS
 
 
 @pytest.mark.parametrize("raw", ["not json", "", "[]", '"a string"'])
@@ -125,7 +139,7 @@ def test_several_engines_report_mixed():
 
 
 def test_a_refetch_run_does_not_become_the_engine_label():
-    """`glr refetch` records `engine: none` — it issued no search. It says
+    """A `refetch` run records `engine: none` — it issued no search. It says
     nothing about where the documents came from."""
     p = package(runs=[{"engine": "google"}, {"engine": "none"}])
     assert gs.engine_of(p) == "google"
@@ -318,8 +332,8 @@ def test_the_same_url_twice_is_one_source():
 
 
 def test_the_same_bytes_under_two_urls_is_one_source():
-    """glr reports byte-identical content under different URLs; the same
-    document mirrored on two hosts is one source."""
+    """The retrieval package reports byte-identical content under different
+    URLs; the same document mirrored on two hosts is one source."""
     other = record(canonical_url="https://mirror.example/x", record_key="mirror-1")
     unique, dupes = gs.partition([record(), other], set(), set())
     assert len(unique) == 1 and len(dupes) == 1
@@ -379,11 +393,11 @@ def test_failed_records_share_no_hash_and_stay_distinct():
 
 
 def test_the_canonicalisation_algorithm_is_recorded():
-    """glr pins the algorithm that produced every canonical URL and warns a
-    consumer never to re-canonicalise with its own copy. Recording it is what
-    lets a later reader notice two imports are not joinable."""
+    """The retrieval tool pins the algorithm that produced every canonical URL
+    and warns a consumer never to re-canonicalise with its own copy. Recording
+    it is what lets a later reader notice two imports are not joinable."""
     meta = gs.package_metadata(package(), filename="records.json")
-    assert meta["canonicalization"] == "glr.urls.canonicalize/1"
+    assert meta["canonicalization"] == "reviq.urls.canonicalize/1"
     assert meta["tool_version"] == "0.1.0"
     assert meta["scope_kind"] == "batch"
     assert meta["scope_id"] == "151514f7"

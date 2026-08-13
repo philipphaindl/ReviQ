@@ -21,10 +21,12 @@ publisher's access control, a platform page that never held a document, or a
 dead link, and those are three different exclusion criteria in a protocol.
 
 `retrieval_reason` and `counts.reasons` were added after `glr-interchange-v1`
-was first published. The schema string is unchanged because both are additive
-and optional: a consumer written against the original shape reads these
-packages unmodified, and one that wants the cause finds it. The version will
-be bumped when a field changes meaning or disappears, not when one is added.
+(this format's name before the tool moved into ReviQ) was first published. The
+schema string carried over unchanged at the move because both fields are
+additive and optional: a consumer written against the original shape reads
+these packages unmodified, and one that wants the cause finds it. The version
+will be bumped when a field changes meaning or disappears, not when one is
+added.
 
 The WARC files do not travel with the package — a few hundred documents run to
 hundreds of megabytes. `archive[]` lists them by basename with their own
@@ -41,13 +43,16 @@ from pathlib import Path
 from . import db, urls
 from .outcome import BLOCKED, EMPTY, FAILED, NOT_FETCHED, OK, classify
 
-SCHEMA = "glr-interchange-v1"
+# The name a repository that no longer exists is not a good name for a format
+# that goes to co-reviewers. `app.services.grey_service.LEGACY_SCHEMA` still
+# reads packages stamped with the old identifier.
+SCHEMA = "reviq-grey-v1"
 
 # Pins the algorithm that produced every `canonical_url` in the package. A
 # consumer deduplicates on those strings and must never re-canonicalise with
 # its own copy of `urls.py`, which may be a different version. Bump this
 # whenever the canonicalisation rules or TRACKING_PARAMS change.
-CANONICALIZATION = "glr.urls.canonicalize/1"
+CANONICALIZATION = "reviq.urls.canonicalize/1"
 
 # Length of the hash half of a record key. 48 bits: at 10,000 records the
 # probability of any collision is about 2e-10.
@@ -429,7 +434,7 @@ def build_package(
     return {
         "_schema": SCHEMA,
         "_exported_at": utc_now(),
-        "tool": {"name": "glr", "version": _tool_version()},
+        "tool": {"name": "reviq-retrieval", "version": _tool_version()},
         "canonicalization": CANONICALIZATION,
         "runs": _runs(conn, run_ids),
         "archive": _archive_entries(conn, referenced_archives),

@@ -1,12 +1,17 @@
-"""Reading a `glr-interchange-v1` package into the grey literature stream.
+"""Reading a `reviq-grey-v1` package into the grey literature stream.
 
-glr (https://github.com/philipphaindl/glr) retrieves grey literature and emits
-one record per document with its search observations nested inside, plus the
-three things that make a grey source citable at all: when it was retrieved, the
-SHA-256 of the bytes retrieved, and where those bytes are archived. A URL alone
-does not survive the page changing, and grey literature changes and disappears
-— that is the whole reason the format exists rather than BibTeX or RIS, neither
-of which has a field for any of the three.
+`app.retrieval` retrieves grey literature and emits one record per document
+with its search observations nested inside, plus the three things that make a
+grey source citable at all: when it was retrieved, the SHA-256 of the bytes
+retrieved, and where those bytes are archived. A URL alone does not survive
+the page changing, and grey literature changes and disappears — that is the
+whole reason the format exists rather than BibTeX or RIS, neither of which has
+a field for any of the three.
+
+The format was designed and first published as `glr-interchange-v1`, when
+retrieval was still its own repository (`philipphaindl/glr`, now archived).
+This reader accepts packages under either name — `LEGACY_SCHEMA` below — so an
+export a co-reviewer made before the move still imports.
 
 This module is deliberately free of FastAPI and SQLModel: everything that
 decides what a record becomes is a pure function over dicts, so it can be
@@ -16,10 +21,10 @@ Three decisions worth knowing about before reading the code:
 
 **Every record is imported, including the ones that could not be retrieved.**
 A package reports blocked, failed and empty retrievals on purpose, so that a
-consumer's "records identified" reconciles with glr's own retrieval report.
-Dropping them here would silently shrink the PRISMA top box, and the reason a
-source could not be read is itself a review finding — grey literature rots, and
-a review that cannot say how much of it rotted is hiding a limitation. They
+consumer's "records identified" reconciles with the retrieval report. Dropping
+them here would silently shrink the PRISMA top box, and the reason a source
+could not be read is itself a review finding — grey literature rots, and a
+review that cannot say how much of it rotted is hiding a limitation. They
 arrive with `full_text_inaccessible` set and their cause recorded.
 
 **Deduplication is exact only.** Two records are the same source if they share
@@ -30,8 +35,8 @@ name, a section, or "| LinkedIn" — and the venue is a hostname, so the same
 document on two hosts and two different documents with a generic title are
 indistinguishable by that test. A false duplicate removes a source from a
 review silently; an undetected one is visible at screening. The conservative
-direction is the right one here, and glr documents the same limit for its own
-deduplication.
+direction is the right one here, and the retrieval package's own documentation
+notes the same limit for its own deduplication.
 
 **The extracted text is not stored.** ReviQ screens on title and abstract, the
 snippet takes the abstract's role, and a source's full text can run to tens of
@@ -43,7 +48,12 @@ import json
 import re
 from typing import Any
 
-SCHEMA = "glr-interchange-v1"
+SCHEMA = "reviq-grey-v1"
+
+# The format's name before retrieval moved into ReviQ. Still accepted on read
+# so a package a co-reviewer exported before the move still imports.
+LEGACY_SCHEMA = "glr-interchange-v1"
+ACCEPTED_SCHEMAS = frozenset({SCHEMA, LEGACY_SCHEMA})
 
 # The reserved `source` prefixes from app.services.streams. Repeated as a
 # derivation rather than an import so the mapping stays a pure function, and
@@ -51,7 +61,8 @@ SCHEMA = "glr-interchange-v1"
 GREY_SEARCH_PREFIX = "grey:"
 GREY_SNOWBALL_PREFIX = "grey-snowball:"
 
-# glr's `discovery` vocabulary: how a document entered its corpus.
+# The retrieval package's `discovery` vocabulary: how a document entered its
+# corpus.
 SERP = "serp"
 
 # Grey literature is rarely older than the web and never newer than the run.
@@ -81,10 +92,11 @@ def parse_package(raw: bytes | str) -> dict:
         raise GreyImportError("expected a JSON object at the top level")
 
     schema = package.get("_schema")
-    if schema != SCHEMA:
+    if schema not in ACCEPTED_SCHEMAS:
         raise GreyImportError(
-            f"expected a {SCHEMA} package, got {schema!r}. "
-            f"Produce one with: glr export-json <run_id|batch_id> --out records.json"
+            f"expected a {SCHEMA} package (or the legacy {LEGACY_SCHEMA}), got "
+            f"{schema!r}. Produce one with: "
+            f"python -m app.retrieval export-json <run_id|batch_id> --out records.json"
         )
     if not isinstance(package.get("records"), list):
         raise GreyImportError("the package has no `records` list")
@@ -97,14 +109,14 @@ def engine_of(package: dict) -> str:
     Taken from the package rather than asked of the user: the runs record which
     engine actually answered, and a hand-typed label could contradict it. A
     package whose runs used more than one engine reports `mixed` — the per-run
-    detail stays in the retrieval report on the glr side.
+    detail stays in the retrieval report on the retrieval side.
     """
     engines = {
         (run or {}).get("engine")
         for run in package.get("runs", [])
         if (run or {}).get("engine")
     }
-    # `none` is what a `glr refetch` run records: it issued no search. It says
+    # `none` is what a `refetch` run records: it issued no search. It says
     # nothing about where the documents came from, so it must not become the
     # label for them.
     engines.discard("none")
@@ -127,9 +139,10 @@ def source_label(record: dict, engine: str) -> str:
 def is_search_discovered(record: dict) -> bool:
     """True when a search engine returned this document, rather than a link.
 
-    glr calls these `serp` and `link`; ReviQ calls them `search` and
-    `snowball`. Both are the same distinction — two sampling mechanisms with
-    different biases, which an MLR has to report separately (Wohlin 2014).
+    The retrieval package calls these `serp` and `link`; ReviQ calls them
+    `search` and `snowball`. Both are the same distinction — two sampling
+    mechanisms with different biases, which an MLR has to report separately
+    (Wohlin 2014).
     """
     return (record.get("discovery") or SERP) == SERP
 
@@ -155,8 +168,8 @@ def year_of(publication_date: Any) -> int | None:
 def title_of(record: dict) -> str:
     """A title that is never empty.
 
-    glr already falls back from the extracted title to the one the search
-    engine displayed, which is what leaves even an unretrievable record
+    The retrieval package already falls back from the extracted title to the
+    one the search engine displayed, which is what leaves even an unretrievable record
     screenable on title and snippet. When both are absent the URL is the
     honest remaining answer — `Paper.title` cannot be null, and inventing
     "Untitled" would put a placeholder where a reviewer expects a source.
@@ -171,7 +184,7 @@ def is_retrievable(record: dict) -> bool:
 
 
 def record_to_paper_dict(record: dict, engine: str) -> dict:
-    """The `Paper` fields for one glr record.
+    """The `Paper` fields for one retrieval-package record.
 
     `venue` is the host. For grey literature the publishing organisation is
     the venue in every sense a review cares about — `oecd.org`, `gartner.com`,
@@ -197,7 +210,7 @@ def record_to_paper_dict(record: dict, engine: str) -> dict:
         "stream": "grey",
         "discovery": "search" if is_search_discovered(record) else "snowball",
         "dedup_status": "original",
-        # Declared by the document, never guessed — see glr's D24.
+        # Declared by the document, never guessed — see decisions.md D24.
         "language": record.get("language"),
         "full_text_url": record.get("source_url") or record.get("canonical_url"),
         "full_text_inaccessible": not is_retrievable(record),
@@ -230,7 +243,7 @@ def record_to_provenance_dict(record: dict) -> dict:
         "archive_offset": warc.get("offset"),
         "archive_record_id": warc.get("record_id"),
         "retrieval_status": record.get("retrieval_status"),
-        # Why a source yielded nothing, in glr's vocabulary: a publisher's
+        # Why a source yielded nothing, in the retrieval package's vocabulary: a publisher's
         # access control, a platform post that was never a document, a dead
         # link. Those are different exclusion criteria, and a review that
         # reports them as one number cannot defend any of them.
@@ -255,9 +268,9 @@ def partition(
     """Split records into new and duplicate, exactly.
 
     The two sets are mutated as the walk proceeds, so a package that contains
-    the same source twice — glr deduplicates within a package, but two packages
-    for overlapping query sets do not — resolves the second occurrence against
-    the first rather than importing both.
+    the same source twice — retrieval deduplicates within a package, but two
+    packages for overlapping query sets do not — resolves the second occurrence
+    against the first rather than importing both.
 
     A record with neither a URL nor a hash cannot be recognised, and is treated
     as new: an unidentifiable record is not evidence of duplication.
@@ -280,7 +293,7 @@ def partition(
 def package_metadata(package: dict, filename: str | None = None) -> dict:
     """The `GreyImport` fields: which package these papers came from.
 
-    `canonicalization` is carried because glr pins the algorithm that produced
+    `canonicalization` is carried because the retrieval tool pins the algorithm that produced
     every `canonical_url` in the package, and warns a consumer never to
     re-canonicalise with its own copy. Recording which version produced these
     keys is what lets a later ReviQ notice that two imports are not comparable
