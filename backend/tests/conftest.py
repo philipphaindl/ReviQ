@@ -302,6 +302,18 @@ def instance(reset_overrides):
 
 
 @pytest.fixture
+def file_backed_instance(tmp_path, reset_overrides):
+    """An instance on a real file, so the retrieval side can be opened too.
+
+    The in-memory default is faster and is what almost every test wants. This
+    one exists because `app/retrieval` uses plain sqlite3, which cannot join
+    SQLAlchemy's shared in-memory connection — so the claim that both halves
+    live in one database is only testable against a file.
+    """
+    return make_instance("file-backed", db_path=tmp_path / "reviq.db")
+
+
+@pytest.fixture
 def two_instances(reset_overrides):
     """A pair of completely separate ReviQ deployments.
 

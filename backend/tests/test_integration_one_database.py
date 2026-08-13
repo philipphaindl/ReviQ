@@ -22,21 +22,23 @@ from __future__ import annotations
 import pytest
 
 from app.retrieval import db as retrieval_db
-from tests.conftest import make_instance
 
 URL_A = "https://oecd.org/ai-maturity"
 URL_B = "https://who.int/digital-health"
 
 
 @pytest.fixture
-def instance(tmp_path, reset_overrides):
-    """A ReviQ deployment on a real file, both halves of it."""
-    return make_instance("file-backed", db_path=tmp_path / "reviq.db")
+def instance(file_backed_instance):
+    """A ReviQ deployment on a real file — both halves of it."""
+    return file_backed_instance
 
 
 @pytest.fixture
 def conn(tmp_path):
-    """The retrieval side of the same file, as the CLI would open it."""
+    """The retrieval side of the same file, as the CLI would open it.
+
+    Shares `tmp_path` with `file_backed_instance`, which is the point: this is
+    the same file the API is serving from, reached the other way."""
     connection = retrieval_db.connect(tmp_path / "reviq.db")
     yield connection
     connection.close()
