@@ -414,3 +414,121 @@ def test_metadata_survives_a_sparse_package():
     meta = gs.package_metadata({"_schema": gs.SCHEMA, "records": []})
     assert meta["records_in_package"] == 0
     assert meta["scope_id"] is None
+
+
+# --- full text ------------------------------------------------------------
+
+
+def test_extracted_text_becomes_its_own_row():
+    ft = gs.record_to_fulltext_dict(record(
+        text="A five-level model for assessing AI maturity.",
+        word_count=4210, extractor="trafilatura-2.2.0",
+    ))
+    assert ft["text"].startswith("A five-level model")
+    assert ft["word_count"] == 4210
+    assert ft["extractor"] == "trafilatura-2.2.0"
+
+
+def test_a_record_without_text_yields_no_row():
+    """A blocked or unretrieved source produced no bytes to extract from. An
+    empty row would be indistinguishable from a page that carried no prose."""
+    assert gs.record_to_fulltext_dict(record()) is None
+
+
+@pytest.mark.parametrize("empty", ["", "   ", "\n\t "])
+def test_whitespace_only_text_is_not_a_row(empty):
+    assert gs.record_to_fulltext_dict(record(text=empty)) is None
+
+
+def test_the_word_count_is_carried_not_recomputed():
+    """Two independently derived counts for one source is how a report and an
+    export end up disagreeing about the same corpus."""
+    ft = gs.record_to_fulltext_dict(record(text="one two three", word_count=999))
+    assert ft["word_count"] == 999
+
+
+def test_a_failed_extraction_is_distinguishable_from_no_extraction():
+    ft = gs.record_to_fulltext_dict(record(text="partial", extraction_error="boom"))
+    assert ft["extraction_error"] == "boom"
+    assert gs.record_to_fulltext_dict(record(extraction_error="boom")) is None
+
+
+# --- figures --------------------------------------------------------------
+
+
+def _figure(**over):
+    base = {
+        "kind": "model_generated",
+        "figure": {
+            "raw_src": "/img/fig1.png",
+            "resolved_url": "https://oecd.org/img/fig1.png",
+            "alt_text": "Maturity levels",
+            "caption": "Figure 1: the five levels",
+            "sha256": "b" * 64,
+            "content_type": "image/png",
+            "byte_size": 20481,
+            "fetch_error": None,
+            "warc": {"run_id": "r1", "filename": "figures.warc.gz",
+                     "offset": 4096, "record_id": "<urn:uuid:aa>",
+                     "recorded_path": "data/runs/r1/figures.warc.gz"},
+        },
+        "descriptions": [{
+            "description": "A staircase of five levels.",
+            "model": "claude-haiku-4-5", "prompt": "Describe this figure.",
+            "described_at_utc": "2026-08-11T20:00:00Z", "error": None,
+        }],
+    }
+    base["figure"].update(over.pop("figure", {}))
+    base.update(over)
+    return base
+
+
+def test_a_figure_and_its_description_come_back_separately():
+    """Source content and model output are two tables: a review that quoted the
+    second as the first would attribute a model's words to a cited source."""
+    [(fig, descriptions)] = gs.record_to_figure_dicts(record(figures=[_figure()]))
+    assert fig["caption"] == "Figure 1: the five levels"
+    assert fig["alt_text"] == "Maturity levels"
+    assert descriptions[0]["description"] == "A staircase of five levels."
+    assert descriptions[0]["model"] == "claude-haiku-4-5"
+    # The prompt is kept verbatim so the output stays auditable.
+    assert descriptions[0]["prompt"] == "Describe this figure."
+
+
+def test_the_figures_archive_pointer_is_flattened_like_the_snapshots_one():
+    [(fig, _)] = gs.record_to_figure_dicts(record(figures=[_figure()]))
+    assert fig["archive_filename"] == "figures.warc.gz"
+    assert fig["archive_offset"] == 4096
+    assert fig["archive_record_id"] == "<urn:uuid:aa>"
+
+
+def test_a_figure_whose_fetch_failed_is_still_kept():
+    """Evidence that the source carried an image the retrieval could not read
+    is a gap a reader should see, not a row worth dropping."""
+    [(fig, descriptions)] = gs.record_to_figure_dicts(record(figures=[
+        _figure(figure={"fetch_error": "403", "sha256": None}, descriptions=[]),
+    ]))
+    assert fig["fetch_error"] == "403"
+    assert descriptions == []
+
+
+def test_a_figure_without_a_warc_reference_does_not_explode():
+    [(fig, _)] = gs.record_to_figure_dicts(record(figures=[
+        _figure(figure={"warc": None}),
+    ]))
+    assert fig["archive_filename"] is None
+
+
+def test_a_record_without_figures_yields_none():
+    assert gs.record_to_figure_dicts(record()) == []
+
+
+def test_several_descriptions_for_one_figure_all_survive():
+    """The same image described by two models is legitimate."""
+    [(_, descriptions)] = gs.record_to_figure_dicts(record(figures=[
+        _figure(descriptions=[
+            {"description": "first", "model": "m1", "prompt": "p"},
+            {"description": "second", "model": "m2", "prompt": "p"},
+        ]),
+    ]))
+    assert [d["model"] for d in descriptions] == ["m1", "m2"]

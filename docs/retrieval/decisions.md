@@ -845,3 +845,57 @@ the source described, and `snapshot_id` stays NULL rather than picking one
 that looks plausible. Verified against the adopted pilot corpus: 424 grey
 sources round-tripped through export → import, 414 resolved outright and the
 remaining 10 were every one of them a document retried more than once.
+
+## D31 — The full text is stored, qualified by the status it was extracted under
+
+Grey literature is screened on title and snippet, and until now the import kept
+only those: `grey_service` stated outright that "the extracted text is not
+stored", on the grounds that the archive reference and the URL are the pointer
+to it. That holds for screening and fails for everything after it. A reviewer
+assessing a grey source against inclusion criteria has to read the source, and
+re-fetching a page that may have changed since is not the same evidence — the
+retrieval timestamp and the payload digest exist precisely because it changes.
+
+The text goes to `GreyFullText`, one row per paper, and **never** to
+`Paper.abstract` or a `Paper` column. Not `abstract`, because `abstract` holds
+the snippet the search engine displayed, which is what a screener saw when
+deciding; overwriting it would change, months later and silently, the evidence
+a recorded decision rests on. Not a `Paper` column, because `list_papers`
+selects `Paper.*` for every paper and the screening view calls it on every
+filter change — the pilot corpus holds a source of 46,586 words, and 424 of
+them together would be megabytes per request.
+
+**The retrieval status does not filter the text; it qualifies it.** This was
+settled by the corpus rather than by argument. Importing the real 424 documents
+yields 358 sources with `retrieval_status = "ok"` and **363** full-text rows.
+The five extra are all `blocked`/`bot_challenge`, and they split two ways:
+
+| What the extractor returned | Count |
+|---|---|
+| Genuine post content LinkedIn served beside the challenge | 3 |
+| The challenge page's own text ("Checking your browser before accessing…") | 2 |
+
+Nothing separates them mechanically — same status, same reason, same extractor,
+comparable length. Filtering on status would discard three real sources.
+Keeping them unmarked would let two pages of bot boilerplate be read as
+documents, and screened against inclusion criteria as if they were.
+
+So `GreyFullText.retrieval_status` carries the status the text was extracted
+under. It duplicates `GreySource.retrieval_status` deliberately: there the
+column describes the *retrieval*, here it qualifies *this text*, and a reader
+who can reach a full text must not be able to miss the reason to distrust it.
+Both are written in one statement from one record and are never updated
+independently, so the drift that `dedup_status` and `detected_duplicates`
+suffered has no path here.
+
+A consequence for the dataset view: it may not render `text` without also
+rendering `retrieval_status`. The two belong on screen together.
+
+**Figures follow the split the exporter already draws.** `alt_text` and
+`caption` are the page's own words about its own image and land in
+`GreyFigure`; what a model said the image shows lands in
+`GreyFigureDescription` with its `model` and its `prompt` verbatim. Generated
+text entering a review has to be attributable, and a description whose
+provenance was dropped in transit could not be defended in a methods section. A
+figure whose fetch failed is kept: that the source carried an image nobody
+could read is a gap a reader should see.

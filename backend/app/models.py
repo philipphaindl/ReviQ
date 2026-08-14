@@ -299,3 +299,104 @@ class GreySource(SQLModel, table=True):
     # of this source" into a join.
     document_id: Optional[int] = Field(default=None, index=True)
     snapshot_id: Optional[int] = None
+
+
+class GreyFullText(SQLModel, table=True):
+    """The extracted body text of one grey source.
+
+    Its own table rather than a column on `Paper`, and never in
+    `Paper.abstract`. Both halves of that are load-bearing.
+
+    **Not a `Paper` column**, because `list_papers` selects `Paper.*` for every
+    paper in a project and the screening view calls it on every filter change.
+    A text column would drag the full body of every source through a listing
+    that renders a title and a year — the pilot corpus holds one source of
+    27,784 words, and 424 of them together are megabytes per request.
+
+    **Not `abstract`**, because `abstract` holds the snippet the search engine
+    displayed, which is what a screener actually saw when deciding. Overwriting
+    it with body text would change, months later and silently, the evidence a
+    recorded screening decision rests on.
+
+    Absent for a source that yielded no bytes at all: a row of empty text would
+    be indistinguishable from a page that genuinely held none.
+
+    Present, however, for some sources whose retrieval did *not* succeed — see
+    `retrieval_status` below, and D31. That case is real rather than
+    theoretical: in the pilot corpus five of them carry text.
+    """
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id", index=True)
+    paper_id: int = Field(foreign_key="paper.id", index=True, unique=True)
+    text: str
+    # The status the retrieval carried when this text was extracted. A copy of
+    # `GreySource.retrieval_status`, and deliberately so: the two answer
+    # different questions. There it describes the *retrieval*; here it
+    # qualifies *this text*, and no reader of a full text may be able to reach
+    # it without also reaching the reason to distrust it.
+    #
+    # Not "ok" is not a reason to drop the text. Under a bot challenge
+    # trafilatura extracts whatever the page served, and in the pilot corpus
+    # that is genuine post content three times ("We've just launched the AI
+    # Maturity Self Assessment tool…") and the challenge page's own boilerplate
+    # twice ("Checking your browser before accessing…"). Nothing distinguishes
+    # them mechanically — both are `blocked`/`bot_challenge` — so dropping on
+    # status loses real sources and keeping silently presents boilerplate as a
+    # document. The text is kept and the status travels with it.
+    retrieval_status: Optional[str] = None
+    # As the extractor counted it, not recomputed here: `GreySource.word_count`
+    # carries the same number, and two independently derived counts for one
+    # source is how a report and an export end up disagreeing.
+    word_count: Optional[int] = None
+    # e.g. "trafilatura-2.2.0". Pinned in the package because an extractor
+    # upgrade changes extracted text, and a review may already cite this one.
+    extractor: Optional[str] = None
+    # Set when extraction ran and failed. Distinct from "no row at all", which
+    # means the source was never retrieved.
+    extraction_error: Optional[str] = None
+
+
+class GreyFigure(SQLModel, table=True):
+    """One image from a grey source, as the page carried it.
+
+    `alt_text` and `caption` are source content: the page's own words about its
+    own image. What a model said the image shows lives in
+    `GreyFigureDescription`, separately — the retrieval side already draws that
+    line (`interchange._figures`), and collapsing the two here would let
+    generated text be quoted in a review as if the source had written it.
+    """
+    id: Optional[int] = Field(default=None, primary_key=True)
+    project_id: int = Field(foreign_key="project.id", index=True)
+    paper_id: int = Field(foreign_key="paper.id", index=True)
+    raw_src: Optional[str] = None        # verbatim from the markup
+    resolved_url: Optional[str] = None
+    alt_text: Optional[str] = None
+    caption: Optional[str] = None
+    sha256: Optional[str] = None         # over the image bytes
+    content_type: Optional[str] = None
+    byte_size: Optional[int] = None
+    archive_filename: Optional[str] = None
+    archive_offset: Optional[int] = None
+    archive_record_id: Optional[str] = None
+    fetch_error: Optional[str] = None    # the image itself could not be fetched
+
+
+class GreyFigureDescription(SQLModel, table=True):
+    """What a model said one figure shows.
+
+    `model` and `prompt` are stored verbatim rather than summarised, because
+    this is generated text entering a review: a reader has to be able to say
+    which model produced it and on what instruction. The retrieval side stores
+    them for the same reason, and a description whose provenance was dropped in
+    transit could not be defended in a methods section.
+
+    Several rows per figure are legitimate — the same image described by two
+    models, or by one model under a revised prompt.
+    """
+    id: Optional[int] = Field(default=None, primary_key=True)
+    grey_figure_id: int = Field(foreign_key="greyfigure.id", index=True)
+    description: Optional[str] = None
+    model: Optional[str] = None
+    prompt: Optional[str] = None
+    described_at_utc: Optional[str] = None
+    error: Optional[str] = None          # the description attempt failed

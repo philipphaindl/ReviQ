@@ -38,9 +38,14 @@ review silently; an undetected one is visible at screening. The conservative
 direction is the right one here, and the retrieval package's own documentation
 notes the same limit for its own deduplication.
 
-**The extracted text is not stored.** ReviQ screens on title and abstract, the
-snippet takes the abstract's role, and a source's full text can run to tens of
-thousands of words. The archive reference and the URL are the pointer to it.
+**The extracted text is stored, but never on `Paper`.** It goes to
+`GreyFullText`, one row per paper, and the figures a source carried go to
+`GreyFigure`/`GreyFigureDescription`. Screening still runs on title and
+snippet — `abstract` keeps holding what the search engine displayed, because
+that is what a screener saw when deciding. What changed is that the full text
+is now *available* for the phase after screening: a reviewer assessing a grey
+source against inclusion criteria has to read it, and re-fetching a page that
+may have changed since is not the same evidence. See D31.
 """
 from __future__ import annotations
 
@@ -251,6 +256,84 @@ def record_to_provenance_dict(record: dict) -> dict:
         "search_observations": len(observations),
         "best_rank": min(ranks) if ranks else None,
     }
+
+
+def record_to_fulltext_dict(record: dict) -> dict | None:
+    """The `GreyFullText` fields, or None when there is no text to store.
+
+    None rather than a row of empty text: a source that yielded no bytes has
+    nothing to have extracted, and an empty row would be indistinguishable from
+    a page that genuinely carried no prose. The difference matters — the first
+    is a limitation to report, the second is a finding about the source. A
+    package exported with `--no-text` arrives with no `text` key and gets the
+    same answer for the same reason.
+
+    **The retrieval status is not a filter.** Text extracted from a page served
+    under a bot challenge is kept, and its status kept with it. Against the
+    real pilot corpus that case is five records, and it splits two ways with
+    nothing to tell the halves apart: three LinkedIn posts whose visible text
+    is genuine source content, and two challenge pages whose "text" is
+    "Checking your browser before accessing…". Filtering on status would
+    discard the first three; keeping them silently would let the other two be
+    read as documents. See D31.
+    """
+    text = record.get("text")
+    if not text or not str(text).strip():
+        return None
+    return {
+        "text": text,
+        "retrieval_status": record.get("retrieval_status"),
+        # Carried, not recomputed. `GreySource.word_count` holds the same
+        # number from the same extractor, and deriving it a second time here is
+        # how two counts for one source start disagreeing.
+        "word_count": record.get("word_count"),
+        "extractor": record.get("extractor"),
+        "extraction_error": record.get("extraction_error"),
+    }
+
+
+def record_to_figure_dicts(record: dict) -> list[tuple[dict, list[dict]]]:
+    """Each figure as (figure fields, list of description fields).
+
+    The two are returned separately rather than nested because they become two
+    tables: what the page said about its image is source content, what a model
+    said it shows is generated text. `interchange._figures` draws the same line
+    on the way out, and a review that quoted the second as the first would be
+    attributing a model's words to a cited source.
+
+    A figure whose fetch failed is kept. It is evidence that the source carried
+    an image the retrieval could not read, which is a gap a reader should see
+    rather than a row worth dropping.
+    """
+    out: list[tuple[dict, list[dict]]] = []
+    for entry in record.get("figures") or []:
+        figure = (entry or {}).get("figure") or {}
+        warc = figure.get("warc") or {}
+        fields = {
+            "raw_src": figure.get("raw_src"),
+            "resolved_url": figure.get("resolved_url"),
+            "alt_text": figure.get("alt_text"),
+            "caption": figure.get("caption"),
+            "sha256": figure.get("sha256"),
+            "content_type": figure.get("content_type"),
+            "byte_size": figure.get("byte_size"),
+            "archive_filename": warc.get("filename"),
+            "archive_offset": warc.get("offset"),
+            "archive_record_id": warc.get("record_id"),
+            "fetch_error": figure.get("fetch_error"),
+        }
+        descriptions = [
+            {
+                "description": d.get("description"),
+                "model": d.get("model"),
+                "prompt": d.get("prompt"),
+                "described_at_utc": d.get("described_at_utc"),
+                "error": d.get("error"),
+            }
+            for d in (entry or {}).get("descriptions") or []
+        ]
+        out.append((fields, descriptions))
+    return out
 
 
 def dedup_key_of(record: dict) -> tuple[str | None, str | None]:

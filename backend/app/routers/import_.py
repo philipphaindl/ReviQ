@@ -28,7 +28,10 @@ from typing import Optional
 import json
 
 from app.database import get_retrieval_conn, get_session
-from app.models import Paper, ReviewerDecision, Reviewer, GreyImport, GreySource
+from app.models import (
+    GreyFigure, GreyFigureDescription, GreyFullText, GreyImport, GreySource,
+    Paper, Reviewer, ReviewerDecision,
+)
 from app.retrieval import db, interchange
 from app.services import grey_service, paper_import
 from app.services.bibtex_service import parse_bib_content, detect_duplicates, entry_to_paper_dict
@@ -270,6 +273,30 @@ def _apply_grey_package(session: Session, project_id: int, package: dict, *,
             grey_import_id=grey_import.id,
             **provenance,
         ))
+
+        # The extracted text and the figures, if the package carried them. Both
+        # are optional in the format — an export made with --no-text or from a
+        # corpus retrieved before figures existed simply has neither — so their
+        # absence is silence, not an error.
+        fulltext = grey_service.record_to_fulltext_dict(record)
+        if fulltext is not None:
+            session.add(GreyFullText(
+                project_id=project_id, paper_id=paper.id, **fulltext,
+            ))
+
+        for figure_fields, descriptions in grey_service.record_to_figure_dicts(record):
+            figure = GreyFigure(
+                project_id=project_id, paper_id=paper.id, **figure_fields,
+            )
+            session.add(figure)
+            # Flushed rather than committed: the descriptions need the figure's
+            # id, and committing per figure would make one import of a source
+            # with twenty images twenty transactions.
+            session.flush()
+            for description in descriptions:
+                session.add(GreyFigureDescription(
+                    grey_figure_id=figure.id, **description,
+                ))
 
         if is_duplicate:
             duplicate_citekeys.append(data["citekey"])
