@@ -13,9 +13,8 @@ import { useProject } from '../App'
 import { getExportStats, getQASummary, getExtractionSummary, exportBibtexUrl, getImportStats, getPapers, getTaxonomyTypes, getTaxonomy, getKappa, getReviewers, getProject, exportReplicationPackageUrl, getSearchMetrics, getExclusionCriteria } from '../api/client'
 import { Card, CardHeader, StatBar, StatCell, EmptyState } from '../components/ui'
 import { normalizeDbKey, dbByKey, DatabaseBadge } from '../components/databases'
-import {
-  isFormalSearch, isFormalSnowball, isFormalSearchSource, isSnowballSource,
-} from '../components/streams'
+import { isFormalSearch, isFormalSearchSource } from '../components/streams'
+import { STREAMS, streamCounts } from '../utils/prisma'
 import type { KappaResult } from '../api/types'
 import {
   aggregateExtractionField, aggregateTaxonomy, binQAScores,
@@ -123,84 +122,29 @@ function PrismaView({ pid }: { pid: number }) {
 
   const bySource = importStats?.by_source ?? {}
 
-  // ── DB stream ───────────────────────────────────────────────────────────────
-  const dbRetrieved = Object.entries(bySource)
-    .filter(([src]) => isFormalSearchSource(src))
-    .reduce((s, [, v]) => s + v.total, 0)
-  const dbUnique = screeningPapers.filter(
-    p => isFormalSearch(p) && p.dedup_status === 'original'
-  ).length
-  const dbDuplicates = Math.max(0, dbRetrieved - dbUnique)
-  const dbScreeningExcluded = screeningPapers.filter(
-    p => isFormalSearch(p) && p.dedup_status === 'original' && p.final_decision?.decision === 'E'
-  ).length
-  const dbFTAssessed = screeningPapers.filter(
-    p => isFormalSearch(p) && p.dedup_status === 'original' && p.final_decision?.decision === 'I'
-  ).length
-  const dbFTExcluded = fulltextPapers.filter(
-    p => isFormalSearch(p) && p.final_decision?.decision === 'E'
-  ).length
-  const dbFTIncluded = fulltextPapers.filter(
-    p => isFormalSearch(p) && p.final_decision?.decision === 'I'
-  ).length
-  const dbScrExclByCrit: Record<string, number> = {}
-  for (const p of screeningPapers) {
-    if (isFormalSearch(p) && p.dedup_status === 'original' && p.final_decision?.decision === 'E') {
-      const c = p.decisions?.[0]?.criterion_label ?? 'Other'
-      dbScrExclByCrit[c] = (dbScrExclByCrit[c] ?? 0) + 1
-    }
-  }
-  const dbFTExclByCrit: Record<string, number> = {}
-  for (const p of fulltextPapers) {
-    if (isFormalSearch(p) && p.final_decision?.decision === 'E') {
-      const c = p.decisions?.[0]?.criterion_label ?? 'Other'
-      dbFTExclByCrit[c] = (dbFTExclByCrit[c] ?? 0) + 1
-    }
-  }
-
-  // ── Snowball stream ─────────────────────────────────────────────────────────
-  const snowballRetrieved = Object.entries(bySource)
-    .filter(([src]) => isSnowballSource(src))
-    .reduce((s, [, v]) => s + v.total, 0)
-  const snowballScreenedPapers = screeningPapers.filter(
-    p => isFormalSnowball(p) && p.dedup_status === 'original'
-  )
-  const snowballScreened = snowballScreenedPapers.length
-  const snowballScrExcluded = snowballScreenedPapers.filter(p => p.final_decision?.decision === 'E').length
-  // fulltextPapers returns ALL papers with their FT decisions (null if not yet reviewed).
-  // Filter to snowballing papers that HAVE an actual FT decision recorded.
-  const snowballFTPapers = fulltextPapers.filter(
-    p => isFormalSnowball(p) && p.final_decision !== null
-  )
-  const snowballFTAssessed = snowballFTPapers.length
-  const snowballFTExcluded = snowballFTPapers.filter(p => p.final_decision?.decision === 'E').length
-  const snowballFTIncluded = snowballFTPapers.filter(p => p.final_decision?.decision === 'I').length
-  const snowballScrExclByCrit: Record<string, number> = {}
-  for (const p of snowballScreenedPapers) {
-    if (p.final_decision?.decision === 'E') {
-      const c = p.decisions?.[0]?.criterion_label ?? 'Other'
-      snowballScrExclByCrit[c] = (snowballScrExclByCrit[c] ?? 0) + 1
-    }
-  }
-  const snowballFTExclByCrit: Record<string, number> = {}
-  for (const p of snowballFTPapers) {
-    if (p.final_decision?.decision === 'E') {
-      const c = p.decisions?.[0]?.criterion_label ?? 'Other'
-      snowballFTExclByCrit[c] = (snowballFTExclByCrit[c] ?? 0) + 1
-    }
-  }
+  // Every stream's eight numbers come from one derivation (utils/prisma.ts).
+  // They used to be written out per stream here, and the two copies had already
+  // drifted: "full texts assessed" meant *passed screening* for databases and
+  // *has a full-text decision* for snowballing, in the same figure. Adding grey
+  // literature as a third copy would have made that three definitions.
+  const db = streamCounts(STREAMS[0], screeningPapers, fulltextPapers, bySource)
+  const snowball = streamCounts(STREAMS[1], screeningPapers, fulltextPapers, bySource)
+  const grey = streamCounts(STREAMS[2], screeningPapers, fulltextPapers, bySource)
 
   // Combined for stat cards
-  const included = (dbFTIncluded + snowballFTIncluded) > 0
-    ? dbFTIncluded + snowballFTIncluded
-    : stats.screening_included
+  const totalIncluded = db.ftIncluded + snowball.ftIncluded + grey.ftIncluded
+  const included = totalIncluded > 0 ? totalIncluded : stats.screening_included
 
   return (
     <div className="space-y-4">
       <StatBar>
         <StatCell label="Total Retrieved" value={stats.total_retrieved} />
-        <StatCell label="After Deduplication" value={dbUnique} />
-        <StatCell label="Screened" value={dbUnique} />
+        {/* Across all streams. Reading only the database column understated
+            both numbers for any review that snowballed or searched the web. */}
+        <StatCell label="After Deduplication"
+          value={db.unique + snowball.unique + grey.unique} />
+        <StatCell label="Screened"
+          value={db.unique + snowball.unique + grey.unique} />
         <StatCell label="Included" value={included} color="include" />
       </StatBar>
 
@@ -210,24 +154,24 @@ function PrismaView({ pid }: { pid: number }) {
         />
         <div className="overflow-x-auto">
           <PrismaFlowDiagram
-            dbRetrieved={dbRetrieved}
-            dbDuplicates={dbDuplicates}
-            dbUnique={dbUnique}
-            dbScreeningExcluded={dbScreeningExcluded}
-            dbFTAssessed={dbFTAssessed}
-            dbFTExcluded={dbFTExcluded}
-            dbFTIncluded={dbFTIncluded > 0 ? dbFTIncluded : snowballFTIncluded === 0 ? dbFTAssessed : dbFTIncluded}
+            dbRetrieved={db.retrieved}
+            dbDuplicates={db.duplicates}
+            dbUnique={db.unique}
+            dbScreeningExcluded={db.screeningExcluded}
+            dbFTAssessed={db.ftAssessed}
+            dbFTExcluded={db.ftExcluded}
+            dbFTIncluded={db.ftIncluded}
             bySource={bySource}
-            dbScrExclByCrit={dbScrExclByCrit}
-            dbFTExclByCrit={dbFTExclByCrit}
-            snowballRetrieved={snowballRetrieved}
-            snowballScreened={snowballScreened}
-            snowballScrExcluded={snowballScrExcluded}
-            snowballFTAssessed={snowballFTAssessed}
-            snowballFTExcluded={snowballFTExcluded}
-            snowballFTIncluded={snowballFTIncluded}
-            snowballScrExclByCrit={snowballScrExclByCrit}
-            snowballFTExclByCrit={snowballFTExclByCrit}
+            dbScrExclByCrit={db.screeningExclByCriterion}
+            dbFTExclByCrit={db.ftExclByCriterion}
+            snowballRetrieved={snowball.retrieved}
+            snowballScreened={snowball.unique}
+            snowballScrExcluded={snowball.screeningExcluded}
+            snowballFTAssessed={snowball.ftAssessed}
+            snowballFTExcluded={snowball.ftExcluded}
+            snowballFTIncluded={snowball.ftIncluded}
+            snowballScrExclByCrit={snowball.screeningExclByCriterion}
+            snowballFTExclByCrit={snowball.ftExclByCriterion}
             shortLabelMap={shortLabelMap}
           />
         </div>
@@ -1079,29 +1023,12 @@ function ExportView({ pid }: { pid: number }) {
     const shortLabelMap: Record<string, string> = {}
     for (const c of exclusionCriteria) { if (c.short_label) shortLabelMap[c.label] = c.short_label }
 
-    const dbRetrieved = Object.entries(bySource).filter(([s]) => isFormalSearchSource(s)).reduce((a, [, v]) => a + v.total, 0)
-    const dbUnique = screeningPapers.filter(p => isFormalSearch(p) && p.dedup_status === 'original').length
-    const dbDuplicates = Math.max(0, dbRetrieved - dbUnique)
-    const dbScreeningExcluded = screeningPapers.filter(p => isFormalSearch(p) && p.dedup_status === 'original' && p.final_decision?.decision === 'E').length
-    const dbFTAssessed = screeningPapers.filter(p => isFormalSearch(p) && p.dedup_status === 'original' && p.final_decision?.decision === 'I').length
-    const dbFTExcluded = fulltextPapers.filter(p => isFormalSearch(p) && p.final_decision?.decision === 'E').length
-    const dbFTIncluded = fulltextPapers.filter(p => isFormalSearch(p) && p.final_decision?.decision === 'I').length
-    const dbScrExclByCrit: Record<string, number> = {}
-    for (const p of screeningPapers) { if (isFormalSearch(p) && p.dedup_status === 'original' && p.final_decision?.decision === 'E') { const c = p.decisions?.[0]?.criterion_label ?? 'Other'; dbScrExclByCrit[c] = (dbScrExclByCrit[c] ?? 0) + 1 } }
-    const dbFTExclByCrit: Record<string, number> = {}
-    for (const p of fulltextPapers) { if (isFormalSearch(p) && p.final_decision?.decision === 'E') { const c = p.decisions?.[0]?.criterion_label ?? 'Other'; dbFTExclByCrit[c] = (dbFTExclByCrit[c] ?? 0) + 1 } }
-    const snowballRetrieved = Object.entries(bySource).filter(([s]) => isSnowballSource(s)).reduce((a, [, v]) => a + v.total, 0)
-    const snowballScreenedPapers = screeningPapers.filter(p => isFormalSnowball(p) && p.dedup_status === 'original')
-    const snowballScreened = snowballScreenedPapers.length
-    const snowballScrExcluded = snowballScreenedPapers.filter(p => p.final_decision?.decision === 'E').length
-    const snowballFTPapers = fulltextPapers.filter(p => isFormalSnowball(p) && p.final_decision !== null)
-    const snowballFTAssessed = snowballFTPapers.length
-    const snowballFTExcluded = snowballFTPapers.filter(p => p.final_decision?.decision === 'E').length
-    const snowballFTIncluded = snowballFTPapers.filter(p => p.final_decision?.decision === 'I').length
-    const snowballScrExclByCrit: Record<string, number> = {}
-    for (const p of snowballScreenedPapers) { if (p.final_decision?.decision === 'E') { const c = p.decisions?.[0]?.criterion_label ?? 'Other'; snowballScrExclByCrit[c] = (snowballScrExclByCrit[c] ?? 0) + 1 } }
-    const snowballFTExclByCrit: Record<string, number> = {}
-    for (const p of snowballFTPapers) { if (p.final_decision?.decision === 'E') { const c = p.decisions?.[0]?.criterion_label ?? 'Other'; snowballFTExclByCrit[c] = (snowballFTExclByCrit[c] ?? 0) + 1 } }
+    // The same derivation the on-screen view uses. This block used to be a
+    // second copy of it, so the PDF's figure and the browser's could disagree
+    // about the same review — the defect `dedup_status` and
+    // `detected_duplicates` each caused once already.
+    const db = streamCounts(STREAMS[0], screeningPapers, fulltextPapers, bySource)
+    const snowball = streamCounts(STREAMS[1], screeningPapers, fulltextPapers, bySource)
 
     const container = document.createElement('div')
     container.style.cssText = 'position:absolute;left:-9999px;top:0;width:1200px'
@@ -1109,15 +1036,18 @@ function ExportView({ pid }: { pid: number }) {
     const root = createRoot(container)
     root.render(
       <PrismaFlowDiagram
-        dbRetrieved={dbRetrieved} dbDuplicates={dbDuplicates} dbUnique={dbUnique}
-        dbScreeningExcluded={dbScreeningExcluded} dbFTAssessed={dbFTAssessed}
-        dbFTExcluded={dbFTExcluded}
-        dbFTIncluded={dbFTIncluded > 0 ? dbFTIncluded : snowballFTIncluded === 0 ? dbFTAssessed : dbFTIncluded}
-        bySource={bySource} dbScrExclByCrit={dbScrExclByCrit} dbFTExclByCrit={dbFTExclByCrit}
-        snowballRetrieved={snowballRetrieved} snowballScreened={snowballScreened}
-        snowballScrExcluded={snowballScrExcluded} snowballFTAssessed={snowballFTAssessed}
-        snowballFTExcluded={snowballFTExcluded} snowballFTIncluded={snowballFTIncluded}
-        snowballScrExclByCrit={snowballScrExclByCrit} snowballFTExclByCrit={snowballFTExclByCrit}
+        dbRetrieved={db.retrieved} dbDuplicates={db.duplicates} dbUnique={db.unique}
+        dbScreeningExcluded={db.screeningExcluded} dbFTAssessed={db.ftAssessed}
+        dbFTExcluded={db.ftExcluded}
+        dbFTIncluded={db.ftIncluded}
+        bySource={bySource}
+        dbScrExclByCrit={db.screeningExclByCriterion}
+        dbFTExclByCrit={db.ftExclByCriterion}
+        snowballRetrieved={snowball.retrieved} snowballScreened={snowball.unique}
+        snowballScrExcluded={snowball.screeningExcluded} snowballFTAssessed={snowball.ftAssessed}
+        snowballFTExcluded={snowball.ftExcluded} snowballFTIncluded={snowball.ftIncluded}
+        snowballScrExclByCrit={snowball.screeningExclByCriterion}
+        snowballFTExclByCrit={snowball.ftExclByCriterion}
         shortLabelMap={shortLabelMap}
       />
     )
