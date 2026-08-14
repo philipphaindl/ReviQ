@@ -2,6 +2,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { useProject } from '../App'
+import { isMlr, REVIEW_TYPES, SLR } from '../utils/reviewType'
 import { getProjects, createProject, getExportStats, getImportStats, getSearchStrings, deleteProject, importReplicationPackage } from '../api/client'
 import { StatBar, StatCell, Card, CardHeader, EmptyState, Modal, FormField, ConfirmDialog } from '../components/ui'
 import { DatabaseBadge } from '../components/databases'
@@ -14,7 +15,9 @@ export default function Overview() {
   const qc = useQueryClient()
   const [showCreate, setShowCreate] = useState(false)
   const [submitted, setSubmitted] = useState(false)
-  const [form, setForm] = useState({ title: '', lead_researcher: '', description: '' })
+  const [form, setForm] = useState({ title: '', lead_researcher: '', description: '',
+     review_type: SLR, methodology: 'Kitchenham & Charters (2007)',
+     methodologyTouched: false })
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
   const [importSuccess, setImportSuccess] = useState<string | null>(null)
@@ -55,7 +58,9 @@ export default function Overview() {
       qc.invalidateQueries({ queryKey: ['projects'] })
       setProjectId(p.id)
       setShowCreate(false)
-      setForm({ title: '', lead_researcher: '', description: '' })
+      setForm({ title: '', lead_researcher: '', description: '',
+     review_type: SLR, methodology: 'Kitchenham & Charters (2007)',
+     methodologyTouched: false })
       setSubmitted(false)
     },
   })
@@ -78,11 +83,15 @@ export default function Overview() {
   const activeProject = projects.find(p => p.id === projectId)
   const confirmDeleteProject = projects.find(p => p.id === confirmDeleteId)
 
-  const openCreate = () => { setForm({ title: '', lead_researcher: '', description: '' }); setSubmitted(false); setShowCreate(true) }
+  const openCreate = () => { setForm({ title: '', lead_researcher: '', description: '',
+     review_type: SLR, methodology: 'Kitchenham & Charters (2007)',
+     methodologyTouched: false }); setSubmitted(false); setShowCreate(true) }
   const submitCreate = () => {
     setSubmitted(true)
     if (!form.title || !form.lead_researcher) return
-    createMutation.mutate(form)
+    // `methodologyTouched` is form state, not a project field.
+    const { methodologyTouched: _ignored, ...payload } = form
+    createMutation.mutate(payload)
   }
 
   const configuredDbs = searchStrings.map(s => s.db_name)
@@ -175,6 +184,10 @@ export default function Overview() {
                   </div>
                   <p className="text-xs text-ink-muted">
                     {p.lead_researcher} · {new Date(p.created_at).toLocaleDateString()}
+                    {/* Which kind of review this is decides what its PRISMA
+                        figure shows, so it belongs where the project is
+                        chosen rather than three pages in. */}
+                    {isMlr(p) && <> · <span className="text-accent font-medium">MLR</span></>}
                   </p>
                 </div>
                 <div className="flex gap-1.5 items-center shrink-0">
@@ -198,7 +211,7 @@ export default function Overview() {
 
       {/* Create project modal */}
       {showCreate && (
-        <Modal title="New SLR Project" onClose={() => setShowCreate(false)} onEnter={submitCreate}>
+        <Modal title="New Review Project" onClose={() => setShowCreate(false)} onEnter={submitCreate}>
           <FormField label="Title" required error={submitted && !form.title ? 'Title is required' : undefined}>
             <input
               className={`input ${submitted && !form.title ? 'border-exclude ring-1 ring-exclude' : ''}`}
@@ -214,6 +227,46 @@ export default function Overview() {
               placeholder="Your name"
               value={form.lead_researcher}
               onChange={e => setForm(f => ({ ...f, lead_researcher: e.target.value }))}
+            />
+          </FormField>
+          {/* Declared here rather than inferred later: it decides what the
+              PRISMA figure has to show, and a figure that grew a third column
+              partway through a review would change a published diagram without
+              anyone deciding to. Changeable afterwards in Setup. */}
+          <FormField
+            label="Review type"
+            required
+            hint={REVIEW_TYPES.find(t => t.value === form.review_type)?.hint}
+          >
+            <select
+              className="select"
+              value={form.review_type}
+              onChange={e => {
+                const value = e.target.value
+                const preset = REVIEW_TYPES.find(t => t.value === value)
+                setForm(f => ({
+                  ...f,
+                  review_type: value,
+                  // Only follow the type while the user has not typed their
+                  // own: overwriting an edited methodology would lose it.
+                  methodology: f.methodologyTouched
+                    ? f.methodology
+                    : (preset?.defaultMethodology ?? f.methodology),
+                }))
+              }}
+            >
+              {REVIEW_TYPES.map(t => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
+          </FormField>
+          <FormField label="Methodology" hint="Cited in the report and the replication package.">
+            <input
+              className="input"
+              value={form.methodology}
+              onChange={e => setForm(f => ({
+                ...f, methodology: e.target.value, methodologyTouched: true,
+              }))}
             />
           </FormField>
           <FormField label="Description (optional)">

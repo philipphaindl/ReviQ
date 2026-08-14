@@ -7,6 +7,9 @@ export interface Project {
   lead_researcher: string
   created_at: string
   methodology: string
+  /** "slr" | "mlr". Read it through utils/reviewType.ts, never by comparing
+   *  the string here — a project from an older backend has no value at all. */
+  review_type?: string
   qa_high_threshold: number
   qa_medium_threshold: number
 }

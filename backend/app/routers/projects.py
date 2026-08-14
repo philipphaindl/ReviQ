@@ -18,10 +18,27 @@ router = APIRouter(tags=["projects"])
 
 # ── Project ──────────────────────────────────────────────────────────────────
 
+# The two review types the tool knows. Validated rather than free text: this
+# value gates the grey-literature stream, and a typo would silently leave a
+# multivocal review reporting itself as a systematic one.
+REVIEW_TYPES = {"slr", "mlr"}
+
+
+def _check_review_type(value: Optional[str]) -> None:
+    if value is not None and value not in REVIEW_TYPES:
+        raise HTTPException(
+            422, f"review_type must be one of {sorted(REVIEW_TYPES)}, got {value!r}")
+
+
 class ProjectCreate(BaseModel):
     title: str
     description: Optional[str] = None
     lead_researcher: str
+    # Both were on the model and reachable through neither the API nor the UI.
+    # `methodology` in particular defaulted to Kitchenham & Charters for every
+    # project including multivocal ones, which cite Garousi et al. instead.
+    methodology: Optional[str] = None
+    review_type: str = "slr"
     qa_high_threshold: float = 75.0
     qa_medium_threshold: float = 50.0
 
@@ -30,6 +47,8 @@ class ProjectUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     lead_researcher: Optional[str] = None
+    methodology: Optional[str] = None
+    review_type: Optional[str] = None
     qa_high_threshold: Optional[float] = None
     qa_medium_threshold: Optional[float] = None
 
@@ -41,7 +60,10 @@ def list_projects(session: Session = Depends(get_session)):
 
 @router.post("/projects", status_code=201)
 def create_project(body: ProjectCreate, session: Session = Depends(get_session)):
-    project = Project(**body.model_dump())
+    _check_review_type(body.review_type)
+    # `exclude_none` so an omitted `methodology` keeps the model's default
+    # rather than overwriting it with null.
+    project = Project(**body.model_dump(exclude_none=True))
     session.add(project)
     session.commit()
     session.refresh(project)
@@ -65,6 +87,7 @@ def update_project(project_id: int, body: ProjectUpdate, session: Session = Depe
     p = session.get(Project, project_id)
     if not p:
         raise HTTPException(404, "Project not found")
+    _check_review_type(body.review_type)
     for k, v in body.model_dump(exclude_none=True).items():
         setattr(p, k, v)
     session.add(p)

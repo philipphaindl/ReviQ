@@ -128,6 +128,11 @@ MIGRATIONS = [
     # on every connection — including from the CLI, which never boots this app.
     "ALTER TABLE greysource ADD COLUMN document_id INTEGER",
     "ALTER TABLE greysource ADD COLUMN snapshot_id INTEGER",
+    # Every project that predates this column was a systematic review. Backfill
+    # rather than default, so an existing review keeps its two-stream PRISMA
+    # figure instead of gaining an empty grey column.
+    "ALTER TABLE project ADD COLUMN review_type VARCHAR",
+    "UPDATE project SET review_type = 'slr' WHERE review_type IS NULL",
 ]
 
 

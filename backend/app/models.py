@@ -29,6 +29,18 @@ class Project(SQLModel, table=True):
     lead_researcher: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     methodology: str = "Kitchenham & Charters (2007)"
+    # "slr" or "mlr". Declared when the project is created rather than inferred
+    # from whether grey literature happens to have been imported: a multivocal
+    # review is designed as one in its protocol (Garousi, Felizardo & Mäntylä
+    # 2019), and the choice decides what the PRISMA figure has to show and what
+    # the report has to say. Inferring it would also mean the third stream
+    # appears mid-review, changing a published figure without anyone deciding.
+    #
+    # Defaults to "slr", and the migration backfills existing rows to it: every
+    # project that predates this column was a systematic review, and a tool
+    # that silently promoted them would put an empty grey column in their
+    # figures.
+    review_type: str = "slr"
     qa_high_threshold: float = 75.0
     qa_medium_threshold: float = 50.0
 
