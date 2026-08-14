@@ -22,6 +22,17 @@ services:
       # `docker compose up --build`. replication.py already assumed /data.
       - DATA_DIR=/data
       - BIB_BASE_DIR=/bib_data
+      # Grey-literature retrieval keys, passed through from the host rather
+      # than assigned: `- VAR` without a value forwards it only when it is set,
+      # so an absent key stays absent and `_require_key` can say which one is
+      # missing. `- VAR=${VAR}` would hand the process an empty string instead
+      # and the message would name the wrong problem.
+      #
+      # Documented in .env.example. They are never stored, logged or accepted
+      # over HTTP — see redact.py.
+      - SEARCHAPI_API_KEY
+      - SCRAPINGBEE_API_KEY
+      - ANTHROPIC_API_KEY
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
