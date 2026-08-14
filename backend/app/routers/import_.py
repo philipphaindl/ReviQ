@@ -363,6 +363,90 @@ def list_grey_sources(project_id: int, session: Session = Depends(get_session)):
     ).all()
 
 
+@router.get("/projects/{project_id}/retrievals")
+def list_retrievals(project_id: int,
+                    session: Session = Depends(get_session),
+                    retrieval=Depends(get_retrieval_conn)):
+    """The retrievals this project has made, as importable scopes.
+
+    `/import/grey/from-retrieval` takes a run id or a batch id. Until now the
+    only way to learn one was to read it off the CLI's output, which put a UUID
+    between a user and their own corpus. This is what lets the interface offer
+    the choice instead.
+
+    Scoped to the project's own runs (D28). A shared installation's retrieval
+    tables hold every project's corpus, and offering another review's runs here
+    would let one project import the other's sources without either noticing.
+
+    A batch is one entry, not one per run: `batch` issues a whole query set
+    together and that set is the unit a methods section describes. Runs made
+    outside a batch appear on their own.
+    """
+    _require_project(project_id, session)
+
+    runs = retrieval.execute(
+        """SELECT run_id, batch_id, query, engine, started_at_utc, status
+           FROM runs WHERE project_id = ? ORDER BY started_at_utc""",
+        (project_id,),
+    ).fetchall()
+    if not runs:
+        return []
+
+    # One grouped query rather than one per run. A batch of twenty queries is
+    # ordinary, and this endpoint is called every time the import page opens.
+    marks = ", ".join("?" for _ in runs)
+    run_ids = [r["run_id"] for r in runs]
+    counts = {
+        row["run_id"]: row["n"]
+        for row in retrieval.execute(
+            f"""SELECT run_id, COUNT(DISTINCT document_id) AS n
+                FROM serp_results WHERE run_id IN ({marks}) GROUP BY run_id""",
+            run_ids,
+        )
+    }
+
+    # Which scopes this project already took in. Recorded on `GreyImport`, so a
+    # user is not offered a second import of the same batch without warning —
+    # it would be counted as `already_present` and change nothing, but silently
+    # doing nothing is worse than saying so.
+    imported = {
+        g.scope_id for g in session.exec(
+            select(GreyImport).where(GreyImport.project_id == project_id)
+        ).all() if g.scope_id
+    }
+
+    scopes: dict[tuple[str, str], dict] = {}
+    for run in runs:
+        kind, ident = (("batch", run["batch_id"]) if run["batch_id"]
+                       else ("run", run["run_id"]))
+        entry = scopes.setdefault((kind, ident), {
+            "kind": kind, "scope_id": ident, "queries": [], "engines": set(),
+            "started_at_utc": run["started_at_utc"], "documents": 0,
+            "runs": 0, "incomplete": False,
+        })
+        entry["queries"].append(run["query"])
+        entry["engines"].add(run["engine"])
+        entry["documents"] += counts.get(run["run_id"], 0)
+        entry["runs"] += 1
+        # A batch whose last run died leaves a partial corpus. Importable, but
+        # the number it contributes to "records identified" is not the number
+        # the protocol asked for, and that belongs on screen.
+        if run["status"] != "completed":
+            entry["incomplete"] = True
+        entry["started_at_utc"] = min(entry["started_at_utc"], run["started_at_utc"])
+
+    return sorted(
+        (
+            {**e,
+             "engines": sorted(e["engines"]),
+             "already_imported": e["scope_id"] in imported}
+            for e in scopes.values()
+        ),
+        key=lambda e: e["started_at_utc"],
+        reverse=True,
+    )
+
+
 @router.get("/projects/{project_id}/papers/{paper_id}/grey-record")
 def get_grey_record(project_id: int, paper_id: int,
                     session: Session = Depends(get_session)):
