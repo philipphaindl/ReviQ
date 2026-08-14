@@ -35,20 +35,38 @@ def list_papers(
 
     papers = session.exec(stmt).all()
 
-    # Enrich with final decisions and conflict status
+    # Both decision tables are read in one query each and grouped here, rather
+    # than queried per paper. The per-paper form issued 2N+1 statements; with
+    # grey literature a project holds hundreds of papers rather than dozens
+    # (the pilot corpus alone is 424), and this endpoint is what the screening
+    # view calls on every filter change.
+    wanted_phase = phase or "screening"
+    paper_ids = [p.id for p in papers]
+
+    finals: dict[int, FinalDecision] = {}
+    decisions: dict[int, list[ReviewerDecision]] = {}
+    if paper_ids:
+        for fd in session.exec(
+            select(FinalDecision)
+            .where(FinalDecision.paper_id.in_(paper_ids))
+            .where(FinalDecision.phase == wanted_phase)
+        ).all():
+            # `.first()` before: keep the first row per paper, not the last, so
+            # a project carrying more than one final decision for a phase reads
+            # the same way it did.
+            finals.setdefault(fd.paper_id, fd)
+
+        for rd in session.exec(
+            select(ReviewerDecision)
+            .where(ReviewerDecision.paper_id.in_(paper_ids))
+            .where(ReviewerDecision.phase == wanted_phase)
+        ).all():
+            decisions.setdefault(rd.paper_id, []).append(rd)
+
     result = []
     for paper in papers:
-        final = session.exec(
-            select(FinalDecision)
-            .where(FinalDecision.paper_id == paper.id)
-            .where(FinalDecision.phase == (phase or "screening"))
-        ).first()
-
-        reviewer_decisions = session.exec(
-            select(ReviewerDecision)
-            .where(ReviewerDecision.paper_id == paper.id)
-            .where(ReviewerDecision.phase == (phase or "screening"))
-        ).all()
+        final = finals.get(paper.id)
+        reviewer_decisions = decisions.get(paper.id, [])
 
         entry = paper.model_dump()
         entry["final_decision"] = final.model_dump() if final else None
