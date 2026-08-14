@@ -5,7 +5,7 @@ import type {
   QACriterion, TaxonomyEntry, DatabaseSearchString,
   Paper, KappaResult, ImportStats, ConflictLog, ExportStats,
   SnowballingIteration, QASummary, ExtractionField, ExtractionSummary,
-  GreyRecord,
+  GreyRecord, GreyImportResult, Retrieval,
 } from './types'
 
 const api = axios.create({ baseURL: '/api' })
@@ -304,3 +304,34 @@ export const downloadReportUrl = (pid: number) =>
  */
 export const getGreyRecord = (pid: number, paperId: number) =>
   api.get<GreyRecord>(`/projects/${pid}/papers/${paperId}/grey-record`).then(r => r.data)
+
+/** The retrievals this project made, newest first.
+ *
+ * Scoped to the project's own runs: a shared installation's retrieval tables
+ * hold every project's corpus. This is what lets the import page offer the
+ * choice instead of asking a user to read a UUID off the CLI's output.
+ */
+export const getRetrievals = (pid: number) =>
+  api.get<Retrieval[]>(`/projects/${pid}/retrievals`).then(r => r.data)
+
+/** Import a retrieval this installation made, by run id or batch id.
+ *
+ * The primary path: it builds the same `reviq-grey-v1` package the exporter
+ * writes and applies it through the same code the upload below uses. Only the
+ * round trip through disk is skipped, never the format.
+ */
+export const importGreyFromRetrieval = (pid: number, scopeId: string) =>
+  api.post<GreyImportResult>(
+    `/projects/${pid}/import/grey/from-retrieval`, { scope_id: scopeId },
+  ).then(r => r.data)
+
+/** Import a `reviq-grey-v1` package file — a corpus from a co-reviewer, or
+ *  from a retrieval made on another installation. */
+export const importGreyPackage = (pid: number, file: File) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  return api.post<GreyImportResult>(
+    `/projects/${pid}/import/grey`, formData,
+    { headers: { 'Content-Type': 'multipart/form-data' } },
+  ).then(r => r.data)
+}

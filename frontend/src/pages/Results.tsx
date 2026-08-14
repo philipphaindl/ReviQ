@@ -13,7 +13,7 @@ import { createRoot } from 'react-dom/client'
 import { useProject } from '../App'
 import { getExportStats, getQASummary, getExtractionSummary, exportBibtexUrl, getImportStats, getPapers, getTaxonomyTypes, getTaxonomy, getKappa, getReviewers, getProject, exportReplicationPackageUrl, getSearchMetrics, getExclusionCriteria } from '../api/client'
 import { Card, CardHeader, StatBar, StatCell, EmptyState } from '../components/ui'
-import { normalizeDbKey, dbByKey } from '../components/databases'
+import { sourceLabel } from '../utils/sourceLabel'
 import {
   allStreamCounts, streamIsPresent,
   type StreamCounts, type StreamSpec,
@@ -266,16 +266,6 @@ const COLUMN: Record<StreamSpec['key'], {
     header: 'Grey literature', ident: 'Records from grey literature',
     included: 'Included (grey literature)', breakdown: true, dedup: true,
   },
-}
-
-/** Display name for a `bySource` key, formal or grey. */
-function sourceLabel(source: string): string {
-  const grey = /^grey(-snowball)?:(.*)$/.exec(source)
-  if (grey) {
-    const engine = grey[2].charAt(0).toUpperCase() + grey[2].slice(1)
-    return grey[1] ? `${engine} (snowballed)` : engine
-  }
-  return dbByKey(normalizeDbKey(source))?.label ?? source
 }
 
 // One column per stream that contributed something; the geometry follows from

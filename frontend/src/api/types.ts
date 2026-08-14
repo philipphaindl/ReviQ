@@ -254,6 +254,65 @@ export interface ExtractionSummary {
   papers: ExtractionPaperRow[]
 }
 
+// ── Grey literature: importing ────────────────────────────────────────────────
+
+/** One retrieval this project made, as a scope that can be imported.
+ *
+ * A batch is one entry rather than one per run: `batch` issues a whole query
+ * set together and that set is the unit a methods section describes.
+ */
+export interface Retrieval {
+  kind: 'run' | 'batch'
+  /** The run id or batch id `/import/grey/from-retrieval` takes. */
+  scope_id: string
+  queries: string[]
+  /** Taken from the runs, never chosen by the user: the runs record which
+   *  engine actually answered, and a hand-typed label could contradict them. */
+  engines: string[]
+  started_at_utc: string
+  documents: number
+  runs: number
+  /** A run in this scope did not complete, so the corpus is partial — and the
+   *  number it contributes to "records identified" is not the number the
+   *  protocol asked for. */
+  incomplete: boolean
+  /** This project already imported this scope. Importing it again would count
+   *  every record as `already_present` and change nothing. */
+  already_imported: boolean
+}
+
+/** What an import of a grey package did, record by record.
+ *
+ * The four disjoint outcomes — `imported_unique`, `imported_duplicates`,
+ * `already_present`, `skipped_no_citekey` — partition `total_in_package`
+ * exactly. They are where a PRISMA "records identified" and "duplicates
+ * removed" come from, so a record falling out of all of them could not be
+ * reconciled by anyone reading the finished diagram.
+ */
+export interface GreyImportResult {
+  grey_import_id: number
+  /** From the package, via `grey_service.engine_of`. `mixed` when its runs
+   *  used more than one. */
+  engine: string
+  scope?: { kind: string; id: string } | null
+  queries: number
+  total_in_package: number
+  imported_unique: number
+  imported_duplicates: number
+  already_present: number
+  skipped_no_citekey: number
+  /** Imported and not readable: identified by the search, lost at retrieval
+   *  rather than at screening. A PRISMA "reports not retrieved". */
+  imported_unretrievable: number
+  unretrievable_by_reason: Record<string, number>
+  /** The package's own totals, so a disagreement surfaces here rather than in
+   *  a finished diagram. */
+  package_reported: { documents?: number | null; usable?: number | null }
+  imported_citekeys: string[]
+  duplicate_citekeys: string[]
+  already_present_citekeys: string[]
+}
+
 // ── Grey literature: the dataset view ─────────────────────────────────────────
 
 /** What makes one grey source citable and checkable.

@@ -4,9 +4,13 @@ import { useState, useRef } from 'react'
 import { useProject } from '../App'
 import {
   importBibFile, getImportStats, getDuplicates, overrideDedup, importReviewerDecisions,
+  getProject,
 } from '../api/client'
 import { Card, CardHeader, StatBar, StatCell, EmptyState } from '../components/ui'
 import { DATABASES, DatabaseBadge } from '../components/databases'
+import { sourceLabel } from '../utils/sourceLabel'
+import GreyImportPanel from '../components/GreyImportPanel'
+import { isMlr } from '../utils/reviewType'
 import type { Paper } from '../api/types'
 
 export default function Search() {
@@ -23,6 +27,15 @@ export default function Search() {
   const { data: stats } = useQuery({
     queryKey: ['import-stats', projectId],
     queryFn: () => getImportStats(projectId!),
+    enabled: !!projectId,
+  })
+
+  // The review type is declared in the protocol, never inferred from the data:
+  // a multivocal review shows the grey path before it holds any grey
+  // literature, and a systematic one never shows it at all.
+  const { data: project } = useQuery({
+    queryKey: ['project', projectId],
+    queryFn: () => getProject(projectId!),
     enabled: !!projectId,
   })
 
@@ -61,11 +74,6 @@ export default function Search() {
 
   if (!projectId) {
     return <EmptyState icon="—" message="No active project. Select or create one from the Overview." />
-  }
-
-  const snowballingLabel = (src: string) => {
-    const n = src.match(/^snowballing:(\d+)$/)?.[1]
-    return n ? `snowballing: It. ${n}` : src
   }
 
   const sources = stats
@@ -115,7 +123,10 @@ export default function Search() {
               {sources.map(([source, counts]) => (
                 <tr key={source}>
                   <td className="py-2">
-                    <DatabaseBadge dbKey={source.startsWith('snowballing:') ? snowballingLabel(source) : source} size="md" width="140px" />
+                    {/* The label, not the key: `grey:google` under a heading
+                        that says "Database" asserts that a search engine is a
+                        bibliographic database. */}
+                    <DatabaseBadge dbKey={sourceLabel(source)} size="md" width="140px" />
                   </td>
                   <td className="py-2 text-right text-ink-light">{counts.total}</td>
                   <td className="py-2 text-right text-include font-medium">{counts.original}</td>
@@ -246,6 +257,9 @@ export default function Search() {
           )}
         </div>
       </Card>
+
+      {/* The second import path, for a multivocal review only */}
+      {isMlr(project) && <GreyImportPanel pid={projectId} />}
 
       {/* Import reviewer decisions */}
       <Card>

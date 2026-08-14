@@ -27,20 +27,8 @@ import { useQuery } from '@tanstack/react-query'
 
 import { getGreyRecord } from '../api/client'
 import type { GreyFigure, GreyFullText, GreySource } from '../api/types'
+import { reasonLabel } from '../utils/retrievalReasons'
 import { Badge } from './ui'
-
-/** Plain-language names for the retrieval outcomes. The raw vocabulary
- *  (`origin_unreachable`, `bot_challenge`) is the retrieval side's; a reviewer
- *  reading a dataset view should not have to learn it to know what happened. */
-const REASON_LABELS: Record<string, string> = {
-  origin_unreachable: 'the origin did not answer (commonly publisher access control)',
-  bot_challenge: 'a firewall or bot challenge answered instead of the page',
-  no_article_text: 'the markup carried no article text',
-  not_found: 'gone — the link had rotted (404/410)',
-  platform_post: 'a platform post or video rather than a document',
-  proxy_rejected: 'the request itself was rejected by the proxy',
-  unsupported_media: 'neither HTML nor PDF',
-}
 
 function statusTone(status?: string | null) {
   if (status === 'ok') return 'include' as const
@@ -299,9 +287,7 @@ export default function GreyRecordPanel({
   }
 
   const { source, full_text, figures } = data
-  const reason = source.retrieval_reason
-    ? (REASON_LABELS[source.retrieval_reason] ?? source.retrieval_reason)
-    : null
+  const reason = reasonLabel(source.retrieval_reason)
 
   return (
     <div>
