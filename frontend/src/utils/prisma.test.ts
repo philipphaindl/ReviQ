@@ -188,3 +188,38 @@ describe('stream presence', () => {
     expect(streamIsPresent(c)).toBe(true)
   })
 })
+
+// ── the list the diagram lays its columns out from ────────────────────────────
+
+/** What `PrismaFlowDiagram` does with `allStreamCounts`: keep the streams that
+ *  contributed, in order, and give each one a column. The order is the figure's
+ *  reading order, so it has to survive a gap in the middle. */
+const drawn = (screening: PrismaPaper[], bySource = {}) =>
+  allStreamCounts(screening, [], bySource)
+    .filter(s => streamIsPresent(s.counts))
+    .map(s => s.spec.key)
+
+describe('which streams a review hands the diagram', () => {
+  it('lists them in PRISMA reading order', () => {
+    expect(drawn([paper('acm'), paper('snowballing:1'), paper('grey:google')]))
+      .toEqual(['database', 'snowball', 'grey'])
+  })
+
+  it('closes the gap left by a stream the review never used', () => {
+    // A multivocal review that did not snowball still reads left to right.
+    expect(drawn([paper('acm'), paper('grey:google')]))
+      .toEqual(['database', 'grey'])
+  })
+
+  it('leaves an SLR with exactly the columns it has today', () => {
+    expect(drawn([paper('acm')])).toEqual(['database'])
+    expect(drawn([paper('acm'), paper('snowballing:1')]))
+      .toEqual(['database', 'snowball'])
+  })
+
+  it('is empty for an untouched project', () => {
+    // The diagram draws a skeleton of zeros rather than nothing at all; that
+    // decision belongs to the figure, not to the counts.
+    expect(drawn([])).toEqual([])
+  })
+})

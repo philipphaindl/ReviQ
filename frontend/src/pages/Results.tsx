@@ -1,6 +1,7 @@
 /**
  * Results & Visualization (Phase 8) — PRISMA flow diagram, charts, and export.
- * PRISMA is inline SVG with parallel streams (DB search + snowballing).
+ * PRISMA is inline SVG, one column per stream that contributed something:
+ * database search, snowballing, and — in a multivocal review — grey literature.
  *
  * Stream membership comes from ../components/streams, never from testing the
  * `source` string here: that test had no third case, so a grey-literature
@@ -12,9 +13,11 @@ import { createRoot } from 'react-dom/client'
 import { useProject } from '../App'
 import { getExportStats, getQASummary, getExtractionSummary, exportBibtexUrl, getImportStats, getPapers, getTaxonomyTypes, getTaxonomy, getKappa, getReviewers, getProject, exportReplicationPackageUrl, getSearchMetrics, getExclusionCriteria } from '../api/client'
 import { Card, CardHeader, StatBar, StatCell, EmptyState } from '../components/ui'
-import { normalizeDbKey, dbByKey, DatabaseBadge } from '../components/databases'
-import { isFormalSearch, isFormalSearchSource } from '../components/streams'
-import { STREAMS, streamCounts } from '../utils/prisma'
+import { normalizeDbKey, dbByKey } from '../components/databases'
+import {
+  allStreamCounts, streamIsPresent,
+  type StreamCounts, type StreamSpec,
+} from '../utils/prisma'
 import type { KappaResult } from '../api/types'
 import {
   aggregateExtractionField, aggregateTaxonomy, binQAScores,
@@ -127,24 +130,20 @@ function PrismaView({ pid }: { pid: number }) {
   // drifted: "full texts assessed" meant *passed screening* for databases and
   // *has a full-text decision* for snowballing, in the same figure. Adding grey
   // literature as a third copy would have made that three definitions.
-  const db = streamCounts(STREAMS[0], screeningPapers, fulltextPapers, bySource)
-  const snowball = streamCounts(STREAMS[1], screeningPapers, fulltextPapers, bySource)
-  const grey = streamCounts(STREAMS[2], screeningPapers, fulltextPapers, bySource)
+  const streams = allStreamCounts(screeningPapers, fulltextPapers, bySource)
 
-  // Combined for stat cards
-  const totalIncluded = db.ftIncluded + snowball.ftIncluded + grey.ftIncluded
+  // Combined for stat cards. Reading only the database column understated
+  // these for any review that snowballed or searched the web.
+  const afterDedup = streams.reduce((n, s) => n + s.counts.unique, 0)
+  const totalIncluded = streams.reduce((n, s) => n + s.counts.ftIncluded, 0)
   const included = totalIncluded > 0 ? totalIncluded : stats.screening_included
 
   return (
     <div className="space-y-4">
       <StatBar>
         <StatCell label="Total Retrieved" value={stats.total_retrieved} />
-        {/* Across all streams. Reading only the database column understated
-            both numbers for any review that snowballed or searched the web. */}
-        <StatCell label="After Deduplication"
-          value={db.unique + snowball.unique + grey.unique} />
-        <StatCell label="Screened"
-          value={db.unique + snowball.unique + grey.unique} />
+        <StatCell label="After Deduplication" value={afterDedup} />
+        <StatCell label="Screened" value={afterDedup} />
         <StatCell label="Included" value={included} color="include" />
       </StatBar>
 
@@ -154,24 +153,8 @@ function PrismaView({ pid }: { pid: number }) {
         />
         <div className="overflow-x-auto">
           <PrismaFlowDiagram
-            dbRetrieved={db.retrieved}
-            dbDuplicates={db.duplicates}
-            dbUnique={db.unique}
-            dbScreeningExcluded={db.screeningExcluded}
-            dbFTAssessed={db.ftAssessed}
-            dbFTExcluded={db.ftExcluded}
-            dbFTIncluded={db.ftIncluded}
+            streams={streams}
             bySource={bySource}
-            dbScrExclByCrit={db.screeningExclByCriterion}
-            dbFTExclByCrit={db.ftExclByCriterion}
-            snowballRetrieved={snowball.retrieved}
-            snowballScreened={snowball.unique}
-            snowballScrExcluded={snowball.screeningExcluded}
-            snowballFTAssessed={snowball.ftAssessed}
-            snowballFTExcluded={snowball.ftExcluded}
-            snowballFTIncluded={snowball.ftIncluded}
-            snowballScrExclByCrit={snowball.screeningExclByCriterion}
-            snowballFTExclByCrit={snowball.ftExclByCriterion}
             shortLabelMap={shortLabelMap}
           />
         </div>
@@ -260,39 +243,74 @@ function PrismaSvgDownload() {
   )
 }
 
-// Two-column layout when snowballing exists, single column otherwise.
-// Y positions cascade top-to-bottom; each row accounts for the tallest
+/** What a column draws beyond the skeleton every stream shares.
+ *
+ * Snowballing has neither a source breakdown — its "sources" are the seed
+ * papers, one row each — nor a deduplication step of its own. A searched
+ * stream has both: databases overlap with one another, and so do the search
+ * engines behind a grey corpus.
+ */
+const COLUMN: Record<StreamSpec['key'], {
+  header: string; ident: string; included: string
+  breakdown: boolean; dedup: boolean
+}> = {
+  database: {
+    header: 'Database search', ident: 'Records from databases',
+    included: 'Included (databases)', breakdown: true, dedup: true,
+  },
+  snowball: {
+    header: 'Snowballing', ident: 'Records via snowballing',
+    included: 'Included (snowballing)', breakdown: false, dedup: false,
+  },
+  grey: {
+    header: 'Grey literature', ident: 'Records from grey literature',
+    included: 'Included (grey literature)', breakdown: true, dedup: true,
+  },
+}
+
+/** Display name for a `bySource` key, formal or grey. */
+function sourceLabel(source: string): string {
+  const grey = /^grey(-snowball)?:(.*)$/.exec(source)
+  if (grey) {
+    const engine = grey[2].charAt(0).toUpperCase() + grey[2].slice(1)
+    return grey[1] ? `${engine} (snowballed)` : engine
+  }
+  return dbByKey(normalizeDbKey(source))?.label ?? source
+}
+
+// One column per stream that contributed something; the geometry follows from
+// how many that is. The diagram used to take fixed `db*` and `snowball*` prop
+// groups and switch its width on a `hasSnowball` boolean, so every position,
+// the header band and the joining line all assumed one column or two — a third
+// stream could not be expressed at all.
+//
+// Y positions still cascade top-to-bottom; each row accounts for the tallest
 // exclusion box at that level (criteria count varies per box).
-function PrismaFlowDiagram({
-  dbRetrieved, dbDuplicates, dbUnique,
-  dbScreeningExcluded, dbFTAssessed, dbFTExcluded, dbFTIncluded,
-  bySource, dbScrExclByCrit, dbFTExclByCrit,
-  snowballRetrieved, snowballScreened, snowballScrExcluded,
-  snowballFTAssessed, snowballFTExcluded, snowballFTIncluded,
-  snowballScrExclByCrit, snowballFTExclByCrit,
-  shortLabelMap,
-}: {
-  dbRetrieved: number; dbDuplicates: number; dbUnique: number
-  dbScreeningExcluded: number; dbFTAssessed: number; dbFTExcluded: number; dbFTIncluded: number
+export function PrismaFlowDiagram({ streams, bySource, shortLabelMap }: {
+  streams: { spec: StreamSpec; counts: StreamCounts }[]
   bySource: Record<string, { total: number; original: number; duplicate: number }>
-  dbScrExclByCrit: Record<string, number>; dbFTExclByCrit: Record<string, number>
-  snowballRetrieved: number; snowballScreened: number; snowballScrExcluded: number
-  snowballFTAssessed: number; snowballFTExcluded: number; snowballFTIncluded: number
-  snowballScrExclByCrit: Record<string, number>; snowballFTExclByCrit: Record<string, number>
   shortLabelMap: Record<string, string>
 }) {
-  const hasSnowball = snowballRetrieved > 0 || snowballScreened > 0
+  // A review without grey literature must not carry an empty grey column into
+  // its published figure, exactly as an SLR without snowballing does not.
+  const present = streams.filter(s => streamIsPresent(s.counts))
+  // An untouched project has no stream at all: draw the first as a skeleton of
+  // zeros rather than an empty frame.
+  const cols0 = present.length > 0 ? present : streams.slice(0, 1)
+  const nCols = cols0.length
+  const multi = nCols > 1
 
   // Layout
   const GAP = 40
   const boxH = 52
-  const W = hasSnowball ? 970 : 755
-  const boxW = hasSnowball ? 200 : 260
-  const cx1 = hasSnowball ? 240 : 310
-  const cx2 = 660
-  const excl1X = cx1 + boxW / 2 + 20
-  const excl2X = cx2 + boxW / 2 + 20
-  const exclW = hasSnowball ? 180 : 215
+  const boxW = multi ? 200 : 260
+  const exclW = multi ? 180 : 215
+  const EXCL_GAP = 20
+  // Box + gap + exclusion box + gutter — the pitch a column repeats at.
+  const COL_PITCH = 420
+  const cxOf = (i: number) => (multi ? 240 + i * COL_PITCH : 310)
+  const exclXOf = (i: number) => cxOf(i) + boxW / 2 + EXCL_GAP
+  const W = multi ? cxOf(nCols - 1) + boxW / 2 + EXCL_GAP + exclW + 10 : 755
 
   // Publication-safe colors (all pass grayscale + WCAG AA)
   const arrowColor = '#6b7280'          // medium gray — darker than before for print
@@ -303,32 +321,38 @@ function PrismaFlowDiagram({
   // Inter matches the app's UI font; system-ui fallback keeps standalone SVG portable
   const FONT = 'Inter, system-ui, -apple-system, "Segoe UI", sans-serif'
 
-  const sourceEntries = Object.entries(bySource)
-    .filter(([src, v]) => isFormalSearchSource(src) && v.total > 0)
+  // Per-column geometry: only the box heights vary between streams, and each
+  // varies with its own criteria and sources.
+  const cols = cols0.map(({ spec, counts }, i) => {
+    const cfg = COLUMN[spec.key]
+    const sources = cfg.breakdown
+      ? Object.entries(bySource).filter(([src, v]) => spec.matchesSource(src) && v.total > 0)
+      : []
+    return {
+      spec, counts, cfg, sources,
+      cx: cxOf(i), exclX: exclXOf(i),
+      identH: boxH + sources.length * 14,
+      scrExclH: counts.screeningExcluded > 0
+        ? boxH + Object.keys(counts.screeningExclByCriterion).length * 14 : 0,
+      ftExclH: counts.ftExcluded > 0
+        ? boxH + Object.keys(counts.ftExclByCriterion).length * 14 : 0,
+    }
+  })
 
-  const identBoxH = boxH + Math.max(0, sourceEntries.length) * 14
-  const screenExclH  = dbScreeningExcluded > 0  ? boxH + Object.keys(dbScrExclByCrit).length * 14 : 0
-  const ftExclH      = dbFTExcluded > 0          ? boxH + Object.keys(dbFTExclByCrit).length * 14 : 0
-  const snoScrExclH  = snowballScrExcluded > 0   ? boxH + Object.keys(snowballScrExclByCrit).length * 14 : 0
-  const snoFTExclH   = snowballFTExcluded > 0    ? boxH + Object.keys(snowballFTExclByCrit).length * 14 : 0
-
-  // Y positions
-  const Y_TOP = hasSnowball ? 28 : 12
-  const db_ident_cy = Y_TOP + identBoxH / 2
-  const db_dedup_cy = db_ident_cy + identBoxH / 2 + GAP + boxH / 2
-  const shared_screened_cy = db_dedup_cy + boxH / 2 + GAP + boxH / 2
+  // Y positions — one band per PRISMA row, tall enough for every column in it.
+  const Y_TOP = multi ? 28 : 12
+  const identBottom = Y_TOP + Math.max(...cols.map(c => c.identH))
+  // Streams that do not deduplicate run one long arrow through this band.
+  const hasDedupRow = cols.some(c => c.cfg.dedup)
+  const dedup_cy = identBottom + GAP + boxH / 2
+  const shared_screened_cy = (hasDedupRow ? dedup_cy + boxH / 2 : identBottom) + GAP + boxH / 2
   const shared_ft_cy = shared_screened_cy
-    + Math.max(boxH / 2, screenExclH / 2, hasSnowball ? snoScrExclH / 2 : 0) + GAP + boxH / 2
+    + Math.max(boxH / 2, ...cols.map(c => c.scrExclH / 2)) + GAP + boxH / 2
   const shared_incl_cy = shared_ft_cy
-    + Math.max(boxH / 2, ftExclH / 2, hasSnowball ? snoFTExclH / 2 : 0) + GAP + boxH / 2
-  const combined_cy = hasSnowball ? shared_incl_cy + boxH / 2 + GAP + boxH / 2 : 0
+    + Math.max(boxH / 2, ...cols.map(c => c.ftExclH / 2)) + GAP + boxH / 2
+  const combined_cy = multi ? shared_incl_cy + boxH / 2 + GAP + boxH / 2 : 0
 
-  // ── Legend: collect all unique criterion labels across both streams ──────────
-  // Merges all four criterion maps; displays full label since these ARE the labels
-  // (if your project uses short codes like E1/E2, see Option B: pass criteriaNames prop)
-  const H = (hasSnowball ? combined_cy : shared_incl_cy) + boxH / 2 + 24
-
-  const snow_ident_cy = Y_TOP + boxH / 2
+  const H = (multi ? combined_cy : shared_incl_cy) + boxH / 2 + 24
 
   // Text styles — all include fontFamily for standalone SVG portability
   const labelStyle = {
@@ -340,8 +364,8 @@ function PrismaFlowDiagram({
   const smallStyle = { fontSize: '9.5px', fill: '#475569', fontFamily: FONT }
 
   function SectionLabel({ y: yPos, label }: { y: number; label: string }) {
-    const lW = hasSnowball ? 116 : 124
-    const xLeft = hasSnowball ? 8 : cx1 - boxW / 2 - lW - 10
+    const lW = multi ? 116 : 124
+    const xLeft = multi ? 8 : cxOf(0) - boxW / 2 - lW - 10
     return (
       <g>
         <rect x={xLeft} y={yPos - 15} width={lW} height={30} rx={4}
@@ -437,174 +461,148 @@ function PrismaFlowDiagram({
         </marker>
       </defs>
 
-      {/* Column headers */}
-      {hasSnowball && (
-        <>
-          <text x={cx1} y={16} textAnchor="middle"
+      {/* Column headers, one per drawn stream, with a divider between neighbours.
+          Uppercased here rather than by `text-transform`, which the standalone
+          SVG and the PDF renderer do not apply. */}
+      {multi && cols.map((c, i) => (
+        <g key={`head-${c.spec.key}`}>
+          <text x={c.cx} y={16} textAnchor="middle"
             style={{ fontSize: '10px', fill: mainColor, fontWeight: '700', letterSpacing: '0.07em',
-                     textTransform: 'uppercase' as const, fontFamily: FONT }}>
-            Database Search
+                     fontFamily: FONT }}>
+            {c.cfg.header.toUpperCase()}
           </text>
-          <text x={cx2} y={16} textAnchor="middle"
-            style={{ fontSize: '10px', fill: mainColor, fontWeight: '700', letterSpacing: '0.07em',
-                     textTransform: 'uppercase' as const, fontFamily: FONT }}>
-            Other Methods
-          </text>
-          {/* Vertical divider — longer dash for cleaner print reproduction */}
-          <line x1={(cx1 + cx2) / 2} y1={22} x2={(cx1 + cx2) / 2} y2={H - 24}
-            stroke="#c8d4e0" strokeWidth={1} strokeDasharray="6,4" />
-        </>
-      )}
+          {i > 0 && (
+            /* Vertical divider — longer dash for cleaner print reproduction */
+            <line x1={(cols[i - 1].cx + c.cx) / 2} y1={22}
+              x2={(cols[i - 1].cx + c.cx) / 2} y2={H - 24}
+              stroke="#c8d4e0" strokeWidth={1} strokeDasharray="6,4" />
+          )}
+        </g>
+      ))}
 
       {/* Section labels */}
-      <SectionLabel y={db_ident_cy} label="IDENTIFICATION" />
+      <SectionLabel y={Y_TOP + Math.max(...cols.map(c => c.identH)) / 2} label="IDENTIFICATION" />
       <SectionLabel y={shared_screened_cy} label="SCREENING" />
       <SectionLabel y={shared_ft_cy} label="ELIGIBILITY" />
-      <SectionLabel y={hasSnowball ? combined_cy : shared_incl_cy} label="INCLUDED" />
+      <SectionLabel y={multi ? combined_cy : shared_incl_cy} label="INCLUDED" />
 
-      {/* ── DB STREAM ── */}
-
-      {/* DB identification box — slightly tinted fill for visual hierarchy */}
-      <MainBox cx={cx1} cy={db_ident_cy} h={identBoxH} label="Records from databases" n={dbRetrieved}>
-        {sourceEntries.map(([src, v], i) => {
-          const label = dbByKey(normalizeDbKey(src))?.label ?? src
-          return (
-            <text key={src} x={cx1} y={db_ident_cy - identBoxH / 2 + 52 + i * 14}
-              textAnchor="middle" style={smallStyle}>
-              {label}: {v.total} ({v.original} unique)
-            </text>
-          )
-        })}
-      </MainBox>
-
-      {/* Duplicates removed — positioned alongside the identification→dedup arrow,
-          with a connecting horizontal line for PRISMA 2020 conformance */}
-      {dbDuplicates > 0 && (() => {
-        // Midpoint on the vertical arrow between ident and dedup boxes
-        const arrowMidY = (db_ident_cy + identBoxH / 2 + db_dedup_cy - boxH / 2) / 2
-        const dedupBoxH = 42
-        const dedupBoxW = exclW
+      {/* ── One column per stream ── */}
+      {cols.map(c => {
+        const identCy = Y_TOP + c.identH / 2
         return (
-          <g>
-            <rect x={excl1X} y={arrowMidY - dedupBoxH / 2} width={dedupBoxW} height={dedupBoxH}
-              rx={5} fill="#f1f5f9" stroke="#94a3b8" strokeWidth={1}
-              strokeDasharray="5,3" />
-            <text x={excl1X + dedupBoxW / 2} y={arrowMidY - 4} textAnchor="middle"
-              style={{ ...smallStyle, fill: '#475569' }}>Duplicates removed</text>
-            <text x={excl1X + dedupBoxW / 2} y={arrowMidY + 12} textAnchor="middle"
-              style={{ fontSize: '12px', fill: '#334155', fontWeight: '700', fontFamily: FONT }}>n = {dbDuplicates}</text>
-            {/* Horizontal connecting line from main flow */}
-            <line x1={cx1 + boxW / 2} y1={arrowMidY} x2={excl1X - 2} y2={arrowMidY}
-              stroke="#94a3b8" strokeWidth={1} strokeDasharray="3,2" />
+          <g key={c.spec.key}>
+            {/* Identification box — slightly tinted fill for visual hierarchy */}
+            <MainBox cx={c.cx} cy={identCy} h={c.identH}
+              label={c.cfg.ident} n={c.counts.retrieved}>
+              {c.sources.map(([src, v], i) => (
+                <text key={src} x={c.cx} y={Y_TOP + 52 + i * 14}
+                  textAnchor="middle" style={smallStyle}>
+                  {sourceLabel(src)}: {v.total} ({v.original} unique)
+                </text>
+              ))}
+            </MainBox>
+
+            {/* Duplicates removed — positioned alongside the identification→dedup
+                arrow, with a connecting horizontal line for PRISMA 2020 conformance */}
+            {c.cfg.dedup && c.counts.duplicates > 0 && (() => {
+              // Midpoint on the vertical arrow between ident and dedup boxes
+              const arrowMidY = (Y_TOP + c.identH + dedup_cy - boxH / 2) / 2
+              const dedupBoxH = 42
+              const dedupBoxW = exclW
+              return (
+                <g>
+                  <rect x={c.exclX} y={arrowMidY - dedupBoxH / 2} width={dedupBoxW} height={dedupBoxH}
+                    rx={5} fill="#f1f5f9" stroke="#94a3b8" strokeWidth={1}
+                    strokeDasharray="5,3" />
+                  <text x={c.exclX + dedupBoxW / 2} y={arrowMidY - 4} textAnchor="middle"
+                    style={{ ...smallStyle, fill: '#475569' }}>Duplicates removed</text>
+                  <text x={c.exclX + dedupBoxW / 2} y={arrowMidY + 12} textAnchor="middle"
+                    style={{ fontSize: '12px', fill: '#334155', fontWeight: '700', fontFamily: FONT }}>n = {c.counts.duplicates}</text>
+                  {/* Horizontal connecting line from main flow */}
+                  <line x1={c.cx + boxW / 2} y1={arrowMidY} x2={c.exclX - 2} y2={arrowMidY}
+                    stroke="#94a3b8" strokeWidth={1} strokeDasharray="3,2" />
+                </g>
+              )
+            })()}
+
+            {c.cfg.dedup ? (
+              <>
+                <DownArrow cx={c.cx} fromY={Y_TOP + c.identH} toY={dedup_cy - boxH / 2} />
+                <MainBox cx={c.cx} cy={dedup_cy}
+                  label="Records after deduplication" n={c.counts.unique} />
+                <DownArrow cx={c.cx} fromY={dedup_cy + boxH / 2} toY={shared_screened_cy - boxH / 2} />
+              </>
+            ) : (
+              /* No deduplication step: one arrow through the band the others use */
+              <DownArrow cx={c.cx} fromY={Y_TOP + c.identH} toY={shared_screened_cy - boxH / 2} />
+            )}
+
+            <MainBox cx={c.cx} cy={shared_screened_cy} label="Records screened" n={c.counts.unique} />
+            <ExclusionBox fromCx={c.cx} cy={shared_screened_cy} exclX={c.exclX}
+              label="Excluded (title/abstract)" n={c.counts.screeningExcluded}
+              criteria={c.counts.screeningExclByCriterion} />
+
+            <DownArrow cx={c.cx}
+              fromY={shared_screened_cy + boxH / 2}
+              toY={shared_ft_cy - boxH / 2} />
+            <MainBox cx={c.cx} cy={shared_ft_cy} label="Full texts assessed" n={c.counts.ftAssessed} />
+            <ExclusionBox fromCx={c.cx} cy={shared_ft_cy} exclX={c.exclX}
+              label="Not eligible (full-text)" n={c.counts.ftExcluded}
+              criteria={c.counts.ftExclByCriterion} />
+
+            <DownArrow cx={c.cx}
+              fromY={shared_ft_cy + boxH / 2}
+              toY={shared_incl_cy - boxH / 2} />
+
+            {multi ? (
+              <MainBox cx={c.cx} cy={shared_incl_cy}
+                label={c.cfg.included} n={c.counts.ftIncluded} />
+            ) : (
+              /* Single stream: its included box is the final one, and green */
+              <g>
+                <rect x={c.cx - boxW / 2} y={shared_incl_cy - boxH / 2} width={boxW} height={boxH}
+                  rx={5} fill="#f0fdf4" stroke="#22c55e" strokeWidth={2} />
+                <text x={c.cx} y={shared_incl_cy - 6} textAnchor="middle"
+                  style={{ ...boxTextStyle, fill: '#166534' }}>Studies included in review</text>
+                <text x={c.cx} y={shared_incl_cy + 13} textAnchor="middle"
+                  style={{ ...nStyle, fill: '#166534', fontSize: '15px' }}>n = {c.counts.ftIncluded}</text>
+              </g>
+            )}
           </g>
         )
+      })}
+
+      {/* ── Where the streams join ── */}
+      {multi && (() => {
+        const first = cols[0].cx
+        const last = cols[cols.length - 1].cx
+        const mid = (first + last) / 2
+        const joinY = shared_incl_cy + boxH / 2 + 22
+        return (
+          <>
+            {/* Convergence arrows: every included box → the combined final box */}
+            {cols.map(c => (
+              <line key={`join-${c.spec.key}`} x1={c.cx} y1={shared_incl_cy + boxH / 2}
+                x2={c.cx} y2={joinY} stroke={arrowColor} strokeWidth={1.5} />
+            ))}
+            <line x1={first} y1={joinY} x2={last} y2={joinY}
+              stroke={arrowColor} strokeWidth={1.5} />
+            <line x1={mid} y1={joinY} x2={mid} y2={combined_cy - boxH / 2}
+              stroke={arrowColor} strokeWidth={1.5} markerEnd="url(#arrowGray)" />
+
+            {/* Combined final box — wider, green, prominent */}
+            <rect x={mid - boxW * 0.85} y={combined_cy - boxH / 2}
+              width={boxW * 1.7} height={boxH}
+              rx={5} fill="#f0fdf4" stroke="#22c55e" strokeWidth={2} />
+            <text x={mid} y={combined_cy - 6} textAnchor="middle"
+              style={{ ...boxTextStyle, fill: '#166534' }}>Studies included in review</text>
+            <text x={mid} y={combined_cy + 13} textAnchor="middle"
+              style={{ ...nStyle, fill: '#166534', fontSize: '15px' }}>
+              n = {cols.reduce((sum, c) => sum + c.counts.ftIncluded, 0)}
+            </text>
+          </>
+        )
       })()}
-
-      <DownArrow cx={cx1} fromY={db_ident_cy + identBoxH / 2} toY={db_dedup_cy - boxH / 2} />
-      <MainBox cx={cx1} cy={db_dedup_cy} label="Records after deduplication" n={dbUnique} />
-
-      <DownArrow cx={cx1} fromY={db_dedup_cy + boxH / 2} toY={shared_screened_cy - boxH / 2} />
-      <MainBox cx={cx1} cy={shared_screened_cy} label="Records screened" n={dbUnique} />
-      <ExclusionBox fromCx={cx1} cy={shared_screened_cy} exclX={excl1X}
-        label="Excluded (title/abstract)" n={dbScreeningExcluded} criteria={dbScrExclByCrit} />
-
-      <DownArrow cx={cx1}
-        fromY={shared_screened_cy + boxH / 2}
-        toY={shared_ft_cy - boxH / 2} />
-      <MainBox cx={cx1} cy={shared_ft_cy} label="Full texts assessed" n={dbFTAssessed} />
-      <ExclusionBox fromCx={cx1} cy={shared_ft_cy} exclX={excl1X}
-        label="Not eligible (full-text)" n={dbFTExcluded} criteria={dbFTExclByCrit} />
-
-      <DownArrow cx={cx1}
-        fromY={shared_ft_cy + boxH / 2}
-        toY={shared_incl_cy - boxH / 2} />
-
-      {hasSnowball ? (
-        <MainBox cx={cx1} cy={shared_incl_cy} label="Included (databases)" n={dbFTIncluded} />
-      ) : (
-        /* Single stream: green "Studies included" final box */
-        <g>
-          <rect x={cx1 - boxW / 2} y={shared_incl_cy - boxH / 2} width={boxW} height={boxH}
-            rx={5} fill="#f0fdf4" stroke="#22c55e" strokeWidth={2} />
-          <text x={cx1} y={shared_incl_cy - 6} textAnchor="middle"
-            style={{ ...boxTextStyle, fill: '#166534' }}>Studies included in review</text>
-          <text x={cx1} y={shared_incl_cy + 13} textAnchor="middle"
-            style={{ ...nStyle, fill: '#166534', fontSize: '15px' }}>n = {dbFTIncluded}</text>
-        </g>
-      )}
-
-      {/* ── SNOWBALL STREAM ── */}
-      {hasSnowball && (
-        <>
-          <g>
-            <rect x={cx2 - boxW / 2} y={snow_ident_cy - boxH / 2} width={boxW} height={boxH}
-              rx={5} fill="#f7fafd" stroke="#93aec8" strokeWidth={1.5} />
-            <text x={cx2} y={snow_ident_cy - 6} textAnchor="middle" style={boxTextStyle}>Records via snowballing</text>
-            <text x={cx2} y={snow_ident_cy + 13} textAnchor="middle" style={nStyle}>n = {snowballRetrieved}</text>
-          </g>
-
-          <DownArrow cx={cx2} fromY={snow_ident_cy + boxH / 2} toY={shared_screened_cy - boxH / 2} />
-
-          <g>
-            <rect x={cx2 - boxW / 2} y={shared_screened_cy - boxH / 2} width={boxW} height={boxH}
-              rx={5} fill="#f7fafd" stroke="#93aec8" strokeWidth={1.5} />
-            <text x={cx2} y={shared_screened_cy - 6} textAnchor="middle" style={boxTextStyle}>Records screened</text>
-            <text x={cx2} y={shared_screened_cy + 13} textAnchor="middle" style={nStyle}>n = {snowballScreened}</text>
-          </g>
-          {snowballScrExcluded > 0 && (
-            <ExclusionBox fromCx={cx2} cy={shared_screened_cy} exclX={excl2X}
-              label="Excluded (screening)" n={snowballScrExcluded} criteria={snowballScrExclByCrit} />
-          )}
-
-          <DownArrow cx={cx2}
-            fromY={shared_screened_cy + boxH / 2}
-            toY={shared_ft_cy - boxH / 2} />
-
-          <g>
-            <rect x={cx2 - boxW / 2} y={shared_ft_cy - boxH / 2} width={boxW} height={boxH}
-              rx={5} fill="#f7fafd" stroke="#93aec8" strokeWidth={1.5} />
-            <text x={cx2} y={shared_ft_cy - 6} textAnchor="middle" style={boxTextStyle}>Full texts assessed</text>
-            <text x={cx2} y={shared_ft_cy + 13} textAnchor="middle" style={nStyle}>n = {snowballFTAssessed}</text>
-          </g>
-          {snowballFTExcluded > 0 && (
-            <ExclusionBox fromCx={cx2} cy={shared_ft_cy} exclX={excl2X}
-              label="Not eligible (full-text)" n={snowballFTExcluded} criteria={snowballFTExclByCrit} />
-          )}
-
-          <DownArrow cx={cx2}
-            fromY={shared_ft_cy + boxH / 2}
-            toY={shared_incl_cy - boxH / 2} />
-
-          <g>
-            <rect x={cx2 - boxW / 2} y={shared_incl_cy - boxH / 2} width={boxW} height={boxH}
-              rx={5} fill="#f7fafd" stroke="#93aec8" strokeWidth={1.5} />
-            <text x={cx2} y={shared_incl_cy - 6} textAnchor="middle" style={boxTextStyle}>Included (snowballing)</text>
-            <text x={cx2} y={shared_incl_cy + 13} textAnchor="middle" style={nStyle}>n = {snowballFTIncluded}</text>
-          </g>
-
-          {/* Convergence arrows: both included boxes → combined final box */}
-          <line x1={cx1} y1={shared_incl_cy + boxH / 2} x2={cx1} y2={shared_incl_cy + boxH / 2 + 22}
-            stroke={arrowColor} strokeWidth={1.5} />
-          <line x1={cx2} y1={shared_incl_cy + boxH / 2} x2={cx2} y2={shared_incl_cy + boxH / 2 + 22}
-            stroke={arrowColor} strokeWidth={1.5} />
-          <line x1={cx1} y1={shared_incl_cy + boxH / 2 + 22} x2={cx2} y2={shared_incl_cy + boxH / 2 + 22}
-            stroke={arrowColor} strokeWidth={1.5} />
-          <line x1={(cx1 + cx2) / 2} y1={shared_incl_cy + boxH / 2 + 22}
-            x2={(cx1 + cx2) / 2} y2={combined_cy - boxH / 2}
-            stroke={arrowColor} strokeWidth={1.5} markerEnd="url(#arrowGray)" />
-
-          {/* Combined final box — wider, green, prominent */}
-          <rect x={(cx1 + cx2) / 2 - boxW * 0.85} y={combined_cy - boxH / 2}
-            width={boxW * 1.7} height={boxH}
-            rx={5} fill="#f0fdf4" stroke="#22c55e" strokeWidth={2} />
-          <text x={(cx1 + cx2) / 2} y={combined_cy - 6} textAnchor="middle"
-            style={{ ...boxTextStyle, fill: '#166534' }}>Studies included in review</text>
-          <text x={(cx1 + cx2) / 2} y={combined_cy + 13} textAnchor="middle"
-            style={{ ...nStyle, fill: '#166534', fontSize: '15px' }}>
-            n = {dbFTIncluded + snowballFTIncluded}
-          </text>
-        </>
-      )}
 
     </svg>
   )
@@ -1023,12 +1021,11 @@ function ExportView({ pid }: { pid: number }) {
     const shortLabelMap: Record<string, string> = {}
     for (const c of exclusionCriteria) { if (c.short_label) shortLabelMap[c.label] = c.short_label }
 
-    // The same derivation the on-screen view uses. This block used to be a
-    // second copy of it, so the PDF's figure and the browser's could disagree
-    // about the same review — the defect `dedup_status` and
-    // `detected_duplicates` each caused once already.
-    const db = streamCounts(STREAMS[0], screeningPapers, fulltextPapers, bySource)
-    const snowball = streamCounts(STREAMS[1], screeningPapers, fulltextPapers, bySource)
+    // The same derivation the on-screen view uses, all three streams of it.
+    // This block used to be a second copy, so the PDF's figure and the
+    // browser's could disagree about the same review — the defect
+    // `dedup_status` and `detected_duplicates` each caused once already.
+    const streams = allStreamCounts(screeningPapers, fulltextPapers, bySource)
 
     const container = document.createElement('div')
     container.style.cssText = 'position:absolute;left:-9999px;top:0;width:1200px'
@@ -1036,19 +1033,7 @@ function ExportView({ pid }: { pid: number }) {
     const root = createRoot(container)
     root.render(
       <PrismaFlowDiagram
-        dbRetrieved={db.retrieved} dbDuplicates={db.duplicates} dbUnique={db.unique}
-        dbScreeningExcluded={db.screeningExcluded} dbFTAssessed={db.ftAssessed}
-        dbFTExcluded={db.ftExcluded}
-        dbFTIncluded={db.ftIncluded}
-        bySource={bySource}
-        dbScrExclByCrit={db.screeningExclByCriterion}
-        dbFTExclByCrit={db.ftExclByCriterion}
-        snowballRetrieved={snowball.retrieved} snowballScreened={snowball.unique}
-        snowballScrExcluded={snowball.screeningExcluded} snowballFTAssessed={snowball.ftAssessed}
-        snowballFTExcluded={snowball.ftExcluded} snowballFTIncluded={snowball.ftIncluded}
-        snowballScrExclByCrit={snowball.screeningExclByCriterion}
-        snowballFTExclByCrit={snowball.ftExclByCriterion}
-        shortLabelMap={shortLabelMap}
+        streams={streams} bySource={bySource} shortLabelMap={shortLabelMap}
       />
     )
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
