@@ -14,6 +14,8 @@ import {
   Card, CardHeader, StatBar, StatCell, Modal, FormField,
   DecisionBadge, EmptyState, Badge,
 } from '../components/ui'
+import GreyRecordPanel from '../components/GreyRecordPanel'
+import { isGrey } from '../components/streams'
 import type { Paper, ConflictLog } from '../api/types'
 import { formatAuthors, ownDecision, consensusDecision, hasOpenConflict } from '../utils'
 
@@ -321,6 +323,16 @@ function DecisionModal({
           <p className="text-xs text-ink-muted mt-2 border-t border-rule pt-2">
             <span className="font-medium">Keywords:</span> {paper.keywords}
           </p>
+        )}
+
+        {/* A grey source cannot be looked up again by DOI — the page may have
+            changed or gone. What was actually read, when, and its digest belong
+            in front of the reviewer at the moment of the decision, not one
+            navigation away. Formal papers have no retrieval to show. */}
+        {isGrey(paper) && (
+          <div className="border-t border-rule mt-3 pt-3">
+            <GreyRecordPanel pid={paper.project_id} paperId={paper.id} />
+          </div>
         )}
       </div>
 

@@ -5,6 +5,7 @@ import type {
   QACriterion, TaxonomyEntry, DatabaseSearchString,
   Paper, KappaResult, ImportStats, ConflictLog, ExportStats,
   SnowballingIteration, QASummary, ExtractionField, ExtractionSummary,
+  GreyRecord,
 } from './types'
 
 const api = axios.create({ baseURL: '/api' })
@@ -291,3 +292,15 @@ export const importReplicationPackage = (file: File) => {
 
 export const downloadReportUrl = (pid: number) =>
   `/api/projects/${pid}/report/pdf`
+
+// ── Grey literature ───────────────────────────────────────────────────────────
+
+/** Provenance, full text and figures for one grey source.
+ *
+ * 404s for a formal paper: it has no retrieval to describe, and an empty
+ * envelope would invite a view that renders blank provenance as though the
+ * retrieval had found nothing. Callers should only ask for papers whose
+ * `stream` is grey.
+ */
+export const getGreyRecord = (pid: number, paperId: number) =>
+  api.get<GreyRecord>(`/projects/${pid}/papers/${paperId}/grey-record`).then(r => r.data)

@@ -363,6 +363,65 @@ def list_grey_sources(project_id: int, session: Session = Depends(get_session)):
     ).all()
 
 
+@router.get("/projects/{project_id}/papers/{paper_id}/grey-record")
+def get_grey_record(project_id: int, paper_id: int,
+                    session: Session = Depends(get_session)):
+    """Everything held about one grey source: provenance, text, figures.
+
+    One endpoint rather than three, because the three are read together and
+    separately fetched halves are how a caller ends up rendering a full text
+    without the status it was extracted under — which D31 forbids. `full_text`
+    carries `retrieval_status` in the same object as `text`, so there is no
+    shape of this response in which a consumer holds one and not the other.
+
+    404 when the paper carries no `GreySource`: a formal paper has no retrieval
+    to describe, and an empty envelope would invite a dataset view that renders
+    blank fields as though the retrieval had simply found nothing.
+    """
+    _require_project(project_id, session)
+
+    paper = session.get(Paper, paper_id)
+    if not paper or paper.project_id != project_id:
+        raise HTTPException(404, "Paper not found")
+
+    source = session.exec(
+        select(GreySource)
+        .where(GreySource.project_id == project_id)
+        .where(GreySource.paper_id == paper_id)
+    ).first()
+    if source is None:
+        raise HTTPException(404, "This paper has no grey-literature provenance")
+
+    full_text = session.exec(
+        select(GreyFullText).where(GreyFullText.paper_id == paper_id)
+    ).first()
+
+    figures = session.exec(
+        select(GreyFigure).where(GreyFigure.paper_id == paper_id)
+    ).all()
+    # Both queries are flat, not one per figure: a source may carry dozens of
+    # images, and the listing beside this endpoint was already fixed for the
+    # same reason.
+    descriptions: dict[int, list[GreyFigureDescription]] = {}
+    if figures:
+        rows = session.exec(
+            select(GreyFigureDescription)
+            .where(GreyFigureDescription.grey_figure_id.in_([f.id for f in figures]))
+        ).all()
+        for row in rows:
+            descriptions.setdefault(row.grey_figure_id, []).append(row)
+
+    return {
+        "paper_id": paper_id,
+        "source": source,
+        "full_text": full_text,
+        "figures": [
+            {**figure.model_dump(), "descriptions": descriptions.get(figure.id, [])}
+            for figure in figures
+        ],
+    }
+
+
 @router.get("/projects/{project_id}/grey-imports")
 def list_grey_imports(project_id: int, session: Session = Depends(get_session)):
     """The packages this project's grey literature came from."""

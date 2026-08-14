@@ -250,3 +250,92 @@ export interface ExtractionSummary {
   fields: ExtractionField[]
   papers: ExtractionPaperRow[]
 }
+
+// ── Grey literature: the dataset view ─────────────────────────────────────────
+
+/** What makes one grey source citable and checkable.
+ *
+ * A URL alone does not survive the page changing, and grey literature changes
+ * and disappears. The retrieval timestamp, the digest of the bytes read and
+ * where those bytes are archived are the citation.
+ */
+export interface GreySource {
+  id: number
+  paper_id: number
+  record_key: string
+  canonical_url: string
+  source_url?: string | null
+  host?: string | null
+  retrieved_at_utc?: string | null
+  sha256?: string | null
+  media_type?: string | null
+  content_length?: number | null
+  word_count?: number | null
+  archive_filename?: string | null
+  archive_offset?: number | null
+  archive_record_id?: string | null
+  /** ok | blocked | failed | empty | not_fetched */
+  retrieval_status?: string | null
+  /** Why, when it is not "ok": origin_unreachable, bot_challenge, not_found, … */
+  retrieval_reason?: string | null
+  search_observations: number
+  best_rank?: number | null
+}
+
+/** The extracted body text, and the status it was extracted under.
+ *
+ * The two are one object on purpose (D31): text pulled from a page served
+ * under a bot challenge is kept, because in the pilot corpus three such
+ * records are genuine content — but two are the challenge page's own words.
+ * Nothing separates them mechanically, so `retrieval_status` has to travel
+ * with the text and be rendered beside it. Never display `text` alone.
+ */
+export interface GreyFullText {
+  id: number
+  paper_id: number
+  text: string
+  word_count?: number | null
+  extractor?: string | null
+  extraction_error?: string | null
+  retrieval_status?: string | null
+}
+
+/** What a model said a figure shows. Generated text, not the source's words. */
+export interface GreyFigureDescription {
+  id: number
+  grey_figure_id: number
+  description?: string | null
+  /** Kept verbatim: a reader has to be able to say what produced this sentence. */
+  model?: string | null
+  prompt?: string | null
+  described_at_utc?: string | null
+  error?: string | null
+}
+
+/** One image, as the page carried it. `alt_text` and `caption` are the source's
+ *  own words about it; anything generated lives in `descriptions`. */
+export interface GreyFigure {
+  id: number
+  paper_id: number
+  raw_src?: string | null
+  resolved_url?: string | null
+  alt_text?: string | null
+  caption?: string | null
+  sha256?: string | null
+  content_type?: string | null
+  byte_size?: number | null
+  archive_filename?: string | null
+  archive_offset?: number | null
+  archive_record_id?: string | null
+  fetch_error?: string | null
+  descriptions: GreyFigureDescription[]
+}
+
+export interface GreyRecord {
+  paper_id: number
+  source: GreySource
+  /** null when the source yielded no bytes — distinct from an empty string,
+   *  which would mean a page that genuinely carried no prose. */
+  full_text: GreyFullText | null
+  figures: GreyFigure[]
+}
