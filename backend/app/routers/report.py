@@ -14,6 +14,7 @@ import tempfile
 from collections import Counter, defaultdict
 from datetime import datetime
 from itertools import groupby
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -61,16 +62,48 @@ _DB_ALIASES = {
 }
 
 
+# fpdf2 refuses to shadow a core font name: add_font("Times", …) warns
+# "Core font or font already added" and silently keeps the latin-1 builtin,
+# so the embedded family needs a name of its own.
+_FONT = "ReviQSerif"
+_FONT_DIR = Path(__file__).resolve().parent.parent / "assets" / "fonts"
+_FONT_FILES = {
+    "":   "DejaVuSerif.ttf",
+    "B":  "DejaVuSerif-Bold.ttf",
+    "I":  "DejaVuSerif-Italic.ttf",
+    "BI": "DejaVuSerif-BoldItalic.ttf",
+}
+
+# Characters the embedded font does not carry, mapped to something readable.
+# Kept small on purpose: the old table existed because *everything* outside
+# latin-1 was lost, and it grew by whack-a-mole \u2014 `\u2010`, an ordinary hyphen
+# variant, was still missing and became "?" in the published PDF. With a
+# Unicode font the only real gaps are scripts DejaVu Serif does not cover.
+_REPLACEMENTS = {
+    "|": ".",       # not a glyph problem: `|` is the table-cell separator
+}
+
+
 def _s(v, maxlen=0):
-    """Sanitise a value for fpdf2's latin-1-only text engine.
-    Replaces common Unicode chars (curly quotes, em-dash, kappa, etc.) with
-    ASCII equivalents, then force-encodes to latin-1 with replacement."""
+    """Sanitise a value for the PDF text engine.
+
+    The report is set in an embedded DejaVu Serif (see `_Report`), so Latin,
+    Cyrillic, Greek, the Unicode dash and quote variants and most Western
+    punctuation now render as themselves rather than being flattened to ASCII.
+    That matters for a multivocal review: grey literature comes off the open
+    web, and a Russian or Greek title used to reach the published PDF as a row
+    of question marks.
+
+    What is still lost: scripts the font does not carry \u2014 CJK, Arabic, Hebrew,
+    emoji. Those become "?" per character. `test_report_unicode.py` pins both
+    halves, so the limit is documented rather than rediscovered. Covering CJK
+    means embedding a second, much larger font, and that is a separate
+    decision.
+    """
     if v is None: return "-"
-    t = (str(v).replace("\u2026","...").replace("\u2014","-").replace("\u2013","-")
-         .replace("|",".").replace("\u00d7","x").replace("\u2019","'").replace("\u2018","'")
-         .replace("\u201c",'"').replace("\u201d",'"').replace("\u03ba","k")
-         .replace("\u2265",">=").replace("\u2264","<=")
-         .encode("latin-1",errors="replace").decode("latin-1"))
+    t = str(v)
+    for bad, good in _REPLACEMENTS.items():
+        t = t.replace(bad, good)
     if maxlen and len(t)>maxlen: t=t[:maxlen-3]+"..."
     return t
 
@@ -369,6 +402,8 @@ def _donut_svg(rows, palette, total: int, unit: str = "papers", size: int = 200)
     # Centred total + unit label.
     parts.append(
         f'<text x="{cx}" y="{cy - 4}" text-anchor="middle" '
+        # A core font name on purpose: this SVG is rendered by svglib/reportlab,
+        # not by fpdf2, and `_FONT` is registered only with the latter.
         f'font-family="Times" font-size="22" font-weight="500" fill="#2B2B2B">'
         f'{total}</text>'
     )
@@ -401,7 +436,7 @@ def _draw_donut_chart(pdf, rows, *, label: str = "papers"):
     legend_x = pdf.l_margin + donut_w + 6
     legend_w = _CW - donut_w - 6
     row_h = 4.4
-    pdf.set_font("Times", "", 8.5)
+    pdf.set_font(_FONT, "", 8.5)
     color_map: dict[str, str] = {}
     for r, color in zip(non_zero, palette):
         color_map[r["value"]] = color
@@ -431,7 +466,7 @@ def _draw_donut_chart(pdf, rows, *, label: str = "papers"):
         pdf.cell(14, row_h, f'{r["percentage"]:.1f}%', align="R")
         cur_y += row_h
 
-    pdf.set_text_color(*_BLACK); pdf.set_font("Times", "", 9)
+    pdf.set_text_color(*_BLACK); pdf.set_font(_FONT, "", 9)
     pdf.set_y(max(chart_y + chart_h, cur_y + 1))
 
 
@@ -460,7 +495,7 @@ def _draw_qa_distribution_chart(pdf, bins, t_medium, t_high):
     base_y = chart_y + pad_t + inner_h
 
     pdf.set_draw_color(*_BORDER); pdf.set_line_width(0.15)
-    pdf.set_font("Times", "", 6); pdf.set_text_color(*_GRAY)
+    pdf.set_font(_FONT, "", 6); pdf.set_text_color(*_GRAY)
     for tick in (0, tick_step, tick_step * 2, tick_step * 3, y_max):
         ty = base_y - (tick / y_max) * inner_h
         pdf.line(chart_x + pad_l, ty, chart_x + pad_l + inner_w, ty)
@@ -487,14 +522,14 @@ def _draw_qa_distribution_chart(pdf, bins, t_medium, t_high):
         tx = chart_x + pad_l + (t_pct / 100.0) * inner_w
         pdf.line(tx, chart_y + pad_t, tx, base_y)
     pdf.set_dash_pattern()
-    pdf.set_text_color(85, 85, 85); pdf.set_font("Times", "", 6)
+    pdf.set_text_color(85, 85, 85); pdf.set_font(_FONT, "", 6)
     for t_pct, label in ((t_medium, f"Medium >= {int(t_medium)}%"),
                          (t_high,   f"High >= {int(t_high)}%")):
         tx = chart_x + pad_l + (t_pct / 100.0) * inner_w
         pdf.set_xy(min(tx + 0.5, chart_x + pad_l + inner_w - 20), chart_y + pad_t)
         pdf.cell(20, 2.5, label)
 
-    pdf.set_font("Times", "", 6); pdf.set_text_color(*_GRAY)
+    pdf.set_font(_FONT, "", 6); pdf.set_text_color(*_GRAY)
     for i, b in enumerate(bins):
         bx = chart_x + pad_l + i * (bar_w + bar_gap)
         pdf.set_xy(bx, base_y + 0.8)
@@ -507,7 +542,7 @@ def _draw_qa_distribution_chart(pdf, bins, t_medium, t_high):
     for band, label in (("low", "Low"), ("medium", "Medium"), ("high", "High")):
         pdf.set_fill_color(*_BAND_RGB[band])
         pdf.rect(legend_x, legend_y, 2, 2, "F")
-        pdf.set_text_color(*_GRAY); pdf.set_font("Times", "", 6)
+        pdf.set_text_color(*_GRAY); pdf.set_font(_FONT, "", 6)
         pdf.set_xy(legend_x + 2.5, legend_y - 0.4)
         pdf.cell(20, 3, label)
         legend_x += 18
@@ -519,14 +554,14 @@ def _draw_qa_distribution_chart(pdf, bins, t_medium, t_high):
 def _draw_taxonomy_bars(pdf, rows, title):
     """Compact horizontal bar list — one category per row, count + percentage."""
     if not rows: return
-    pdf.set_font("Times", "B", 7.5); pdf.set_text_color(*_DARK)
+    pdf.set_font(_FONT, "B", 7.5); pdf.set_text_color(*_DARK)
     pdf.cell(0, 4, _s(title), ln=True)
     pdf.set_text_color(*_BLACK)
     max_count = max((r["count"] for r in rows), default=1) or 1
     label_w = 36
     value_w = 18
     bar_max_w = _CW - label_w - value_w - 4
-    pdf.set_font("Times", "", 7.5)
+    pdf.set_font(_FONT, "", 7.5)
     for r in rows:
         y0 = pdf.get_y()
         if y0 + 5 > pdf.page_break_trigger: pdf.add_page(); y0 = pdf.get_y()
@@ -541,12 +576,12 @@ def _draw_taxonomy_bars(pdf, rows, title):
             pdf.set_fill_color(*_BAR_BLUE)
             pdf.rect(bx, y0 + 0.4, bw, 2.8, "F")
         pdf.set_xy(bx + bar_max_w + 2, y0)
-        pdf.set_text_color(*_BLACK); pdf.set_font("Times", "B", 7.5)
+        pdf.set_text_color(*_BLACK); pdf.set_font(_FONT, "B", 7.5)
         pdf.cell(8, 3.6, str(r["count"]))
-        pdf.set_text_color(*_GRAY); pdf.set_font("Times", "", 7)
+        pdf.set_text_color(*_GRAY); pdf.set_font(_FONT, "", 7)
         pdf.cell(10, 3.6, f"({r['percentage']:.0f}%)")
         pdf.ln(4)
-    pdf.set_text_color(*_BLACK); pdf.set_font("Times", "", 9)
+    pdf.set_text_color(*_BLACK); pdf.set_font(_FONT, "", 9)
     pdf.ln(1)
 
 
@@ -573,7 +608,7 @@ def _draw_extraction_field_chart(pdf, rows):
 
     base_y = chart_y + pad_t + inner_h
     pdf.set_draw_color(*_BORDER); pdf.set_line_width(0.15)
-    pdf.set_font("Times", "", 6); pdf.set_text_color(*_GRAY)
+    pdf.set_font(_FONT, "", 6); pdf.set_text_color(*_GRAY)
     for tick in (0, tick_step, tick_step * 2, tick_step * 3, y_max):
         ty = base_y - (tick / y_max) * inner_h
         pdf.line(chart_x + pad_l, ty, chart_x + pad_l + inner_w, ty)
@@ -587,7 +622,7 @@ def _draw_extraction_field_chart(pdf, rows):
         by = base_y - bh
         pdf.rect(bx, by, bar_w, bh, "F")
 
-    pdf.set_font("Times", "", 6); pdf.set_text_color(*_GRAY)
+    pdf.set_font(_FONT, "", 6); pdf.set_text_color(*_GRAY)
     for i, r in enumerate(rows):
         bx = chart_x + pad_l + i * (bar_w + bar_gap)
         with pdf.rotation(angle=35, x=bx + bar_w / 2, y=base_y + 1.5):
@@ -600,18 +635,48 @@ def _draw_extraction_field_chart(pdf, rows):
 
 # ─────────────────────────────────────────────────────────────────────────────
 class _Report(FPDF):
-    """Times-Roman based A4 report with auto-wrapping tables."""
+    """A4 report with auto-wrapping tables, set in DejaVu Serif.
+
+    The family is registered under the name `Times` on purpose. Every
+    `set_font(_FONT, …)` in this module — thirty-odd sites — then resolves to
+    the embedded TTF without being rewritten, and a call site that is added
+    later cannot accidentally reach for the latin-1 core font again.
+
+    Why an embedded font at all: fpdf2's core fonts are latin-1, and `_s` had
+    to force every string into that range. For a review of peer-reviewed
+    literature that mostly worked. For a multivocal one it does not — grey
+    literature comes off the open web, and a Cyrillic or Greek title became a
+    row of question marks in the published PDF. DejaVu Serif keeps the serif
+    look the report already had while covering Latin, Cyrillic, Greek and the
+    punctuation that Unicode has several variants of.
+    """
 
     def __init__(self, title):
         super().__init__("P","mm","A4")
+        self._register_fonts()
         self.slr_title = _s(title, 80)
         self.set_margins(20,20,20)
         self.set_auto_page_break(True, margin=22)
         self._is_cover = True
 
+    def _register_fonts(self):
+        """Embed DejaVu Serif under the name the call sites already use.
+
+        A missing font file must not take the report down: a PDF set in the
+        core font with some characters replaced is worth more to a user than an
+        exception, and the degradation is exactly what `_s` already handles.
+        """
+        for style, filename in _FONT_FILES.items():
+            path = _FONT_DIR / filename
+            try:
+                self.add_font(_FONT, style, str(path))
+            except (FileNotFoundError, RuntimeError):
+                return
+        self._unicode_font = True
+
     def header(self):
         if self._is_cover: return
-        self.set_font("Times","I",7); self.set_text_color(*_GRAY_LT)
+        self.set_font(_FONT,"I",7); self.set_text_color(*_GRAY_LT)
         self.cell(0,5,self.slr_title,align="L")
         self.cell(0,5,f"Page {self.page_no()}",align="R")
         self.ln(5)
@@ -624,7 +689,7 @@ class _Report(FPDF):
         self.set_y(-12)
         self.set_draw_color(*_BORDER); self.set_line_width(0.15)
         self.line(self.l_margin,self.get_y(),self.l_margin+_CW,self.get_y())
-        self.set_font("Times","",6.5); self.set_text_color(*_GRAY_LT)
+        self.set_font(_FONT,"",6.5); self.set_text_color(*_GRAY_LT)
         self.cell(0,8,f"Generated by ReviQ  .  {self.slr_title}  .  Page {self.page_no()}",align="C")
         self.set_text_color(*_BLACK)
 
@@ -638,7 +703,7 @@ class _Report(FPDF):
         """Level 1: Section heading — 13pt bold black, 18pt space before, black rule."""
         if self.get_y() + 25 > self.page_break_trigger: self.add_page()
         self.ln(6.5)  # ~18pt
-        self.set_font("Times","B",13); self.set_text_color(*_BLACK)
+        self.set_font(_FONT,"B",13); self.set_text_color(*_BLACK)
         self.cell(0,7,_s(text),ln=True)
         y=self.get_y(); self.set_draw_color(*_BLACK); self.set_line_width(0.4)
         self.line(self.l_margin,y,self.l_margin+_CW,y)
@@ -648,7 +713,7 @@ class _Report(FPDF):
         """Level 2: Subsection — 11pt bold #333, 12pt space before, light gray underline."""
         if self.get_y() + 16 > self.page_break_trigger: self.add_page()
         self.ln(4.2)  # ~12pt
-        self.set_font("Times","B",11); self.set_text_color(*_DARK)
+        self.set_font(_FONT,"B",11); self.set_text_color(*_DARK)
         self.cell(0,5.5,_s(text),ln=True)
         y=self.get_y(); self.set_draw_color(*_GRAY_LT); self.set_line_width(0.18)
         self.line(self.l_margin,y,self.l_margin+_CW,y)
@@ -659,27 +724,27 @@ class _Report(FPDF):
         """Level 3: Field label — 10pt bold #444, 8pt space before."""
         if self.get_y() + 10 > self.page_break_trigger: self.add_page()
         self.ln(2.8)  # ~8pt
-        self.set_font("Times","B",10); self.set_text_color(68,68,68)  # #444
+        self.set_font(_FONT,"B",10); self.set_text_color(68,68,68)  # #444
         self.cell(0,4.5,_s(text),ln=True)
         self.set_text_color(*_BLACK)
 
     def body(self, text):
         """Body text — 9pt regular #333."""
-        self.set_x(self.l_margin); self.set_font("Times","",9); self.set_text_color(*_DARK)
+        self.set_x(self.l_margin); self.set_font(_FONT,"",9); self.set_text_color(*_DARK)
         self.multi_cell(_CW,4.5,_s(text)); self.set_text_color(*_BLACK); self.ln(1)
 
     def note(self, text):
-        self.set_x(self.l_margin); self.set_font("Times","I",8); self.set_text_color(*_DARK)
+        self.set_x(self.l_margin); self.set_font(_FONT,"I",8); self.set_text_color(*_DARK)
         self.multi_cell(_CW,4,_s(text,600)); self.set_text_color(*_BLACK); self.ln(1)
 
     def indent_text(self, text, indent=4):
         """Regular-weight indented text — 9pt #333."""
         self.set_x(self.l_margin + indent)
-        self.set_font("Times","",9); self.set_text_color(*_DARK)
+        self.set_font(_FONT,"",9); self.set_text_color(*_DARK)
         self.multi_cell(_CW - indent, 4, _s(text))
         self.set_text_color(*_BLACK); self.ln(0.5)
 
-    def _measure_mc(self, txt, w, font_name="Times", font_style="", font_size=8):
+    def _measure_mc(self, txt, w, font_name=_FONT, font_style="", font_size=8):
         """Estimate multi-cell height for text in given width."""
         self.set_font(font_name, font_style, font_size)
         line_h = font_size * 0.42
@@ -693,7 +758,7 @@ class _Report(FPDF):
 
     # ── Wrapping table ────────────────────────────────────────────────────────
 
-    def _text_height(self, txt, w, font_name="Times", font_style="", font_size=8):
+    def _text_height(self, txt, w, font_name=_FONT, font_style="", font_size=8):
         """Estimate multi-cell height for text in given width."""
         self.set_font(font_name, font_style, font_size)
         # Use get_string_width to calculate lines needed
@@ -715,7 +780,7 @@ class _Report(FPDF):
 
         # Header
         if self.get_y() + 12 > self.page_break_trigger: self.add_page()
-        self.set_font("Times","B",7.5); self.set_fill_color(*_TH_BG)
+        self.set_font(_FONT,"B",7.5); self.set_fill_color(*_TH_BG)
         self.set_text_color(*_BLACK); self.set_draw_color(*_BORDER)
         for label, w in abs_cols:
             self.cell(w, 5.5, label, border=1, fill=True)
@@ -748,7 +813,7 @@ class _Report(FPDF):
                 cell_text = _s(str(row[ci]) if ci < len(row) else "")
                 x = x0 + sum(ww for _, ww in abs_cols[:ci])
                 self.set_xy(x + 1, y0 + 0.5)
-                self.set_font("Times", "B" if ci == 0 else "", 7.5)
+                self.set_font(_FONT, "B" if ci == 0 else "", 7.5)
                 self.set_text_color(*_BLACK)
                 self.multi_cell(w - 2, line_h, cell_text)
 
@@ -774,11 +839,11 @@ class _Report(FPDF):
             self.rect(x0 + lw, y0, vw, row_h, "FD" if fill else "D")
 
             self.set_xy(x0 + 1, y0 + 0.5)
-            self.set_font("Times","",8); self.set_text_color(*_BLACK)
+            self.set_font(_FONT,"",8); self.set_text_color(*_BLACK)
             self.multi_cell(lw - 2, 4, _s(label))
 
             self.set_xy(x0 + lw + 1, y0 + 0.5)
-            self.set_font("Times","B",8)
+            self.set_font(_FONT,"B",8)
             self.multi_cell(vw - 2, 4, _s(value))
 
             self.set_xy(x0, y0 + row_h)
@@ -1275,30 +1340,30 @@ def _build_pdf(
 
     # ═══ COVER PAGE ══════════════════════════════════════════════════════════
     pdf.ln(55)
-    pdf.set_font("Times","B",20); pdf.set_text_color(*_BLACK)
+    pdf.set_font(_FONT,"B",20); pdf.set_text_color(*_BLACK)
     pdf.multi_cell(_CW, 10, _s(project.title), align="C")
     pdf.ln(4)
-    pdf.set_font("Times","",10); pdf.set_text_color(*_DARK)
+    pdf.set_font(_FONT,"",10); pdf.set_text_color(*_DARK)
     pdf.cell(0,5,"Supplementary Material: Search Protocol & Results",align="C",ln=True)
     pdf.ln(3)
-    pdf.set_font("Times","",9)
+    pdf.set_font(_FONT,"",9)
     pdf.cell(0,4,now,align="C",ln=True)
     pdf.ln(3)
     # Horizontal rule
     pdf.set_draw_color(*_BORDER); pdf.set_line_width(0.2)
     pdf.line(70, pdf.get_y(), 140, pdf.get_y()); pdf.ln(3)
     # Reviewer count
-    pdf.set_font("Times","",9); pdf.set_text_color(*_DARK)
+    pdf.set_font(_FONT,"",9); pdf.set_text_color(*_DARK)
     pdf.cell(0,4,f"{len(reviewers)} reviewer{'s' if len(reviewers)!=1 else ''}",align="C",ln=True)
     # Citation
-    pdf.ln(2); pdf.set_font("Times","I",7); pdf.set_text_color(*_GRAY_LT)
+    pdf.ln(2); pdf.set_font(_FONT,"I",7); pdf.set_text_color(*_GRAY_LT)
     pdf.set_x(pdf.l_margin)
     pdf.multi_cell(_CW, 3.5,
         "Generated with ReviQ. If you use ReviQ in your research, please cite: "
         "Philipp Haindl, ReviQ: A systematic literature review workbench, SoftwareX, Volume 35, 2026.",
         align="C")
     doi_url = "https://doi.org/10.1016/j.softx.2026.102814"
-    pdf.set_font("Times","IU",7); pdf.set_text_color(*_GRAY)
+    pdf.set_font(_FONT,"IU",7); pdf.set_text_color(*_GRAY)
     pdf.set_x(pdf.l_margin)
     pdf.cell(_CW, 3.5, doi_url, align="C", link=doi_url)
     pdf.ln(3.5)
@@ -1341,7 +1406,7 @@ def _build_pdf(
                 pdf.set_font("Courier","",7); pdf.set_fill_color(*_GRAY_BG)
                 pdf.set_x(pdf.l_margin+2)
                 pdf.multi_cell(_CW-4, 3.5, _s(ss.query_string,500), fill=True)
-                pdf.set_fill_color(*_WHITE); pdf.ln(2); pdf.set_font("Times","",9)
+                pdf.set_fill_color(*_WHITE); pdf.ln(2); pdf.set_font(_FONT,"",9)
     else:
         pdf.body("No search strings recorded.")
 
@@ -1530,7 +1595,7 @@ def _build_pdf(
         else:
             _draw_donut_chart(pdf, venue_rows, label="papers")
         if venue_top10:
-            pdf.set_font("Times", "B", 8.5); pdf.set_text_color(*_DARK)
+            pdf.set_font(_FONT, "B", 8.5); pdf.set_text_color(*_DARK)
             pdf.ln(2)
             pdf.cell(0, 4, _s("Top venues by name:"), ln=True)
             pdf.wrapping_table(
