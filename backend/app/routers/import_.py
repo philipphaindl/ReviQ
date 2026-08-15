@@ -376,9 +376,10 @@ def list_retrievals(project_id: int,
     between a user and their own corpus. This is what lets the interface offer
     the choice instead.
 
-    Scoped to the project's own runs (D28). A shared installation's retrieval
-    tables hold every project's corpus, and offering another review's runs here
-    would let one project import the other's sources without either noticing.
+    Scoped to the project's own runs — a run belongs to a review, even though a
+    document belongs to nobody. A shared installation's retrieval tables hold
+    every project's corpus, and offering another review's runs here would let
+    one project import the other's sources without either noticing.
 
     A batch is one entry, not one per run: `batch` issues a whole query set
     together and that set is the unit a methods section describes. Runs made
@@ -484,7 +485,8 @@ def get_grey_record(project_id: int, paper_id: int,
 
     One endpoint rather than three, because the three are read together and
     separately fetched halves are how a caller ends up rendering a full text
-    without the status it was extracted under — which D31 forbids. `full_text`
+    without the status it was extracted under, which a reader who can reach the
+    text must not be able to miss. `full_text`
     carries `retrieval_status` in the same object as `text`, so there is no
     shape of this response in which a consumer holds one and not the other.
 

@@ -9,7 +9,7 @@
  * Two rules run through the layout, both of them from real failure modes
  * rather than taste:
  *
- * 1. **Text is never shown without the status it was extracted under** (D31).
+ * 1. **Text is never shown without the status it was extracted under.**
  *    `FullTextBlock` takes the whole `GreyFullText` object rather than a
  *    string, so there is no way to call it with the text alone. Under a bot
  *    challenge the extractor returns whatever the page served: in the pilot
@@ -122,7 +122,7 @@ const PREVIEW_CHARS = 1500
 /** The text, and — inseparably — the status it was extracted under.
  *
  * Takes the whole record rather than a string: passing only the text is not a
- * thing a caller can express, which is the point (D31).
+ * thing a caller can express, which is the point.
  */
 function FullTextBlock({ fullText }: { fullText: GreyFullText }) {
   const [expanded, setExpanded] = useState(false)

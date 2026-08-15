@@ -74,7 +74,7 @@ def retrieval_db_path(url: str | None = None) -> Path:
 def ensure_retrieval_schema() -> None:
     """Apply `app/retrieval/schema.sql` to the shared file.
 
-    `retrieval.db.connect` runs `ensure_schema` on every connection (D20), so
+    `retrieval.db.connect` runs `ensure_schema` on every connection, so
     connecting once and closing again is the whole mechanism: no second
     migration system, and no SQLAlchemy translation of a schema already written
     as SQL.

@@ -334,8 +334,11 @@ class GreyFullText(SQLModel, table=True):
     be indistinguishable from a page that genuinely held none.
 
     Present, however, for some sources whose retrieval did *not* succeed — see
-    `retrieval_status` below, and D31. That case is real rather than
-    theoretical: in the pilot corpus five of them carry text.
+    `retrieval_status` below. That case is real rather than theoretical: in the
+    pilot corpus five of them carry text, three of it genuine post content
+    served beside a bot challenge and two of it the challenge page's own words.
+    Nothing separates the two mechanically, which is why the text is kept and
+    qualified rather than filtered on status.
     """
     id: Optional[int] = Field(default=None, primary_key=True)
     project_id: int = Field(foreign_key="project.id", index=True)

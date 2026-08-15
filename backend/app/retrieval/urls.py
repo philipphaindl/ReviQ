@@ -1,8 +1,8 @@
 """URL canonicalisation and the deduplication key.
 
 Deliberately hand-written on top of `urllib.parse` rather than delegated to a
-library such as courlan. Risk R7 in docs/retrieval/PLAN.md is the reason: a canonicaliser
-that strips query parameters too eagerly silently merges distinct documents,
+library such as courlan. A canonicaliser that strips query parameters too
+eagerly silently merges distinct documents,
 and in grey literature parameters are often content-bearing (`?id=`, `?doc=`,
 `?report=`). That failure mode is invisible in the output — you simply end up
 with fewer sources and no error.

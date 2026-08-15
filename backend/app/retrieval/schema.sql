@@ -139,9 +139,10 @@ CREATE TABLE IF NOT EXISTS extractions (
 -- find it.
 --
 -- A separate table rather than a wider UNIQUE key on `extractions`: SQLite
--- cannot alter a constraint in place, and D20 is explicit that schema.sql adds
--- tables to an existing database but not columns. This shape upgrades a corpus
--- retrieved months ago on the next connection, which is the normal case here.
+-- cannot alter a constraint in place, and this file adds tables to an existing
+-- database but never columns — it is `CREATE ... IF NOT EXISTS` throughout.
+-- This shape upgrades a corpus retrieved months ago on the next connection,
+-- which is the normal case here.
 CREATE TABLE IF NOT EXISTS extraction_history (
     history_id        INTEGER PRIMARY KEY,
     snapshot_id       INTEGER NOT NULL REFERENCES snapshots(snapshot_id),

@@ -14,7 +14,12 @@ returns 200 with a body, the retrieval succeeded; what the last hop answered
 is not observable, so it is not claimed anywhere.
 
 `render_js` defaults to true at the API and costs 5 credits instead of 1. We
-send render_js=false unless asked otherwise; see docs/retrieval/PLAN.md §5.
+send render_js=false unless asked otherwise: a review mostly retrieves
+articles, reports and PDFs, where rendering buys nothing, and at 50 URLs a run
+that is 50 credits instead of 250. The cost is that JavaScript-heavy pages
+extract as empty, which is why a run counts documents with no text and says so
+— an invisible data problem turned into a visible prompt to re-run with
+`--render-js`.
 """
 
 from __future__ import annotations

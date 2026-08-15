@@ -133,8 +133,16 @@ rather than dropped.
 
 It is a command rather than a button, and stays one. A batch of twenty queries
 runs for tens of minutes — one concurrent request, with a delay between fetches
-— and spends API credits that are billed to you. `docs/retrieval/decisions.md`
-records the reasoning, decision by decision.
+— and spends API credits that are billed to you.
+
+**One caveat belongs in any paper that uses this.** Retrieval goes through
+ScrapingBee, so the WARC `response` record holds the *proxy's* answer, not the
+origin server's raw answer. What ScrapingBee reports about the origin —
+`Spb-Initial-Status-Code` (the **first** status of a redirect chain, not the
+final one), `Spb-Resolved-Url`, `Spb-Cost` — plus the payload SHA-256 is
+written as a `metadata` record beside every response, so the archive alone
+documents how the retrieval happened. `creel report` generates that note rather
+than leaving it to be remembered.
 
 **1 — Two API keys.** [SearchApi.io](https://www.searchapi.io) issues the search
 queries; [ScrapingBee](https://www.scrapingbee.com) fetches and archives what
@@ -592,7 +600,8 @@ backend/app/
     streams.py         # Formal vs grey, search vs snowball — mirrored in the frontend
   retrieval/           # Creel — the grey-literature retrieval tool: CLI, SERP,
                        #   fetch, WARC archive, extraction, figures, interchange,
-                       #   adoption. Knows nothing about reviews; see docs/retrieval/
+                       #   adoption. Knows nothing about reviews; each module's
+                       #   docstring carries the reasoning behind its choices
 ```
 
 ### Frontend structure

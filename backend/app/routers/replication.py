@@ -9,7 +9,8 @@ ZIP layout:
 
 v2 adds the grey-literature side: `grey_sources`, `grey_imports`, and the
 retrieval rows behind them (`retrieval` — runs, documents, snapshots, and so
-on, scoped to this project's own runs per D28). v1 exported papers only, which
+on, scoped to this project's own runs — a run belongs to a review). v1
+exported papers only, which
 silently dropped a grey paper's provenance — the SHA-256, the archive pointer,
 the retrieval timestamp — everything that makes it a citable grey source
 rather than just a URL. A v1 package still imports; its papers arrive without
@@ -119,8 +120,8 @@ def _select_in(conn: sqlite3.Connection, table: str, column: str,
 def _export_retrieval(retrieval: Optional[sqlite3.Connection], pid: int) -> Optional[dict]:
     """The retrieval rows behind this project's grey sources.
 
-    Scoped to `runs.project_id = pid` (D28: a run belongs to a review, a
-    document belongs to nobody) — `retrieval` is one shared file across every
+    Scoped to `runs.project_id = pid` — a run belongs to a review, a document
+    belongs to nobody. `retrieval` is one shared file across every
     project on this installation, and copying documents wholesale would leak
     another project's corpus into this one's package.
 
@@ -582,7 +583,7 @@ def import_replication_package(
 
     # ── Grey-literature retrieval (v2) ───────────────────────────────────────
     # The rows behind `grey_sources`' document_id/snapshot_id — scoped, on the
-    # exporting side, to that project's own runs (D28). Remapped through
+    # exporting side, to that project's own runs. Remapped through
     # `app.retrieval.adopt`, the same command this installation already uses
     # to bring in the pilot corpus, rather than a second implementation of the
     # same remapping.

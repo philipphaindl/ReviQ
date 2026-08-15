@@ -250,8 +250,9 @@ def test_no_snapshot_at_all():
 
 
 def test_a_row_missing_columns_still_classifies():
-    """D20 leaves column-level upgrades manual, so a read command meets rows
-    without the columns it wants. It must classify them, not raise."""
+    """Column upgrades are applied only by `db.COLUMN_UPGRADES`, so a read
+    command meets rows without the columns it wants. It must classify them,
+    not raise."""
     outcome = classify({"blocked_reason": None, "fetch_error": None}, None, host="oecd.org")
     assert outcome.status == EMPTY
 

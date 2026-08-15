@@ -273,8 +273,8 @@ def test_a_re_extraction_that_finds_text_moves_a_document_out_of_empty(corpus):
 
 
 def test_a_schema_older_than_the_history_table_gains_it_on_connect(tmp_path):
-    """D20: a corpus retrieved before this feature existed must not have to be
-    re-initialised to use it."""
+    """A corpus retrieved before this feature existed must not have to be
+    re-initialised to use it — `schema.sql` is applied on every connection."""
     import sqlite3
 
     path = tmp_path / "older.sqlite3"

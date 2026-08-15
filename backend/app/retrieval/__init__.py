@@ -10,8 +10,16 @@ Formerly the standalone tool `glr`. It kept its own repository while a second,
 non-review use was planned; that plan was dropped, so it lives here now and is
 GPL-3.0 like the rest of ReviQ. The commit history that justifies this code
 stays in the archived `philipphaindl/glr` repository — `git log --follow` does
-not reach across repositories — while the decisions themselves are in
-`docs/retrieval/decisions.md` as D1-D31.
+not reach across repositories.
+
+The choices that are expensive to reverse or easy to undo by accident are
+recorded in the docstring of the module that carries them, not in a document
+beside the code: why snapshots are WARC and what the proxy caveat costs
+(`archive.py`), why canonicalisation is hand-written (`urls.py`), why a block
+page is archived rather than discarded (`extract.py`), why a retrieval's cause
+is derived at read time (`outcome.py`), why a retry never searches again
+(`refetch.py`), why integer keys are remapped on adoption (`adopt.py`). A
+reason kept next to the code it governs is read by whoever changes that code.
 
 **This package knows nothing about reviews.** No `study`, no `screening`, no
 `inclusion criterion`, no `citekey`. The boundary is real rather than a

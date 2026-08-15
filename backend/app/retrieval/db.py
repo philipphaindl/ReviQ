@@ -38,10 +38,14 @@ def connect(db_path: Path) -> sqlite3.Connection:
 # Columns added to tables that already existed in an earlier version.
 #
 # schema.sql cannot express these: it is `CREATE ... IF NOT EXISTS` throughout
-# and SQLite has no `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`. D20 left such
-# changes manual, which held while there were none. `runs.project_id` is the
-# first, and leaving it manual would mean a corpus opened only through the CLI
-# never gets it — the CLI is still the primary way a batch is run.
+# and SQLite has no `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`. Worse, any
+# statement referencing a column an older database lacks — an index, most
+# obviously — raises inside `executescript` and abandons the rest of the
+# script, so a missing column would become missing tables. Column changes were
+# therefore left manual, which held while there were none. `runs.project_id` is
+# the first, and leaving it manual would mean a corpus opened only through the
+# CLI never gets it — the CLI is still the primary way a batch is run, and
+# ReviQ's own `MIGRATIONS` runs only when the API boots.
 #
 # Kept deliberately small and additive: a column, a type, no defaults to
 # backfill and nothing dropped. Anything beyond that belongs in a real

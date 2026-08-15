@@ -339,7 +339,9 @@ def cmd_run(args: argparse.Namespace) -> int:
             )
         if empty_text:
             # Surfaced deliberately: silent empty text columns look like a data
-            # problem rather than a retrieval problem. See docs/retrieval/PLAN.md R4.
+            # problem rather than a retrieval problem, and the reader who could
+            # act on it — by re-running with rendering — is the one at this
+            # terminal, not the one reading the CSV a week later.
             print(
                 f"warning: {empty_text} document(s) yielded no text "
                 f"(see extraction_error; --render-js may help)"
@@ -1006,8 +1008,9 @@ def _install_termination_handler() -> None:
 #
 # The seven remaining subcommands are not missing it. `report`, `export-json`,
 # `refetch` and `reextract` derive the project from the runs they were asked to
-# read (D28), and taking it as an argument would be a second chance to get it
-# wrong; `init`, `init-config` and `export` have no project at all.
+# read — a run belongs to a review, so the ids already name it — and taking it
+# as an argument would be a second chance to name it wrong; `init`,
+# `init-config` and `export` have no project at all.
 _PROJECT_HELP = ("the review this retrieval belongs to. Recorded on the run, "
                  "and confines snapshot reuse to that review's own retrievals")
 

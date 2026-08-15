@@ -6,7 +6,7 @@ provenance.
 
 Note on result depth: Google deprecated the `num` parameter on 2025-09-11, so
 `engine=google` returns 10 results per request and depth comes from paging.
-See docs/retrieval/PLAN.md R2.
+`--pages` is therefore the only depth control, and a run's cost scales with it.
 """
 
 from __future__ import annotations

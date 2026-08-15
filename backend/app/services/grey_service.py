@@ -45,7 +45,8 @@ snippet — `abstract` keeps holding what the search engine displayed, because
 that is what a screener saw when deciding. What changed is that the full text
 is now *available* for the phase after screening: a reviewer assessing a grey
 source against inclusion criteria has to read it, and re-fetching a page that
-may have changed since is not the same evidence. See D31.
+may have changed since is not the same evidence — the retrieval timestamp and
+the payload digest exist precisely because a page changes.
 """
 from __future__ import annotations
 
@@ -215,7 +216,9 @@ def record_to_paper_dict(record: dict, engine: str) -> dict:
         "stream": "grey",
         "discovery": "search" if is_search_discovered(record) else "snowball",
         "dedup_status": "original",
-        # Declared by the document, never guessed — see decisions.md D24.
+        # Declared by the document, never guessed: a detected value and a
+        # declared one in the same column, feeding an inclusion decision, with
+        # no way to tell them apart, is the failure this avoids.
         "language": record.get("language"),
         "full_text_url": record.get("source_url") or record.get("canonical_url"),
         "full_text_inaccessible": not is_retrievable(record),
@@ -275,7 +278,7 @@ def record_to_fulltext_dict(record: dict) -> dict | None:
     is genuine source content, and two challenge pages whose "text" is
     "Checking your browser before accessing…". Filtering on status would
     discard the first three; keeping them silently would let the other two be
-    read as documents. See D31.
+    read as documents. So the text is kept and the status kept with it.
     """
     text = record.get("text")
     if not text or not str(text).strip():

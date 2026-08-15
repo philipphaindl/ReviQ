@@ -6,7 +6,8 @@ SHA-256, no archive pointer, no retrieval timestamp. v2 carries `grey_sources`,
 `grey_imports`, and the retrieval rows behind them, and remaps every integer
 key through `app.retrieval.adopt` on the way in — the same command this
 installation already uses to bring in the pilot corpus, scoped here to one
-project's own runs (D28) rather than a whole database.
+project's own runs rather than a whole database — the shared retrieval file
+holds every project's corpus.
 """
 from __future__ import annotations
 

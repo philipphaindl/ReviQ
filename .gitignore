@@ -18,3 +18,11 @@ frontend/dist/assets
 # Docker, here for a checkout run without it — the runs live in DATA_DIR/runs,
 # which for a local checkout is backend/data/runs.
 backend/data/
+
+# Database backups. Written to the checkout root because that is where the
+# shell happens to be, which is how a 3 MB tarball of reviq.db — a review's
+# papers, its reviewers and their addresses — reached a public repository. The
+# pattern is broader than that one filename on purpose: nothing this project
+# ships is a tarball, so the rule costs nothing and does not depend on the next
+# backup being named the same way.
+*.tar.gz

@@ -6,8 +6,11 @@ which matters because the extraction step has to be defensible in a methods
 section. It removes boilerplate and returns metadata in the same call.
 
 PDF goes through pdfminer.six (MIT). PyMuPDF would be 10-50x faster but is
-AGPL-3.0, which would force this tool to AGPL or a commercial licence — see
-docs/retrieval/decisions.md.
+AGPL-3.0, which would force this tool to AGPL or a commercial licence from
+Artifex; either outcome defeats the point of a reusable research artefact. At
+~50 PDFs per run the speed difference is a few seconds, so the trade is not
+close. This is written down because anyone profiling extraction will find
+PyMuPDF and reach for it.
 """
 
 from __future__ import annotations
@@ -47,6 +50,11 @@ BLOCK_SIGNATURES: tuple[tuple[str, str], ...] = (
 )
 
 # Block pages are short. A genuine report, article or whitepaper is not.
+#
+# Calibrated against real retrievals rather than guessed: of nine documents from
+# one query, the two block pages ran to 17 words (MITRE behind F5 BIG-IP ASM)
+# and 16 (ResearchGate behind a Cloudflare challenge), an order of magnitude
+# below this ceiling, and none of the other seven was flagged.
 MAX_BLOCK_PAGE_WORDS = 200
 
 
@@ -234,8 +242,15 @@ def extract_pdf_ocr(content: bytes, dpi: int = 200, max_pages: int = 40) -> Extr
     `ocr` dependencies plus a tesseract binary on the system. A missing
     install must degrade to a recorded extraction error, never break a run.
 
-    pypdfium2 does the rasterising rather than PyMuPDF: same reason as D2, it
-    is BSD/Apache rather than AGPL.
+    pypdfium2 does the rasterising rather than PyMuPDF: same licence reason as
+    the extractor above, it is BSD/Apache rather than AGPL, and it ships wheels
+    so it adds no further system dependency.
+
+    Scanned PDFs are common in exactly the sources a grey-literature review
+    targets — government reports, older whitepapers, standards drafts — and
+    without this they are recorded as retrieved and empty. The dispatch path
+    here is tested; the OCR itself is not, because the packages are not
+    installable in the build environment.
     """
     try:
         import pypdfium2

@@ -32,8 +32,8 @@ from app.retrieval import cli
 TAKES_PROJECT = ("run", "batch", "adopt")
 
 # The rest. `report`, `export-json`, `refetch` and `reextract` derive the
-# project from the runs they were asked to read (D28) — asking again would be a
-# second chance to answer wrong. `init`, `init-config` and `export` have no
+# project from the runs they were asked to read — a run belongs to a review, so
+# asking again would be a second chance to answer wrong. `init`, `init-config` and `export` have no
 # project at all.
 NO_PROJECT = ("init", "init-config", "refetch", "reextract", "report",
               "export", "export-json")

@@ -104,7 +104,7 @@ def test_a_batch_is_one_entry_not_one_per_query(instance, retrieval_conn):
 
 
 def test_another_projects_runs_are_not_offered(instance, retrieval_conn):
-    """D28. A shared installation holds every project's corpus, and offering
+    """A shared installation holds every project's corpus, and offering
     another review's runs would let one import the other's sources."""
     mine = instance.create_project(title="Mine")["id"]
     theirs = instance.create_project(title="Theirs")["id"]

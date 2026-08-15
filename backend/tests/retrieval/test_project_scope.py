@@ -171,7 +171,8 @@ def test_the_export_shows_a_project_its_own_retrieval(conn):
 
 
 def test_the_report_agrees_with_the_export(conn, tmp_path):
-    """D23 in its project-scoped form. The report expresses `best_snapshot` as
+    """One rule for which snapshot represents a document, in its
+    project-scoped form. The report expresses `best_snapshot` as
     a window function for speed; if the two rules drifted apart, the report and
     the export would again disagree about how large the corpus is."""
     _two_projects_over_one_url(conn)

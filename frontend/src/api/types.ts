@@ -352,7 +352,7 @@ export interface GreySource {
 
 /** The extracted body text, and the status it was extracted under.
  *
- * The two are one object on purpose (D31): text pulled from a page served
+ * The two are one object on purpose: text pulled from a page served
  * under a bot challenge is kept, because in the pilot corpus three such
  * records are genuine content — but two are the challenge page's own words.
  * Nothing separates them mechanically, so `retrieval_status` has to travel

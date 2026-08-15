@@ -4,9 +4,8 @@ What a reviewer needs in front of them to assess a grey source: when it was
 read, the digest of what was read, where those bytes are archived, the text
 itself, and what any figures showed.
 
-The invariant this file exists to hold is D31's: there is no shape of the
-response in which a caller holds the text without the status it was extracted
-under. Two of the pilot corpus's five non-`ok` texts are bot-challenge
+The invariant this file exists to hold: there is no shape of the response in
+which a caller holds the text without the status it was extracted under. Two of the pilot corpus's five non-`ok` texts are bot-challenge
 boilerplate, and a view that rendered them unqualified would put "Checking your
 browser before accessing…" in front of a reviewer as the document.
 """
@@ -67,7 +66,7 @@ def test_the_record_carries_what_makes_a_grey_source_citable(instance):
 
 
 def test_the_text_never_arrives_without_its_status(instance):
-    """D31. The two are one object precisely so a caller cannot hold one half."""
+    """The two are one object precisely so a caller cannot hold one half."""
     pid = instance.create_project(title="MLR")["id"]
     instance.import_grey(pid, [
         grey("blocked-1", "https://linkedin.com/posts/x",

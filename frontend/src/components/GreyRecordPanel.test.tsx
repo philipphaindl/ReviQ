@@ -1,7 +1,7 @@
 /**
  * The dataset view's two non-negotiables.
  *
- * D31: full text is never rendered without the retrieval status it was
+ * Full text is never rendered without the retrieval status it was
  * extracted under. Two of the pilot corpus's five non-`ok` texts are
  * bot-challenge boilerplate ("Checking your browser before accessing…"), and a
  * panel that showed them unqualified would put a Cloudflare interstitial in
@@ -69,7 +69,7 @@ describe('provenance', () => {
   })
 })
 
-describe('full text and its status (D31)', () => {
+describe('full text and its status', () => {
   const blocked: GreyRecord = {
     paper_id: 7,
     source: source({ retrieval_status: 'blocked', retrieval_reason: 'bot_challenge' }),

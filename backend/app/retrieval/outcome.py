@@ -24,8 +24,9 @@ type, host, extractor message — and the facts are immutable. Deriving it in
 `report` and `export-json` rather than storing it means a corpus
 retrieved months ago reclassifies under an improved classifier without a single
 byte being fetched again, which is the same property `extractions` already has
-against the WARC. It also needs no new column, and D20 is explicit that
-schema.sql can add tables but not columns.
+against the WARC. It also needs no new column, which matters because
+`schema.sql` is `CREATE ... IF NOT EXISTS` throughout: it adds tables to an
+existing database but not columns.
 
 The classifier is deliberately conservative. It reads what the proxy and the
 extractor reported and stops there; it does not sniff the archived bytes to
@@ -160,8 +161,10 @@ class Outcome(NamedTuple):
 def _get(row: Mapping[str, Any] | Any, key: str) -> Any:
     """Read a column that an older database may not have.
 
-    D20 leaves column-level upgrades manual, so a read command must survive a
-    missing column rather than assume schema.sql has caught up.
+    Column-level upgrades are applied by `db.COLUMN_UPGRADES` and nowhere else,
+    so a read command must survive a missing column rather than assume the
+    database it was handed has caught up. A corpus retrieved months ago is the
+    normal case here, not the exception.
     """
     if row is None:
         return None
