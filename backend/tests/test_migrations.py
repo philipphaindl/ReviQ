@@ -11,7 +11,9 @@ import sqlite3
 import pytest
 from sqlalchemy import create_engine
 
-from app.database import MIGRATIONS, run_migrations
+from app.database import (
+    MIGRATIONS, MLR_METHODOLOGY, WRONG_MLR_METHODOLOGY, run_migrations,
+)
 
 # The `paper` table as it stood before the stream columns existed. Built by
 # hand rather than from the model, because the point is to migrate a database
@@ -142,3 +144,91 @@ class TestMigrationList:
         # venue_category_override is user-set and legitimately NULL by default.
         assert {"stream", "discovery"} <= backfilled
         assert added >= {"stream", "discovery"}
+
+
+# ── The one migration that corrects a value rather than filling one in ────────
+
+# `project` as it stood before the correction. Written by hand for the same
+# reason as LEGACY_SCHEMA above: the point is a database that predates it.
+PROJECT_SCHEMA = """
+CREATE TABLE project (
+    id INTEGER PRIMARY KEY,
+    title VARCHAR NOT NULL,
+    lead_researcher VARCHAR NOT NULL,
+    methodology VARCHAR NOT NULL DEFAULT 'Kitchenham & Charters (2007)'
+);
+"""
+
+PROJECT_ROWS = [
+    # A multivocal review created before the citation was corrected.
+    (1, "Grey pilot", "PH", WRONG_MLR_METHODOLOGY),
+    # A systematic one, which never carried the string at all.
+    (2, "Systematic", "PH", "Kitchenham & Charters (2007)"),
+    # One where the reviewer wrote their own, and it happens to contain the
+    # wrong spelling. Nothing here may touch it.
+    (3, "Hand-written", "PH", "Garousi, Felizardo & Mäntylä (2019), adapted"),
+    # And one created after the fix.
+    (4, "Recent", "PH", MLR_METHODOLOGY),
+]
+
+
+@pytest.fixture
+def projects_db(tmp_path):
+    path = tmp_path / "projects.db"
+    conn = sqlite3.connect(path)
+    conn.executescript(PROJECT_SCHEMA)
+    conn.executemany("INSERT INTO project VALUES (?, ?, ?, ?)", PROJECT_ROWS)
+    conn.commit()
+    conn.close()
+    return path
+
+
+def methodologies(path) -> dict[int, str]:
+    conn = sqlite3.connect(path)
+    try:
+        return {r[0]: r[1] for r in conn.execute("SELECT id, methodology FROM project")}
+    finally:
+        conn.close()
+
+
+class TestMethodologyCorrection:
+    """The multivocal guidelines are Garousi, *Felderer* & Mäntylä. ReviQ
+    offered the wrong co-author as a project's default methodology, and the
+    interface has no field to correct it in — so this boot-time correction is
+    the only thing a reviewer with an existing project has."""
+
+    def test_the_wrong_citation_is_corrected(self, projects_db):
+        run_migrations(create_engine(f"sqlite:///{projects_db}"))
+        assert methodologies(projects_db)[1] == MLR_METHODOLOGY
+
+    def test_the_umlaut_survives(self, projects_db):
+        """Asserted as the literal string rather than through the constant: the
+        statement carries an ä, and it has to match what is stored byte for
+        byte or it matches nothing — and `run_migrations` swallows failures."""
+        run_migrations(create_engine(f"sqlite:///{projects_db}"))
+        assert methodologies(projects_db)[1] == "Garousi, Felderer & Mäntylä (2019)"
+
+    def test_what_a_reviewer_wrote_is_left_alone(self, projects_db):
+        """Guarded by the whole wrong string, so a methodology that merely
+        contains it — someone citing the paper and saying what they changed —
+        is not rewritten under them."""
+        run_migrations(create_engine(f"sqlite:///{projects_db}"))
+        after = methodologies(projects_db)
+        assert after[2] == "Kitchenham & Charters (2007)"
+        assert after[3] == "Garousi, Felizardo & Mäntylä (2019), adapted"
+
+    def test_running_twice_changes_nothing(self, projects_db):
+        engine = create_engine(f"sqlite:///{projects_db}")
+        run_migrations(engine)
+        once = methodologies(projects_db)
+        run_migrations(engine)
+        assert methodologies(projects_db) == once
+
+    def test_a_project_created_after_the_fix_is_untouched(self, projects_db):
+        run_migrations(create_engine(f"sqlite:///{projects_db}"))
+        assert methodologies(projects_db)[4] == MLR_METHODOLOGY
+
+    def test_the_two_strings_differ_in_exactly_the_co_author(self):
+        """If these drift into two unrelated strings the guard stops matching
+        and the correction quietly becomes a no-op."""
+        assert WRONG_MLR_METHODOLOGY.replace("Felizardo", "Felderer") == MLR_METHODOLOGY

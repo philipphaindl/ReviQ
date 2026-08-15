@@ -100,6 +100,18 @@ def get_retrieval_conn():
         conn.close()
 
 
+# The multivocal guidelines, as ReviQ offered them as a project's default
+# methodology until the citation was corrected. The paper is Garousi, *Felderer*
+# & Mäntylä (IST 106, 2019); every project created before then stored the wrong
+# co-author, and the interface has no field to correct it in.
+#
+# Both spellings live here rather than at their two use sites — the migration
+# below and the replication import — because a pair of literals that has to
+# match exactly is a pair that drifts.
+WRONG_MLR_METHODOLOGY = "Garousi, Felizardo & Mäntylä (2019)"
+MLR_METHODOLOGY = "Garousi, Felderer & Mäntylä (2019)"
+
+
 MIGRATIONS = [
     "ALTER TABLE inclusioncriterion ADD COLUMN short_label VARCHAR",
     "ALTER TABLE exclusioncriterion ADD COLUMN short_label VARCHAR",
@@ -133,6 +145,13 @@ MIGRATIONS = [
     # figure instead of gaining an empty grey column.
     "ALTER TABLE project ADD COLUMN review_type VARCHAR",
     "UPDATE project SET review_type = 'slr' WHERE review_type IS NULL",
+    # The one statement here that corrects a value rather than filling in a
+    # missing one. Guarded by the exact wrong string, which makes it idempotent
+    # like the IS NULL guards above, and which is also what keeps it safe: the
+    # only way for a project to hold that string is to have accepted the default
+    # ReviQ offered it. Anything a reviewer typed themselves is left alone.
+    f"UPDATE project SET methodology = '{MLR_METHODOLOGY}' "
+    f"WHERE methodology = '{WRONG_MLR_METHODOLOGY}'",
 ]
 
 

@@ -32,7 +32,10 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, Query
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 
-from ..database import RetrievalDatabaseUnavailable, get_session, retrieval_db_path
+from ..database import (
+    MLR_METHODOLOGY, RetrievalDatabaseUnavailable, WRONG_MLR_METHODOLOGY,
+    get_session, retrieval_db_path,
+)
 from ..models import (
     ConflictLog, DatabaseSearchString, ExclusionCriterion, ExtractionField,
     ExtractionRecord, FinalDecision, GreyImport, GreySource, InclusionCriterion,
@@ -340,6 +343,14 @@ def import_replication_package(
     # ── Project ───────────────────────────────────────────────────────────────
     pd = {k: v for k, v in pkg["project"].items()
           if k not in ("id", "created_at") and not k.startswith("_")}
+    # A package exported before the citation was corrected carries the wrong
+    # co-author for the multivocal guidelines. The boot-time migration cannot
+    # reach it — the row is written after boot — so the same correction happens
+    # here. It rewrites one field of an imported package deliberately: that
+    # string is ReviQ's own generated default, not something the exporting
+    # review wrote, and reproducing a citation known to be wrong helps nobody.
+    if pd.get("methodology") == WRONG_MLR_METHODOLOGY:
+        pd["methodology"] = MLR_METHODOLOGY
     project = Project(**pd, created_at=datetime.utcnow())
     session.add(project)
     session.flush()

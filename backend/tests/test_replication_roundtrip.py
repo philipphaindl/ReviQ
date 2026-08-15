@@ -11,7 +11,9 @@ from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
-from app.database import get_session
+from app.database import (
+    MLR_METHODOLOGY, WRONG_MLR_METHODOLOGY, get_session,
+)
 from app.main import app
 from app.models import (
     DatabaseSearchString, ExtractionField, ExtractionRecord, FinalDecision,
@@ -140,3 +142,35 @@ class TestReplicationRoundTrip:
         import json as _json
         pkg = _json.loads(zf.read("project.json"))
         assert pkg["_schema"].startswith("reviq-replication")
+
+
+class TestMethodologyOnImport:
+    """A package exported before the citation was corrected carries the wrong
+    co-author for the multivocal guidelines. The boot-time migration cannot
+    reach it — the row is written long after boot — so the import corrects it.
+    """
+
+    def _package_saying(self, client, db_session, methodology: str) -> bytes:
+        proj_id = _seed_full_project(db_session)
+        proj = db_session.get(Project, proj_id)
+        proj.methodology = methodology
+        db_session.add(proj)
+        db_session.commit()
+        return client.get(f"/api/projects/{proj_id}/replication/export").content
+
+    def _imported(self, client, db_session, zip_bytes) -> str:
+        files = {"file": ("pkg.zip", zip_bytes, "application/zip")}
+        resp = client.post("/api/projects/replication/import", files=files)
+        assert resp.status_code == 200
+        return db_session.get(Project, resp.json()["id"]).methodology
+
+    def test_an_old_package_arrives_with_the_citation_corrected(self, client, db_session):
+        pkg = self._package_saying(client, db_session, WRONG_MLR_METHODOLOGY)
+        assert self._imported(client, db_session, pkg) == MLR_METHODOLOGY
+
+    def test_anything_else_is_carried_across_verbatim(self, client, db_session):
+        """Only the string ReviQ generated itself is rewritten. What the
+        exporting review wrote is what the importing one gets."""
+        written = "Garousi, Felizardo & Mäntylä (2019), with our own exclusions"
+        pkg = self._package_saying(client, db_session, written)
+        assert self._imported(client, db_session, pkg) == written
