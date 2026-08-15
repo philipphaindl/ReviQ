@@ -84,6 +84,45 @@ _REPLACEMENTS = {
 }
 
 
+# The same four files again, under the names ReportLab wants. Section 10 is
+# built with Platypus rather than fpdf2 (it needs wrapping table cells), and
+# Platypus does not inherit the family fpdf2 embedded — its default Times is
+# latin-1, so a Cyrillic or Greek title came out as a row of .notdef boxes in
+# the one section that prints titles at full length. The boxes were worse than
+# the question marks they replaced: they look like a corrupted file rather than
+# a missing glyph.
+_RL_FONT = "ReviQSerif"
+_RL_STYLES = {"": _RL_FONT, "B": f"{_RL_FONT}-Bold",
+              "I": f"{_RL_FONT}-Italic", "BI": f"{_RL_FONT}-BoldItalic"}
+
+
+def _register_reportlab_fonts() -> bool:
+    """Embed DejaVu Serif for Platypus. True when the whole family is there.
+
+    A missing font file must not take the report down, exactly as on the fpdf2
+    side: a section set in Times with some characters replaced is worth more to
+    a user than an exception. Registration is idempotent — ReportLab keeps a
+    process-wide registry, and the report is built once per request.
+    """
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+
+    registered = pdfmetrics.getRegisteredFontNames()
+    if _RL_STYLES[""] in registered:
+        return True
+    for style, filename in _FONT_FILES.items():
+        path = _FONT_DIR / filename
+        try:
+            pdfmetrics.registerFont(TTFont(_RL_STYLES[style], str(path)))
+        except Exception:
+            return False
+    pdfmetrics.registerFontFamily(
+        _RL_FONT, normal=_RL_STYLES[""], bold=_RL_STYLES["B"],
+        italic=_RL_STYLES["I"], boldItalic=_RL_STYLES["BI"],
+    )
+    return True
+
+
 def _s(v, maxlen=0):
     """Sanitise a value for the PDF text engine.
 
@@ -1021,7 +1060,10 @@ def _insert_chart_pages(main_bytes: bytes, insertions: list) -> bytes:
             c = Canvas(chart_buf, pagesize=(page_w, page_h))
             renderPDF.draw(drawing, c, margin_h, 16 if caption else 8)
             if caption:
-                c.setFont("Times-Italic", 9)
+                # A caption carries a taxonomy name, and those are the user's
+                # words too — same font, same reason.
+                c.setFont(_RL_STYLES["I"] if _register_reportlab_fonts()
+                          else "Times-Italic", 9)
                 c.drawCentredString(page_w / 2, 5, caption)
             c.save()
             ins_map.setdefault(after_page, []).append(chart_buf.getvalue())
@@ -1070,19 +1112,26 @@ def _build_section10_pdf(
     )
     avail_w = doc.width  # ~170mm in points
 
-    # Styles
-    s_title = ParagraphStyle("PaperTitle", fontName="Times-Bold", fontSize=9,
+    # Styles. The embedded family when it is available, Times when it is not —
+    # this section prints titles verbatim and at full length, so it is the one
+    # that shows a missing script rather than hiding it.
+    unicode_font = _register_reportlab_fonts()
+    regular = _RL_STYLES[""] if unicode_font else "Times-Roman"
+    bold = _RL_STYLES["B"] if unicode_font else "Times-Bold"
+    italic = _RL_STYLES["I"] if unicode_font else "Times-Italic"
+
+    s_title = ParagraphStyle("PaperTitle", fontName=bold, fontSize=9,
                              leading=12, textColor=rl_colors.black, spaceAfter=2,
                              leftIndent=0, rightIndent=0)
-    s_label = ParagraphStyle("Label", fontName="Times-Bold", fontSize=8,
+    s_label = ParagraphStyle("Label", fontName=bold, fontSize=8,
                              leading=10, textColor=rl_colors.black)
-    s_value = ParagraphStyle("Value", fontName="Times-Roman", fontSize=8,
+    s_value = ParagraphStyle("Value", fontName=regular, fontSize=8,
                              leading=10, textColor=rl_colors.Color(0.2, 0.2, 0.2))
-    s_heading = ParagraphStyle("SectionHeading", fontName="Times-Bold", fontSize=13,
+    s_heading = ParagraphStyle("SectionHeading", fontName=bold, fontSize=13,
                                leading=16, textColor=rl_colors.black, spaceAfter=4, spaceBefore=6)
-    s_note = ParagraphStyle("Note", fontName="Times-Italic", fontSize=8,
+    s_note = ParagraphStyle("Note", fontName=italic, fontSize=8,
                             leading=10, textColor=rl_colors.Color(0.2, 0.2, 0.2), spaceAfter=8)
-    s_footer = ParagraphStyle("Footer", fontName="Times-Roman", fontSize=6.5,
+    s_footer = ParagraphStyle("Footer", fontName=regular, fontSize=6.5,
                               leading=8, textColor=rl_colors.Color(0.6, 0.6, 0.6),
                               alignment=1)  # centered
 
@@ -1091,7 +1140,7 @@ def _build_section10_pdf(
 
     def _on_page(canvas, doc):
         canvas.saveState()
-        canvas.setFont("Times-Italic", 7)
+        canvas.setFont(italic, 7)
         canvas.setFillColor(rl_colors.Color(0.6, 0.6, 0.6))
         canvas.drawString(20*mm, A4[1] - 14*mm, title_safe)
         canvas.drawRightString(A4[0] - 20*mm, A4[1] - 14*mm, f"Page {doc.page}")
@@ -1100,7 +1149,7 @@ def _build_section10_pdf(
         canvas.line(20*mm, A4[1] - 15*mm, A4[0] - 20*mm, A4[1] - 15*mm)
         # Footer
         canvas.line(20*mm, 16*mm, A4[0] - 20*mm, 16*mm)
-        canvas.setFont("Times-Roman", 6.5)
+        canvas.setFont(regular, 6.5)
         canvas.drawCentredString(A4[0]/2, 10*mm,
             f"Generated by ReviQ  .  {title_safe}  .  Page {doc.page}")
         canvas.restoreState()
