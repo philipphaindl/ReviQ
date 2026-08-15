@@ -107,6 +107,18 @@ def _s(v, maxlen=0):
     if maxlen and len(t)>maxlen: t=t[:maxlen-3]+"..."
     return t
 
+def _agreement_unit(phase: str) -> str:
+    """What the two reviewers were agreeing about, in PRISMA's nouns.
+
+    Screening decides on *records* — a title and an abstract — while full-text
+    eligibility decides on *reports*, the documents those records point at. The
+    counts differ, and one word for both is how a table of agreement statistics
+    stops saying what it counted. `frontend/src/utils/vocabulary.ts` carries the
+    same distinction for the interface.
+    """
+    return "reports" if phase == "full-text" else "records"
+
+
 def _norm_db(r): return _DB_ALIASES.get(r.lower().strip(), r.lower().strip())
 def _db_name(c): return _DB_DISPLAY.get(c, c.replace("_"," ").title())
 
@@ -344,7 +356,7 @@ def monochromatic_scale(n: int) -> list[str]:
 
 # ── Donut chart rendering (issue 5/6) ──────────────────────────────────────
 
-def _donut_svg(rows, palette, total: int, unit: str = "papers", size: int = 200) -> bytes:
+def _donut_svg(rows, palette, total: int, unit: str = "studies", size: int = 200) -> bytes:
     """Build an SVG donut chart matching the web design (monochromatic).
 
     `rows` are {value, count, percentage} dicts; only count > 0 yield a slice,
@@ -416,7 +428,7 @@ def _donut_svg(rows, palette, total: int, unit: str = "papers", size: int = 200)
     return ''.join(parts).encode("utf-8")
 
 
-def _draw_donut_chart(pdf, rows, *, label: str = "papers"):
+def _draw_donut_chart(pdf, rows, *, label: str = "studies"):
     """Render the donut + legend block at the current pdf y-position."""
     import io as _io
     total = sum(r["count"] for r in rows)
@@ -1035,7 +1047,7 @@ def _insert_chart_pages(main_bytes: bytes, insertions: list) -> bytes:
 def _build_section10_pdf(
     included_pap, avg_qa, project, all_fns, fl, rec_map, section_num, slr_title,
 ):
-    """Build Section 10 (Included Papers) as a standalone ReportLab PDF.
+    """Build Section 10 (Included Studies) as a standalone ReportLab PDF.
 
     Uses Platypus instead of fpdf2 here because we need text wrapping in table
     cells. Each paper is a KeepTogether block (title + citation table + extraction
@@ -1097,7 +1109,7 @@ def _build_section10_pdf(
 
     # Section heading
     story.append(Paragraph(
-        f"{section_num}. Included Papers ({len(included_pap)})", s_heading))
+        f"{section_num}. Included Studies ({len(included_pap)})", s_heading))
     story.append(HRFlowable(width="100%", thickness=0.4*mm,
                              color=rl_colors.black, spaceAfter=3*mm))
     story.append(Paragraph(
@@ -1450,7 +1462,7 @@ def _build_pdf(
     ], 0.60)
     pdf.note(
         "Note: 'Included from database searches' and 'Included from snowballing' are not additive; "
-        "snowballed papers were assessed separately and the total of "
+        "snowballed reports were assessed separately and the total of "
         f"{len(included_ids)} studies represents the combined non-overlapping set.")
     if conflict_log:
         pdf.h3("Conflict Resolution")
@@ -1477,7 +1489,7 @@ def _build_pdf(
                 ("PABAK", f"{kr.pabak:.4f}"),
                 ("Observed agreement (Po)", f"{kr.observed_agreement:.4f}"),
                 ("Interpretation", kr.interpretation),
-                ("Papers in sample", f"{kr.n_papers:,}"),
+                (f"{_agreement_unit(phase).capitalize()} in sample", f"{kr.n_papers:,}"),
                 ("Both Include", f"{kr.n_agree_include:,}"),
                 ("Both Exclude", f"{kr.n_agree_exclude:,}"),
                 ("Disagreements", f"{kr.n_disagree:,}"),
@@ -1506,13 +1518,13 @@ def _build_pdf(
                 if quality_distribution_svg:
                     chart_insertions.append((
                         pdf.page, quality_distribution_svg, 460.0,
-                        f"Figure {fig_num}: Quality Score Distribution (n={qa_stats['n']} papers assessed).",
+                        f"Figure {fig_num}: Quality Score Distribution (n={qa_stats['n']} studies assessed).",
                     ))
                 else:
                     _draw_qa_distribution_chart(pdf, qa_bins,
                                                 project.qa_medium_threshold, project.qa_high_threshold)
             pdf.kv_table([
-                ("Papers assessed",f"{len(qa_included):,}"),("Average QA score",f"{avg_all:.1f}%"),
+                ("Studies assessed",f"{len(qa_included):,}"),("Average QA score",f"{avg_all:.1f}%"),
                 ("High quality",f"{high:,}"),("Medium quality",f"{med:,}"),("Low quality",f"{low:,}"),
             ], 0.45)
             extra = len(avg_qa) - len(qa_included)
@@ -1521,9 +1533,9 @@ def _build_pdf(
                          f"at full-text stage; they are not counted in the {len(included_ids)} included studies.")
             qa_paps = sorted([p for p in included_pap if p.id in qa_included], key=lambda p: qa_included.get(p.id,0), reverse=True)
             if qa_paps:
-                pdf.h3("Per-Paper Quality Scores")
+                pdf.h3("Per-Study Quality Scores")
                 cc = [(c.label,0.06) for c in qa_criteria]
-                bc = [("Paper Key",0.14),("Year",0.06)]; ec = [("Total",0.08),("Level",0.08)]
+                bc = [("Study Key",0.14),("Year",0.06)]; ec = [("Total",0.08),("Level",0.08)]
                 fixed = sum(f for _,f in bc+ec)
                 avail_frac = 1.0 - fixed
                 cc = [(c.label, avail_frac/len(qa_criteria)) for c in qa_criteria]
@@ -1560,7 +1572,7 @@ def _build_pdf(
         if not rows or all(r["count"] == 0 for r in rows): continue
         fig_num += 1
         label = _s(key.replace("_", " ").title())
-        pdf.body(f"Figure {fig_num} presents the distribution of included papers "
+        pdf.body(f"Figure {fig_num} presents the distribution of included studies "
                  f"across the {label.lower()} taxonomy.")
         pdf.h3(label)
         svg_for_key = _tax_svg_map.get(key)
@@ -1570,13 +1582,13 @@ def _build_pdf(
                 f"Figure {fig_num}: {label} Distribution.",
             ))
         else:
-            _draw_donut_chart(pdf, rows, label="papers")
+            _draw_donut_chart(pdf, rows, label="studies")
 
     # Iteration-1 chart 4: distribution across the first dropdown extraction
     # field — kept (a real synthesis dimension that's not a taxonomy).
     if extraction_field and extraction_rows:
         fig_num += 1
-        pdf.body(f"Figure {fig_num} presents the distribution of papers across the "
+        pdf.body(f"Figure {fig_num} presents the distribution of studies across the "
                  f"{extraction_field.field_label} extraction field.")
         pdf.h3(f"Extraction — {_s(extraction_field.field_label)}")
         _draw_extraction_field_chart(pdf, extraction_rows)
@@ -1584,7 +1596,7 @@ def _build_pdf(
     # Iteration-2 issue 6: Venue types donut + top-venues table.
     if included_papers:
         fig_num += 1
-        pdf.body(f"Figure {fig_num} presents the distribution of included papers "
+        pdf.body(f"Figure {fig_num} presents the distribution of included studies "
                  f"across the venue-type categorisation.")
         pdf.h3("Venue Types")
         if venue_types_svg:
@@ -1593,7 +1605,7 @@ def _build_pdf(
                 f"Figure {fig_num}: Venue Type Distribution.",
             ))
         else:
-            _draw_donut_chart(pdf, venue_rows, label="papers")
+            _draw_donut_chart(pdf, venue_rows, label="studies")
         if venue_top10:
             pdf.set_font(_FONT, "B", 8.5); pdf.set_text_color(*_DARK)
             pdf.ln(2)

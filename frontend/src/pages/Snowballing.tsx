@@ -19,6 +19,10 @@ import {
 } from '../components/ui'
 import type { SnowballingIteration, Paper } from '../api/types'
 import { formatAuthors, ownDecision, consensusDecision, hasOpenConflict } from '../utils'
+import { PHASE_NOUN } from '../utils/vocabulary'
+
+/** Snowballing identifies new records; they are screened like any other. */
+const RECORDS = PHASE_NOUN.screening
 
 export default function Snowballing() {
   const { projectId } = useProject()
@@ -73,6 +77,10 @@ function IterationsView({ pid }: { pid: number }) {
   const seedPhaseLabel = fulltextIncluded.length > 0
     ? 'From Phase 4 (Eligibility)'
     : 'From Phase 3 (Screening)'
+  // What the seeds are called follows where they came from, which the label
+  // beneath already states: a review that has finished full-text assessment
+  // snowballs from studies, one that has not snowballs from records.
+  const seedNoun = fulltextIncluded.length > 0 ? PHASE_NOUN.results : PHASE_NOUN.screening
 
   const createMutation = useMutation({
     mutationFn: () => createSnowballingIteration(pid, iterType),
@@ -95,7 +103,7 @@ function IterationsView({ pid }: { pid: number }) {
     <div className="space-y-5">
       {/* Stats */}
       <StatBar>
-        <StatCell label="Seed Papers" value={seedPapers.length} sub={seedPhaseLabel} />
+        <StatCell label={`Seed ${seedNoun.Many}`} value={seedPapers.length} sub={seedPhaseLabel} />
         <StatCell label="Iterations" value={iterations.length} />
         <StatCell label="Retrieved" value={totalPapers} />
         <StatCell label="Incl. (Screening)" value={totalIncluded} sub="Passed title/abstract" />
@@ -244,7 +252,7 @@ function IterationsView({ pid }: { pid: number }) {
           </FormField>
           <p className="text-xs text-ink-muted mb-4">
             {iterType === 'forward'
-              ? 'Forward snowballing: papers that cite the included studies.'
+              ? `Forward snowballing: ${RECORDS.many} that cite the included studies.`
               : 'Backward snowballing: references listed in the included studies.'}
           </p>
           <div className="flex gap-2">
@@ -425,7 +433,7 @@ function IterationCard({ iteration, pid, expanded, onToggle }: {
         <Modal title="Delete Iteration" onClose={() => setConfirmDelete(false)} width="max-w-sm">
           <p className="text-sm text-ink-light mb-4">
             Delete Iteration {iteration.iteration_number}? This will permanently remove all{' '}
-            <strong>{iteration.paper_count}</strong> papers imported in this iteration and their decisions.
+            <strong>{iteration.paper_count}</strong> {RECORDS.many} imported in this iteration and their decisions.
           </p>
           <div className="flex gap-2">
             <button className="btn-secondary flex-1 justify-center" onClick={() => setConfirmDelete(false)}>Cancel</button>

@@ -17,8 +17,14 @@ import {
 } from '../components/ui'
 import type { Paper, ConflictLog } from '../api/types'
 import { formatAuthors, ownDecision, consensusDecision, hasOpenConflict } from '../utils'
+import { counted, PHASE_NOUN } from '../utils/vocabulary'
 
 type EligView = 'papers' | 'conflicts' | 'kappa'
+
+/** Eligibility assesses the documents themselves: reports, not records. The
+ *  set it starts from is still what screening included — records. */
+const REPORTS = PHASE_NOUN.eligibility
+const RECORDS = PHASE_NOUN.screening
 
 export default function Eligibility() {
   const { projectId } = useProject()
@@ -43,7 +49,7 @@ export default function Eligibility() {
                 ? 'text-info after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-info'
                 : 'text-ink-muted hover:text-ink'
             }`}>
-            {v}
+            {v === 'papers' ? REPORTS.many : v}
           </button>
         ))}
       </div>
@@ -155,13 +161,13 @@ function PapersView({ pid }: { pid: number }) {
             ? 'bg-amber-50 border-amber-200 text-amber-800'
             : 'bg-green-50 border-green-200 text-green-800'
         }`}>
-          <p className="font-semibold mb-0.5">Snowballing papers — Phase 4 review required</p>
+          <p className="font-semibold mb-0.5">Snowballed {REPORTS.many} — Phase 4 review required</p>
           <p className="text-xs">
-            Snowballing papers must go through the same full-text eligibility
-            assessment as database papers.{' '}
+            Snowballed {REPORTS.many} must go through the same full-text eligibility
+            assessment as those from the database search.{' '}
             {snowballingPending.length > 0
-              ? <><strong>{snowballingPending.length}</strong> of {snowballingEligible.length} snowballing paper{snowballingEligible.length !== 1 ? 's' : ''} still need full-text review before they can proceed to Quality Assessment.</>
-              : <>All {snowballingEligible.length} snowballing paper{snowballingEligible.length !== 1 ? 's' : ''} have been reviewed. ✓</>
+              ? <><strong>{snowballingPending.length}</strong> of {snowballingEligible.length} snowballed {snowballingEligible.length !== 1 ? REPORTS.many : REPORTS.one} still need full-text review before they can proceed to Quality Assessment.</>
+              : <>All {counted(snowballingEligible.length, REPORTS)} reached by snowballing have been reviewed. ✓</>
             }
           </p>
         </div>
@@ -188,9 +194,10 @@ function PapersView({ pid }: { pid: number }) {
       </div>
 
       {screeningIncludedIds.size === 0 ? (
-        <EmptyState icon="—" message="No papers included from screening yet. Complete Phase 3 (Screening) first." />
+        <EmptyState icon="—"
+          message={`No ${RECORDS.many} included from screening yet. Complete Phase 3 (Screening) first.`} />
       ) : filteredPapers.length === 0 ? (
-        <EmptyState icon="—" message="No papers match the current filter." />
+        <EmptyState icon="—" message={`No ${REPORTS.many} match the current filter.`} />
       ) : (
         <div className="paper-list">
           {filteredPapers.map(paper => (
@@ -434,7 +441,7 @@ function DecisionModal({
           <textarea
             className={`textarea ${submitted && rationaleRequired && !rationale.trim() ? 'border-exclude ring-1 ring-exclude' : ''}`}
             rows={2} value={rationale} onChange={e => setRationale(e.target.value)}
-            placeholder={decision === 'U' ? 'Explain why this paper is uncertain…' : 'Brief justification (optional)…'} />
+            placeholder={decision === 'U' ? `Explain why this ${REPORTS.one} is uncertain…` : 'Brief justification (optional)…'} />
         </FormField>
       )}
 
@@ -625,7 +632,7 @@ function KappaView({ pid }: { pid: number }) {
       <Card>
         <CardHeader title="Inter-Rater Agreement — Full-Text Eligibility" />
         {isLoading && <p className="text-sm text-ink-muted">Calculating…</p>}
-        {isError && <p className="text-sm text-ink-muted">Not enough data yet. Both reviewers need to assess at least one common paper.</p>}
+        {isError && <p className="text-sm text-ink-muted">Not enough data yet. Both reviewers need to assess at least one common {REPORTS.one}.</p>}
         {kappa && (
           <div className="space-y-4">
             <StatBar>
@@ -640,7 +647,7 @@ function KappaView({ pid }: { pid: number }) {
             </div>
             <table className="w-full text-sm">
               <tbody className="divide-y divide-rule">
-                <tr><td className="py-2 text-ink-light">Papers in sample</td><td className="py-2 text-right font-medium text-ink">{kappa.n_papers}</td></tr>
+                <tr><td className="py-2 text-ink-light">{REPORTS.Many} in sample</td><td className="py-2 text-right font-medium text-ink">{kappa.n_papers}</td></tr>
                 <tr><td className="py-2 text-ink-light">Observed agreement (Po)</td><td className="py-2 text-right font-medium text-ink">{(kappa.observed_agreement * 100).toFixed(1)}%</td></tr>
                 <tr><td className="py-2 text-ink-light">Both Include</td><td className="py-2 text-right text-include font-medium">{kappa.n_agree_include}</td></tr>
                 <tr><td className="py-2 text-ink-light">Both Exclude</td><td className="py-2 text-right text-exclude font-medium">{kappa.n_agree_exclude}</td></tr>

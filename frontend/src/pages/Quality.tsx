@@ -8,6 +8,12 @@ import {
 } from '../components/ui'
 import type { QAPaperResult, QAScoreEntry } from '../api/types'
 import { formatAuthors } from '../utils'
+import { PHASE_NOUN } from '../utils/vocabulary'
+
+/** Everything scored here has been included at full-text eligibility: by
+ *  then a record has become a report, and a report a study. */
+const STUDIES = PHASE_NOUN.quality
+const REPORTS = PHASE_NOUN.eligibility
 
 export default function Quality() {
   const { projectId } = useProject()
@@ -32,7 +38,7 @@ export default function Quality() {
                 ? 'text-info after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-info'
                 : 'text-ink-muted hover:text-ink'
             }`}>
-            {v === 'scoring' ? 'Score Papers' : 'Summary'}
+            {v === 'scoring' ? `Score ${STUDIES.Many}` : 'Summary'}
           </button>
         ))}
       </div>
@@ -69,7 +75,7 @@ function ScoringView({ pid }: { pid: number }) {
       <EmptyState icon="—" message={
         summary?.criteria.length === 0
           ? 'No QA criteria defined. Add QA1, QA2, … criteria in Setup → Quality Assessment.'
-          : 'No eligible papers yet. Include papers through screening or full-text eligibility first.'
+          : `No ${STUDIES.many} to score yet. Include ${REPORTS.many} at full-text eligibility first.`
       } />
     )
   }
@@ -79,7 +85,7 @@ function ScoringView({ pid }: { pid: number }) {
   return (
     <div className="space-y-4">
       <StatBar>
-        <StatCell label="Eligible Papers" value={summary.papers.length} sub="Phase 4 (Full-Text Eligibility)" />
+        <StatCell label={`Included ${STUDIES.Many}`} value={summary.papers.length} sub="Phase 4 (Full-Text Eligibility)" />
         <StatCell label="Fully Scored" value={scored} color="include" sub="→ Phase 7 (Extraction)" />
         <StatCell label="Pending" value={summary.papers.length - scored} color="uncertain" />
       </StatBar>
@@ -302,7 +308,8 @@ function SummaryView({ pid }: { pid: number }) {
   if (isLoading) return <p className="text-sm text-ink-muted">Loading…</p>
 
   if (!summary || summary.papers.length === 0) {
-    return <EmptyState icon="—" message="No papers to display. Score papers in the 'Score Papers' tab first." />
+    return <EmptyState icon="—"
+      message={`Nothing to display yet. Score ${STUDIES.many} in the "Score ${STUDIES.Many}" tab first.`} />
   }
 
   const high = summary.papers.filter(p => p.quality_level === 'high').length
@@ -320,11 +327,11 @@ function SummaryView({ pid }: { pid: number }) {
       </StatBar>
 
       <Card>
-        <CardHeader title="Papers Ranked by Quality Score" />
+        <CardHeader title={`${STUDIES.Many} Ranked by Quality Score`} />
         <table className="w-full text-sm">
           <thead>
             <tr className="text-xs text-ink-muted uppercase tracking-label border-b border-rule">
-              <th className="text-left pb-2 font-semibold">Paper</th>
+              <th className="text-left pb-2 font-semibold">{STUDIES.One}</th>
               {summary.criteria.map(c => (
                 <th key={c.id} className="text-center pb-2 font-semibold px-1 min-w-[3rem]" title={c.description}>{c.label}</th>
               ))}

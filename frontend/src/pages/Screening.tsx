@@ -18,8 +18,12 @@ import GreyRecordPanel from '../components/GreyRecordPanel'
 import { isGrey } from '../components/streams'
 import type { Paper, ConflictLog } from '../api/types'
 import { formatAuthors, ownDecision, consensusDecision, hasOpenConflict } from '../utils'
+import { PHASE_NOUN } from '../utils/vocabulary'
 
 type ScreeningView = 'papers' | 'conflicts' | 'kappa'
+
+/** Screening reads titles and abstracts: what it decides on are records. */
+const RECORDS = PHASE_NOUN.screening
 
 export default function Screening() {
   const { projectId } = useProject()
@@ -37,6 +41,8 @@ export default function Screening() {
       </div>
 
       <div className="flex gap-0 border-b border-rule">
+        {/* The tab is keyed on 'papers' — the identifier the code has always
+            used — and labelled with what a reader is looking at. */}
         {(['papers', 'conflicts', 'kappa'] as ScreeningView[]).map(v => (
           <button key={v} onClick={() => setView(v)}
             className={`px-4 py-2.5 text-xs font-semibold uppercase tracking-label transition-colors relative capitalize ${
@@ -44,7 +50,7 @@ export default function Screening() {
                 ? 'text-info after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-info'
                 : 'text-ink-muted hover:text-ink'
             }`}>
-            {v}
+            {v === 'papers' ? RECORDS.many : v}
           </button>
         ))}
       </div>
@@ -152,7 +158,8 @@ function PapersView({ pid }: { pid: number }) {
 
       {/* Paper list */}
       {filteredPapers.length === 0 ? (
-        <EmptyState icon="—" message="No papers match the current filter. Import BibTeX files first." />
+        <EmptyState icon="—"
+          message={`No ${RECORDS.many} match the current filter. Import BibTeX files first.`} />
       ) : (
         <div className="paper-list">
           {filteredPapers.map(paper => (
@@ -404,7 +411,7 @@ function DecisionModal({
             className={`textarea ${submitted && rationaleRequired && !rationale.trim() ? 'border-exclude ring-1 ring-exclude' : ''}`}
             rows={2} value={rationale}
             onChange={e => setRationale(e.target.value)}
-            placeholder={decision === 'U' ? 'Explain why this paper is uncertain…' : 'Brief justification (optional)…'} />
+            placeholder={decision === 'U' ? `Explain why this ${RECORDS.one} is uncertain…` : 'Brief justification (optional)…'} />
         </FormField>
       )}
 
@@ -616,7 +623,7 @@ function KappaView({ pid }: { pid: number }) {
         {isLoading && <p className="text-sm text-ink-muted">Calculating…</p>}
         {isError && (
           <p className="text-sm text-ink-muted">
-            Not enough data yet. Both reviewers need to screen at least one common paper.
+            Not enough data yet. Both reviewers need to screen at least one common {RECORDS.one}.
           </p>
         )}
 
@@ -646,7 +653,7 @@ function KappaView({ pid }: { pid: number }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-rule">
-                <tr><td className="py-2 text-ink-light">Papers in sample</td><td className="py-2 text-right font-medium text-ink">{kappa.n_papers}</td></tr>
+                <tr><td className="py-2 text-ink-light">{RECORDS.Many} in sample</td><td className="py-2 text-right font-medium text-ink">{kappa.n_papers}</td></tr>
                 <tr><td className="py-2 text-ink-light">Observed agreement (Po)</td><td className="py-2 text-right font-medium text-ink">{(kappa.observed_agreement * 100).toFixed(1)}%</td></tr>
                 <tr><td className="py-2 text-ink-light">Both Include</td><td className="py-2 text-right text-include font-medium">{kappa.n_agree_include}</td></tr>
                 <tr><td className="py-2 text-ink-light">Both Exclude</td><td className="py-2 text-right text-exclude font-medium">{kappa.n_agree_exclude}</td></tr>

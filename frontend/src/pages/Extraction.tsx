@@ -16,6 +16,10 @@ import {
 } from '../components/ui'
 import type { ExtractionField, ExtractionPaperRow } from '../api/types'
 import { formatAuthors } from '../utils'
+import { PHASE_NOUN } from '../utils/vocabulary'
+
+/** Extraction runs on what the review included: studies. */
+const STUDIES = PHASE_NOUN.extraction
 
 type ExtView = 'schema' | 'extract' | 'table'
 
@@ -385,7 +389,8 @@ function ExtractView({ pid }: { pid: number }) {
   if (!summary) return null
 
   if (summary.papers.length === 0) {
-    return <EmptyState icon="—" message="No included papers yet. Complete Full-Text Eligibility (Phase 4) first." />
+    return <EmptyState icon="—"
+      message={`No included ${STUDIES.many} yet. Complete Full-Text Eligibility (Phase 4) first.`} />
   }
 
   const hasTaxonomies = taxonomyTypes.length > 0
@@ -400,7 +405,7 @@ function ExtractView({ pid }: { pid: number }) {
         </div>
       )}
       <StatBar>
-        <StatCell label="Included Papers" value={summary.papers.length} sub="Phase 4 (Full-Text Eligibility)" />
+        <StatCell label={`Included ${STUDIES.Many}`} value={summary.papers.length} sub="Phase 4 (Full-Text Eligibility)" />
         {hasFields && <StatCell label="Fields Extracted" value={done} color="include" />}
         {hasTaxonomies && <StatCell label="Taxonomy Types" value={taxonomyTypes.length} color="info" />}
       </StatBar>
@@ -624,7 +629,7 @@ function TableView({ pid }: { pid: number }) {
     return <EmptyState icon="—" message="No extraction fields defined. Add fields in the 'Field Schema' tab first." />
   }
   if (summary.papers.length === 0) {
-    return <EmptyState icon="—" message="No included papers yet." />
+    return <EmptyState icon="—" message={`No included ${STUDIES.many} yet.`} />
   }
 
   const fieldCount = summary.fields.length
@@ -637,7 +642,7 @@ function TableView({ pid }: { pid: number }) {
           <thead>
             <tr className="border-b border-rule">
               <th className="text-left pb-2 font-semibold pr-3 text-xs text-ink-muted uppercase tracking-label align-bottom" style={{ width: 160, minWidth: 120 }}>
-                Paper
+                {STUDIES.One}
               </th>
               {summary.fields.map(f => (
                 <th key={f.field_name} className="align-bottom p-0" style={{ width: fieldCount > 4 ? 44 : 100 }} title={f.field_label}>

@@ -8,6 +8,10 @@ import { StatBar, StatCell, Card, CardHeader, EmptyState, Modal, FormField, Conf
 import { DatabaseBadge } from '../components/databases'
 import { useState, useRef } from 'react'
 import type { Project } from '../api/types'
+import { PHASE_NOUN } from '../utils/vocabulary'
+
+/** A project holds everything the searches returned, decided or not. */
+const RECORDS = PHASE_NOUN.import
 
 export default function Overview() {
   const { projectId, setProjectId } = useProject()
@@ -291,7 +295,7 @@ export default function Overview() {
       {/* Delete confirmation */}
       {confirmDeleteId !== null && confirmDeleteProject && (
         <ConfirmDialog
-          message={`Permanently delete "${confirmDeleteProject.title}" and all its papers, decisions, and data? This cannot be undone.`}
+          message={`Permanently delete "${confirmDeleteProject.title}" and all its ${RECORDS.many}, decisions, and data? This cannot be undone.`}
           confirmLabel="Delete Project"
           onConfirm={() => deleteMutation.mutate(confirmDeleteId)}
           onCancel={() => setConfirmDeleteId(null)}

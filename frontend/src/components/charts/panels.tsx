@@ -53,6 +53,12 @@ import { usePaletteAccent } from './palette'
 import type { PanelMenuAction } from './PanelMenu'
 import { useChartFilename } from './filename'
 import { DatabaseBadge } from '../databases'
+import { counted, PHASE_NOUN } from '../../utils/vocabulary'
+
+// Every chart draws from what the review included. The CSV headers below
+// keep `Paper keys` and `Papers (%)`: an export a script may already read is
+// an interface of its own.
+const STUDIES = PHASE_NOUN.results
 
 // ── Action helpers ─────────────────────────────────────────────────────────
 
@@ -156,9 +162,9 @@ export function PublicationsPerYearPanel({ papers }: { papers: Array<{ year?: nu
     <ChartPanel
       eyebrow="Timeline"
       title="Publications per Year"
-      subtitle={`${total} included papers spanning ${span}`}
+      subtitle={`${counted(total, STUDIES)} included, spanning ${span}`}
       kpis={[
-        { label: 'Papers',    value: total },
+        { label: STUDIES.Many, value: total },
         { label: 'Years',     value: data.length },
         { label: 'Peak year', value: peak.count > 0 ? peak.year : '—' },
       ]}
@@ -192,13 +198,14 @@ export function QAScoreDistributionPanel({
     <ChartPanel
       eyebrow="Quality"
       title="Quality Score Distribution"
-      subtitle={`${stats.n} paper${stats.n === 1 ? '' : 's'} assessed`}
+      subtitle={`${counted(stats.n, STUDIES)} assessed`}
       kpis={[
         { label: 'Mean',   value: `${stats.mean.toFixed(1)}%` },
         { label: 'Median', value: `${stats.median.toFixed(1)}%` },
       ]}
       exportName={filename}
-      footnote="Bars stack the count of papers in each QA band within a bin; threshold lines reflect project setup."
+      footnote={`Bars stack the count of ${STUDIES.many} in each QA band within a bin; `
+        + 'threshold lines reflect project setup.'}
       actions={downloadActions(csv)}
     >
       <QAScoreDistributionChart bins={bins} thresholds={thresholds} />
@@ -223,7 +230,7 @@ export function TaxonomyPiePanel({
     <ChartPanel
       eyebrow="Taxonomy"
       title={dist.label}
-      subtitle={`${totalPapers} paper${totalPapers === 1 ? '' : 's'} · ${dist.categories.length} categor${dist.categories.length === 1 ? 'y' : 'ies'}`}
+      subtitle={`${counted(totalPapers, STUDIES)} · ${dist.categories.length} categor${dist.categories.length === 1 ? 'y' : 'ies'}`}
       exportName={filename}
       actions={downloadActions(csv)}
       flush
@@ -252,7 +259,7 @@ export function ExtractionFieldPanel({
     <ChartPanel
       eyebrow="Extraction"
       title={field.field_label}
-      subtitle={`${totalPapers} paper${totalPapers === 1 ? '' : 's'} · ${categories.length} value${categories.length === 1 ? '' : 's'}`}
+      subtitle={`${counted(totalPapers, STUDIES)} · ${categories.length} value${categories.length === 1 ? '' : 's'}`}
       exportName={filename}
       actions={downloadActions(csv)}
     >
@@ -319,7 +326,7 @@ export function VenueTypesPanel({
       <ChartPanel
         eyebrow="Composition"
         title="Venue Types"
-        subtitle={`${papers.length} included paper${papers.length === 1 ? '' : 's'}`}
+        subtitle={`${counted(papers.length, STUDIES)} included`}
         exportName={filename}
         actions={downloadActions(csv)}
         flush
@@ -535,7 +542,7 @@ export function TopVenuesPanel({
     <ChartPanel
       eyebrow="Sourcing"
       title="Top Venues"
-      subtitle={`${papers.length} included papers · ${data.length} venues shown`}
+      subtitle={`${counted(papers.length, STUDIES)} included · ${data.length} venues shown`}
       exportName={filename}
       actions={downloadActions(csv)}
     >

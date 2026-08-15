@@ -11,7 +11,11 @@ import { DATABASES, DatabaseBadge } from '../components/databases'
 import { sourceLabel } from '../utils/sourceLabel'
 import GreyImportPanel from '../components/GreyImportPanel'
 import { isMlr } from '../utils/reviewType'
+import { PHASE_NOUN } from '../utils/vocabulary'
 import type { Paper } from '../api/types'
+
+/** Phase 2 counts what the searches returned: records, not papers. */
+const RECORDS = PHASE_NOUN.import
 
 export default function Search() {
   const { projectId } = useProject()
@@ -100,7 +104,7 @@ export default function Search() {
       {stats && (
         <StatBar>
           <StatCell label="Total Retrieved" value={stats.total_papers} />
-          <StatCell label="Unique Papers" value={stats.total_original} color="include" />
+          <StatCell label={`Unique ${RECORDS.Many}`} value={stats.total_original} color="include" />
           <StatCell label="Duplicates Removed" value={stats.total_duplicates} color="uncertain" />
         </StatBar>
       )}
@@ -300,7 +304,7 @@ export default function Search() {
             {importDecResult.unknown_citekey > 0 && (
               <p className="text-xs text-exclude mt-1">
                 {importDecResult.unknown_citekey} decision{importDecResult.unknown_citekey === 1 ? '' : 's'}
-                {' '}reference papers this project does not have
+                {' '}reference {RECORDS.many} this project does not have
                 {importDecResult.unknown_citekeys.length > 0 && (
                   <> — e.g. {importDecResult.unknown_citekeys.slice(0, 3).join(', ')}</>
                 )}

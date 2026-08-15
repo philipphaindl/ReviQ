@@ -12,6 +12,7 @@ import { PrismaFlowDiagram } from './Results'
 import {
   allStreamCounts, type PrismaPaper,
 } from '../utils/prisma'
+import { PHASE_NOUN } from '../utils/vocabulary'
 
 function paper(source: string, over: Partial<PrismaPaper> = {}): PrismaPaper {
   return {
@@ -154,5 +155,16 @@ describe('what the columns say', () => {
 
     expect(document.getElementById('prisma-svg')).toBeInTheDocument()
     expect(screen.getByText('Records from databases')).toBeInTheDocument()
+  })
+
+  it('uses the same nouns the pages do', () => {
+    // The figure has always said "Records screened" and "Studies included in
+    // review" while the pages said "papers" at both. Whichever way that gets
+    // fixed, it has to stay fixed in both places.
+    draw([paper('acm')], { acm: { total: 1, original: 1, duplicate: 0 } })
+
+    expect(screen.getByText(`${PHASE_NOUN.screening.Many} screened`)).toBeInTheDocument()
+    expect(screen.getByText(new RegExp(`^${PHASE_NOUN.results.Many} included`)))
+      .toBeInTheDocument()
   })
 })

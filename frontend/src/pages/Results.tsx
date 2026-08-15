@@ -14,6 +14,7 @@ import { useProject } from '../App'
 import { getExportStats, getQASummary, getExtractionSummary, exportBibtexUrl, getImportStats, getPapers, getTaxonomyTypes, getTaxonomy, getKappa, getReviewers, getProject, exportReplicationPackageUrl, getSearchMetrics, getExclusionCriteria } from '../api/client'
 import { Card, CardHeader, StatBar, StatCell, EmptyState } from '../components/ui'
 import { sourceLabel } from '../utils/sourceLabel'
+import { counted, PHASE_NOUN } from '../utils/vocabulary'
 import {
   allStreamCounts, streamIsPresent,
   type StreamCounts, type StreamSpec,
@@ -38,6 +39,14 @@ import { ChartFilenameProvider } from '../components/charts/filename'
 import { COLORS, SANS } from '../components/charts/tokens'
 import { PALETTES, PaletteContext, usePalette } from '../components/charts/palette'
 import { getExportPadding, setExportPadding, MIN_PADDING, MAX_PADDING, ExportPaddingContext } from '../components/charts/exportSettings'
+
+// Each export is named for the phase whose decision it carries: screening
+// decides on records, eligibility on reports, and the review includes studies.
+// The CSV column headers below keep `Paper ID` — that is a data interchange a
+// consumer may already parse, not a sentence anyone reads.
+const RECORDS = PHASE_NOUN.screening
+const REPORTS = PHASE_NOUN.eligibility
+const STUDIES = PHASE_NOUN.results
 
 type ResView = 'prisma' | 'charts' | 'export'
 
@@ -1106,20 +1115,20 @@ function ExportView({ pid }: { pid: number }) {
 
   const exports: { label: string; description: string; href: string; count: number }[] = [
     {
-      label: 'Included Papers (Full-Text)',
-      description: 'BibTeX file of papers included after full-text eligibility assessment',
+      label: `Included ${STUDIES.Many} (Full-Text)`,
+      description: `BibTeX file of ${STUDIES.many} included after full-text eligibility assessment`,
       href: exportBibtexUrl(pid, 'full-text', 'I'),
       count: stats?.fulltext_included ?? 0,
     },
     {
-      label: 'Included Papers (Screening)',
-      description: 'BibTeX file of papers included after title/abstract screening',
+      label: `Included ${RECORDS.Many} (Screening)`,
+      description: `BibTeX file of ${RECORDS.many} included after title/abstract screening`,
       href: exportBibtexUrl(pid, 'screening', 'I'),
       count: stats?.screening_included ?? 0,
     },
     {
-      label: 'Excluded Papers (Full-Text)',
-      description: 'BibTeX file of papers excluded at full-text stage',
+      label: `Excluded ${REPORTS.Many} (Full-Text)`,
+      description: `BibTeX file of ${REPORTS.many} excluded at full-text stage`,
       href: exportBibtexUrl(pid, 'full-text', 'E'),
       count: stats?.fulltext_excluded ?? 0,
     },
@@ -1137,7 +1146,9 @@ function ExportView({ pid }: { pid: number }) {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-ink">Replication Package</p>
               <p className="text-xs text-ink-muted mt-0.5">
-                Full SLR data as a ZIP archive (project.json + BibTeX files) — importable into any ReviQ instance
+                {/* "Full review data", not "Full SLR data": the same button in a
+                    multivocal review exports its grey literature too. */}
+                Full review data as a ZIP archive (project.json + BibTeX files) — importable into any ReviQ instance
               </p>
             </div>
             <a
@@ -1174,7 +1185,7 @@ function ExportView({ pid }: { pid: number }) {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-ink">Full Extraction Dataset</p>
               <p className="text-xs text-ink-muted mt-0.5">
-                All included papers with extracted data — {extSummary!.papers.length} paper{extSummary!.papers.length !== 1 ? 's' : ''}, {extSummary!.fields.length} field{extSummary!.fields.length !== 1 ? 's' : ''}
+                All included {STUDIES.many} with extracted data — {counted(extSummary!.papers.length, STUDIES)}, {extSummary!.fields.length} field{extSummary!.fields.length !== 1 ? 's' : ''}
               </p>
             </div>
             <button className="btn-secondary shrink-0" onClick={handleFullDatasetCsv}>

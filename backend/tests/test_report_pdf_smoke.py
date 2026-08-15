@@ -1,6 +1,5 @@
-"""End-to-end smoke test: generate the PDF report against a populated project
-and verify the resulting bytes are a valid PDF including the new synthesis-chart
-captions ("Figure 1", "Figure 2", "Figure 3").
+"""End-to-end smoke tests against a populated project: the PDF renders, carries
+its synthesis-chart captions, and names what it counts in PRISMA's nouns.
 """
 import pytest
 from fastapi.testclient import TestClient
@@ -127,3 +126,63 @@ class TestPDFGeneration:
         assert "Figure 2" in text
         assert "Figure 3" in text
         assert "inter-rater agreement statistics" in text.lower()
+
+
+class TestReportVocabulary:
+    """The report counts records, reports and studies — never "papers".
+
+    PRISMA 2020 uses three nouns because the three boxes hold different things:
+    two records can point at one report, and two reports can describe one
+    study. The report already said "Total records retrieved" in its statistics
+    table while heading the same document's section 10 "Included Papers", so a
+    reader could not tell whether two numbers counted the same population.
+    `frontend/src/utils/vocabulary.ts` carries the same distinction for the
+    interface.
+    """
+
+    def _text(self, client, db_session) -> str:
+        import io
+        from pypdf import PdfReader
+
+        proj_id = _build_fixture(db_session)
+        resp = client.get(f"/api/projects/{proj_id}/report/pdf")
+        assert resp.status_code == 200
+        reader = PdfReader(io.BytesIO(resp.content))
+        return "\n".join(page.extract_text() or "" for page in reader.pages)
+
+    def test_the_headings_use_prismas_nouns(self, client, db_session):
+        text = self._text(client, db_session)
+
+        assert "Included Studies" in text
+        assert "Studies assessed" in text
+        assert "Per-Study Quality Scores" in text
+        # The sample two reviewers agreed about at screening is titles and
+        # abstracts: records.
+        assert "Records in sample" in text
+
+    def test_no_heading_calls_them_papers(self, client, db_session):
+        # The fixture's own titles are "Paper 0"… — data, not chrome. These are
+        # the labels the report writes itself.
+        text = self._text(client, db_session)
+
+        for stale in ("Included Papers", "Papers assessed", "Papers in sample",
+                      "Per-Paper Quality Scores", "Paper Key"):
+            assert stale not in text, stale
+
+
+class TestAgreementUnit:
+    """What the two reviewers were agreeing about, phase by phase."""
+
+    def test_screening_agrees_about_records(self):
+        from app.routers.report import _agreement_unit
+        assert _agreement_unit("screening") == "records"
+
+    def test_full_text_agrees_about_reports(self):
+        from app.routers.report import _agreement_unit
+        assert _agreement_unit("full-text") == "reports"
+
+    def test_an_unknown_phase_falls_back_to_records(self):
+        # A phase this build does not know still counts something that was
+        # screened; "records" is the safer of the two to be wrong about.
+        from app.routers.report import _agreement_unit
+        assert _agreement_unit("phase-from-a-newer-build") == "records"
