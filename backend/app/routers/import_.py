@@ -21,6 +21,8 @@ grey copy of a formal paper is not detected as a duplicate of it. That is a
 stated limitation rather than an oversight: over-inclusion is visible at
 screening, silent exclusion is not.
 """
+from collections import defaultdict
+
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlmodel import Session, select
 from pydantic import BaseModel
@@ -381,6 +383,14 @@ def list_retrievals(project_id: int,
     A batch is one entry, not one per run: `batch` issues a whole query set
     together and that set is the unit a methods section describes. Runs made
     outside a batch appear on their own.
+
+    `documents` is what importing the scope would actually bring: distinct
+    documents across the whole scope, counted the way `interchange.document_ids`
+    selects them. Summing a per-run count instead — which this did — counts a
+    document once per query that found it, so a twenty-query batch advertised
+    541 documents and then imported 424. The listing and the import have to
+    agree, because the first is what a user reads before deciding and the second
+    is what the PRISMA figure will say.
     """
     _require_project(project_id, session)
 
@@ -392,41 +402,58 @@ def list_retrievals(project_id: int,
     if not runs:
         return []
 
-    # One grouped query rather than one per run. A batch of twenty queries is
-    # ordinary, and this endpoint is called every time the import page opens.
-    marks = ", ".join("?" for _ in runs)
-    run_ids = [r["run_id"] for r in runs]
-    counts = {
-        row["run_id"]: row["n"]
-        for row in retrieval.execute(
-            f"""SELECT run_id, COUNT(DISTINCT document_id) AS n
-                FROM serp_results WHERE run_id IN ({marks}) GROUP BY run_id""",
-            run_ids,
-        )
+    scope_of = {
+        r["run_id"]: (("batch", r["batch_id"]) if r["batch_id"]
+                      else ("run", r["run_id"]))
+        for r in runs
     }
 
-    # Which scopes this project already took in. Recorded on `GreyImport`, so a
-    # user is not offered a second import of the same batch without warning —
-    # it would be counted as `already_present` and change nothing, but silently
-    # doing nothing is worse than saying so.
-    imported = {
-        g.scope_id for g in session.exec(
-            select(GreyImport).where(GreyImport.project_id == project_id)
-        ).all() if g.scope_id
-    }
+    # One grouped query rather than one per run. A batch of twenty queries is
+    # ordinary, and this endpoint is called every time the import page opens.
+    #
+    # The three sources must stay the three `interchange.document_ids` unions,
+    # or the number here stops being the number the import produces:
+    # a snowballed document has no SERP observation, and a document observed
+    # again without being re-fetched has no snapshot in scope.
+    # `test_the_listing_counts_what_an_import_would_bring` pins the agreement.
+    marks = ", ".join("?" for _ in runs)
+    run_ids = [r["run_id"] for r in runs]
+    documents: dict[tuple[str, str], set] = defaultdict(set)
+    for row in retrieval.execute(
+        f"""SELECT run_id, document_id FROM serp_results WHERE run_id IN ({marks})
+            UNION
+            SELECT run_id, document_id FROM snapshots WHERE run_id IN ({marks})
+            UNION
+            SELECT run_id, to_document_id FROM document_links WHERE run_id IN ({marks})""",
+        run_ids * 3,
+    ):
+        if row["document_id"] is not None:
+            documents[scope_of[row["run_id"]]].add(row["document_id"])
+
+    # What earlier imports of each scope actually contributed. `already_imported`
+    # alone answers "has this been pressed", which stops distinguishing anything
+    # once a user has pressed everything; `records_added` answers the question
+    # they were really asking — whether it brought the review anything.
+    added: dict[str, int] = defaultdict(int)
+    times: dict[str, int] = defaultdict(int)
+    for g in session.exec(
+        select(GreyImport).where(GreyImport.project_id == project_id)
+    ).all():
+        if g.scope_id:
+            added[g.scope_id] += (g.imported_count or 0) + (g.duplicate_count or 0)
+            times[g.scope_id] += 1
 
     scopes: dict[tuple[str, str], dict] = {}
     for run in runs:
-        kind, ident = (("batch", run["batch_id"]) if run["batch_id"]
-                       else ("run", run["run_id"]))
-        entry = scopes.setdefault((kind, ident), {
+        key = scope_of[run["run_id"]]
+        kind, ident = key
+        entry = scopes.setdefault(key, {
             "kind": kind, "scope_id": ident, "queries": [], "engines": set(),
-            "started_at_utc": run["started_at_utc"], "documents": 0,
+            "started_at_utc": run["started_at_utc"],
             "runs": 0, "incomplete": False,
         })
         entry["queries"].append(run["query"])
         entry["engines"].add(run["engine"])
-        entry["documents"] += counts.get(run["run_id"], 0)
         entry["runs"] += 1
         # A batch whose last run died leaves a partial corpus. Importable, but
         # the number it contributes to "records identified" is not the number
@@ -439,7 +466,10 @@ def list_retrievals(project_id: int,
         (
             {**e,
              "engines": sorted(e["engines"]),
-             "already_imported": e["scope_id"] in imported}
+             "documents": len(documents[(e["kind"], e["scope_id"])]),
+             "already_imported": times[e["scope_id"]] > 0,
+             "imports": times[e["scope_id"]],
+             "records_added": added[e["scope_id"]]}
             for e in scopes.values()
         ),
         key=lambda e: e["started_at_utc"],

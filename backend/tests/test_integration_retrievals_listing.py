@@ -189,3 +189,123 @@ def test_many_runs_do_not_cost_a_query_each(instance, retrieval_conn):
 def test_an_unknown_project_is_a_404(instance):
     assert instance.client.get(
         "/api/projects/9999/retrievals").status_code == 404
+
+
+# ── what the number in the Documents column means ────────────────────────────
+
+
+def seed_shared_document(conn, *, run_ids, url, started="2026-08-11T19:00:00Z"):
+    """One document that several runs found — the case a per-run count doubles."""
+    conn.execute(
+        """INSERT INTO documents (canonical_url, host, first_seen_run_id,
+                                  first_seen_at_utc)
+           VALUES (?, 'example.test', ?, ?)""",
+        (url, run_ids[0], started),
+    )
+    doc_id = conn.execute(
+        "SELECT document_id FROM documents WHERE canonical_url = ?", (url,)
+    ).fetchone()["document_id"]
+    # Positions well past anything `seed_run` used: (run_id, page, position)
+    # is unique, and this document is an extra hit on the same page.
+    for rank, run_id in enumerate(run_ids, start=90):
+        conn.execute(
+            """INSERT INTO serp_results (run_id, page, position, global_rank,
+                                         raw_url, canonical_url, title, snippet,
+                                         retrieved_at_utc, document_id)
+               VALUES (?, 1, ?, ?, ?, ?, 'T', 'S', ?, ?)""",
+            (run_id, rank, rank, url, url, started, doc_id),
+        )
+    conn.commit()
+    return doc_id
+
+
+def test_a_document_two_queries_found_is_counted_once(instance, retrieval_conn):
+    """The number a user reads before deciding, against the number the import
+    then reports. Summing a per-run count made a twenty-query batch advertise
+    541 documents and import 424 — the same corpus, described twice."""
+    pid = instance.create_project(title="P")["id"]
+    for i in range(3):
+        seed_run(retrieval_conn, run_id=f"r{i}", project_id=pid, batch_id="b1",
+                 query=f"query {i}", documents=0)
+    seed_shared_document(retrieval_conn, run_ids=["r0", "r1", "r2"],
+                         url="https://example.test/found-by-all")
+
+    [entry] = listing(instance, pid)
+
+    assert entry["documents"] == 1
+
+
+def test_the_listing_counts_what_an_import_would_bring(instance, retrieval_conn):
+    """Pins the listing against `interchange.document_ids`, which is what the
+    package is actually built from. The two select over three different unions,
+    and a document reached only by a link or only by a snapshot is exactly the
+    kind that falls out of one of them."""
+    from app.retrieval.interchange import document_ids
+
+    pid = instance.create_project(title="P")["id"]
+    for i in range(2):
+        seed_run(retrieval_conn, run_id=f"r{i}", project_id=pid, batch_id="b1",
+                 query=f"query {i}", documents=2)
+    seed_shared_document(retrieval_conn, run_ids=["r0", "r1"],
+                         url="https://example.test/overlap")
+
+    [entry] = listing(instance, pid)
+
+    assert entry["documents"] == len(document_ids(retrieval_conn, ["r0", "r1"]))
+    assert entry["documents"] == 5
+
+
+def test_a_scope_that_would_import_nothing_says_zero(instance, retrieval_conn):
+    """A `refetch` or `re-extract` run issues no search and carries no documents
+    of its own. Zero here is what lets the interface say so before the click
+    rather than after."""
+    pid = instance.create_project(title="P")["id"]
+    seed_run(retrieval_conn, run_id="reex", project_id=pid, engine="none",
+             query="reextract of batch b1", documents=0)
+
+    [entry] = listing(instance, pid)
+
+    assert entry["documents"] == 0
+
+
+# ── what an earlier import of the same scope actually did ────────────────────
+
+
+def test_an_untouched_scope_reports_no_imports(instance, retrieval_conn):
+    pid = instance.create_project(title="P")["id"]
+    seed_run(retrieval_conn, run_id="r1", project_id=pid, documents=2)
+
+    [entry] = listing(instance, pid)
+
+    assert entry["already_imported"] is False
+    assert entry["imports"] == 0
+    assert entry["records_added"] == 0
+
+
+def test_an_import_reports_what_it_added(instance, retrieval_conn):
+    pid = instance.create_project(title="P")["id"]
+    seed_run(retrieval_conn, run_id="r1", project_id=pid, documents=2)
+    instance.client.post(f"/api/projects/{pid}/import/grey/from-retrieval",
+                         json={"scope_id": "r1"}).raise_for_status()
+
+    [entry] = listing(instance, pid)
+
+    assert entry["already_imported"] is True
+    assert entry["imports"] == 1
+    assert entry["records_added"] == 2
+
+
+def test_a_second_import_of_the_same_scope_adds_nothing(instance, retrieval_conn):
+    """Which is the whole point of showing it: after pressing everything once,
+    "already imported" is on every row and distinguishes nothing. What a
+    reviewer wants to know is whether the press brought the review anything."""
+    pid = instance.create_project(title="P")["id"]
+    seed_run(retrieval_conn, run_id="r1", project_id=pid, documents=2)
+    for _ in range(3):
+        instance.client.post(f"/api/projects/{pid}/import/grey/from-retrieval",
+                             json={"scope_id": "r1"}).raise_for_status()
+
+    [entry] = listing(instance, pid)
+
+    assert entry["imports"] == 3
+    assert entry["records_added"] == 2   # not 6

@@ -33,6 +33,8 @@ function retrieval(over: Partial<Retrieval> = {}): Retrieval {
     runs: 28,
     incomplete: false,
     already_imported: false,
+    imports: 0,
+    records_added: 0,
     ...over,
   }
 }
@@ -115,13 +117,31 @@ describe('choosing a retrieval', () => {
 })
 
 describe('what a user is told before pressing the button', () => {
-  it('marks a scope this project already imported', async () => {
-    renderPanel([retrieval({ already_imported: true })])
+  it('says what an earlier import of this scope brought in', async () => {
+    renderPanel([retrieval({ already_imported: true, imports: 1, records_added: 423 })])
 
-    expect(await screen.findByText('Already imported')).toBeInTheDocument()
+    expect(await screen.findByText('Imported · 423 records')).toBeInTheDocument()
     // Still possible — it simply counts every record as already present — but
     // the label says which button this is.
     expect(screen.getByRole('button', { name: 'Import again' })).toBeInTheDocument()
+  })
+
+  it('says so when an import of this scope brought nothing', async () => {
+    // The case that made the listing useless to read: press every row once and
+    // "already imported" is on all of them, distinguishing nothing. A run whose
+    // documents the batch already carried added exactly zero.
+    renderPanel([retrieval({ already_imported: true, imports: 1, records_added: 0 })])
+
+    expect(await screen.findByText('Imported · nothing new')).toBeInTheDocument()
+  })
+
+  it('refuses a scope that has no documents of its own', async () => {
+    // A refetch or re-extraction run re-reads what an earlier retrieval found.
+    // Saying so at the button beats saying it in the result afterwards.
+    renderPanel([retrieval({ documents: 0, engines: ['none'] })])
+
+    expect(await screen.findByText('Nothing to import')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Import' })).toBeDisabled()
   })
 
   it('marks a partial corpus and says what that means for the counts', async () => {
@@ -191,14 +211,15 @@ describe('what an import reports', () => {
   })
 
   it('says a scope carried nothing rather than showing a row of zeros', async () => {
-    // A refetch run re-reads sources an earlier retrieval identified; it has no
-    // documents of its own, and importing it is a no-op.
+    // The button is disabled for a scope the listing already knows is empty,
+    // so this is the other route to it: a scope that looked importable and
+    // turned out to build an empty package.
     importGreyFromRetrieval.mockResolvedValue(result({
       total_in_package: 0, imported_unique: 0, imported_duplicates: 0,
       already_present: 0, skipped_no_citekey: 0, imported_unretrievable: 0,
       unretrievable_by_reason: {}, package_reported: { documents: 0, usable: 0 },
     }))
-    renderPanel([retrieval({ documents: 0, engines: ['none'] })])
+    renderPanel([retrieval({ documents: 2 })])
     fireEvent.click(await screen.findByRole('button', { name: 'Import' }))
 
     expect(await screen.findByText(/carried no documents, so nothing was imported/))

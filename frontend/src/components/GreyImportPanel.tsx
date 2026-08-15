@@ -25,8 +25,12 @@ import { useRef, useState } from 'react'
 
 import { getRetrievals, importGreyFromRetrieval, importGreyPackage } from '../api/client'
 import type { GreyImportResult, Retrieval } from '../api/types'
+import { counted, PHASE_NOUN } from '../utils/vocabulary'
 import { reasonLabel } from '../utils/retrievalReasons'
 import { Badge, Card, CardHeader } from './ui'
+
+/** What a retrieval brings in is a record, like any other import. */
+const RECORDS = PHASE_NOUN.import
 
 /** What the server said went wrong, not a sentence of our own.
  *
@@ -52,19 +56,40 @@ function Count({ label, value, tone = 'text-ink' }: {
   )
 }
 
+/** What an earlier import of this scope did, in the words a reviewer needs.
+ *
+ * "Already imported" answered "has this been pressed", which stops
+ * distinguishing anything once someone has pressed every row — and pressing
+ * every row is what a listing of near-identical entries invites. What they were
+ * asking is whether the press brought the review anything.
+ */
+function importBadge(retrieval: Retrieval) {
+  if (!retrieval.already_imported) return null
+  if (retrieval.records_added > 0) {
+    return <Badge label={`Imported · ${counted(retrieval.records_added, RECORDS)}`}
+      variant="include" />
+  }
+  return <Badge label="Imported · nothing new" variant="neutral" />
+}
+
 function RetrievalRow({ retrieval, onImport, busy }: {
   retrieval: Retrieval
   onImport: (scopeId: string) => void
   busy: boolean
 }) {
   const { queries, engines, scope_id: scopeId } = retrieval
+  // A refetch or re-extraction run carries no documents of its own: it re-read
+  // sources an earlier retrieval identified. Saying so at the button beats
+  // saying it in the result afterwards.
+  const empty = retrieval.documents === 0
   return (
     <tr>
       <td className="py-2.5 pr-3 align-top">
         <div className="flex items-center gap-1.5 flex-wrap">
           <Badge label={retrieval.kind === 'batch' ? 'Batch' : 'Run'} variant="info" />
           {retrieval.incomplete && <Badge label="Incomplete" variant="uncertain" />}
-          {retrieval.already_imported && <Badge label="Already imported" variant="neutral" />}
+          {empty && <Badge label="Nothing to import" variant="neutral" />}
+          {importBadge(retrieval)}
         </div>
         <p className="text-sm text-ink mt-1 break-words">
           {queries[0] ?? '(no query recorded)'}
@@ -92,8 +117,9 @@ function RetrievalRow({ retrieval, onImport, busy }: {
       </td>
       <td className="py-2.5 align-top text-right">
         <button
-          className={retrieval.already_imported ? 'btn-secondary' : 'btn-primary'}
-          disabled={busy}
+          className={retrieval.already_imported || empty ? 'btn-secondary' : 'btn-primary'}
+          disabled={busy || empty}
+          title={empty ? 'This retrieval carries no documents of its own' : undefined}
           onClick={() => onImport(scopeId)}
         >
           {retrieval.already_imported ? 'Import again' : 'Import'}
@@ -212,12 +238,26 @@ export default function GreyImportPanel({ pid }: { pid: number }) {
   return (
     <Card>
       <CardHeader title="Import Grey Literature" />
-      <p className="text-xs text-ink-muted mb-4 max-w-2xl">
-        Grey literature is retrieved outside this interface, with{' '}
-        <code className="bg-rule/30 px-1 rounded">python -m app.retrieval batch</code>;
-        search-engine keys are read from the process environment and are never entered here.
-        What a retrieval produced is imported below.
-      </p>
+      <div className="text-xs text-ink-muted mb-4 max-w-2xl space-y-1.5">
+        <p>
+          Each row is one retrieval this project made with{' '}
+          <code className="bg-rule/30 px-1 rounded">python -m app.retrieval</code>.
+          Importing it brings its {RECORDS.many} into the review.
+        </p>
+        {/* The distinction the listing could not make on its own: five runs of
+            the same query, one batch containing all of them, and no way to tell
+            which one to press. */}
+        <p>
+          A <strong>batch</strong> is a whole query set run together — normally the
+          one to import, since it is also the unit a methods section describes.
+          A <strong>run</strong> is a single query on its own; if a batch already
+          covered it, importing it adds nothing.
+        </p>
+        <p>
+          Search-engine keys are read from the process environment and are never
+          entered here.
+        </p>
+      </div>
 
       {isLoading && <p className="text-sm text-ink-muted">Loading retrievals…</p>}
 

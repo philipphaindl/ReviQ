@@ -279,6 +279,12 @@ export interface Retrieval {
   /** This project already imported this scope. Importing it again would count
    *  every record as `already_present` and change nothing. */
   already_imported: boolean
+  /** How many times it was imported. */
+  imports: number
+  /** What those imports actually contributed — records the review did not have
+   *  before. Zero after a scope whose documents another import already brought,
+   *  which is the case `already_imported` alone cannot distinguish. */
+  records_added: number
 }
 
 /** What an import of a grey package did, record by record.
