@@ -1020,9 +1020,10 @@ def build_parser() -> argparse.ArgumentParser:
     """
     parser = argparse.ArgumentParser(
         prog="python -m app.retrieval",
-        description="Provenance-preserving retrieval for grey literature reviews.",
+        description="Creel — provenance-preserving retrieval of grey literature, for ReviQ.",
     )
-    parser.add_argument("--version", action="version", version=f"ReviQ retrieval {__version__}")
+    parser.add_argument("--version", action="version",
+                        version=f"Creel {__version__} — ReviQ's grey-literature retrieval")
     parser.add_argument("--db", type=Path, default=None,
                         help="SQLite database path (default: ReviQ's own, from "
                              "DATABASE_URL)")

@@ -124,7 +124,7 @@ def load_config(path: Path) -> list[QuerySpec]:
 
 
 EXAMPLE = '''\
-# ReviQ retrieval query set — the search protocol for one review, in one file.
+# Creel query set — the search protocol for one review, in one file.
 #
 #   python -m app.retrieval batch queries.toml --out results.csv
 #

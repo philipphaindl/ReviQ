@@ -1,4 +1,4 @@
-"""Entry point, so the package is runnable the way the CLI used to be.
+"""Entry point, so Creel is runnable the way the CLI used to be.
 
     python -m app.retrieval run "AI maturity model" --pages 5
 

@@ -123,10 +123,13 @@ A multivocal project gets three things a systematic one never sees:
 
 ### Running a retrieval
 
-The retrieval lives in `backend/app/retrieval/`: it queries a search engine,
-canonicalises and deduplicates the hits, fetches each source through a scraping
-proxy, and archives the bytes as a WARC snapshot with a SHA-256 before a single
-word is extracted.
+Grey literature is retrieved by **Creel**, ReviQ's retrieval tool, which lives
+in `backend/app/retrieval/` and runs as `python -m app.retrieval`. It queries a
+search engine, canonicalises and deduplicates the hits, fetches each source
+through a scraping proxy, and archives the bytes as a WARC snapshot with a
+SHA-256 before a single word is extracted. A creel is the basket a catch goes
+into, bycatch included: the sources that could not be read are kept and counted
+rather than dropped.
 
 It is a command rather than a button, and stays one. A batch of twenty queries
 runs for tens of minutes — one concurrent request, with a delay between fetches
@@ -411,7 +414,7 @@ a database nobody reads. It also says so when `--runs-dir` is outside
 `DATA_DIR` — those paths are stored, and a directory that only exists for the
 duration of the command leaves every snapshot pointing nowhere.
 
-### Command reference
+### Creel command reference
 
 ```bash
 python -m app.retrieval [--db PATH] <command> [options]
@@ -587,9 +590,9 @@ backend/app/
     kappa_service.py   # Cohen's κ, PABAK, Landis-Koch interpretation
     paper_import.py    # The one import loop both BibTeX paths use
     streams.py         # Formal vs grey, search vs snowball — mirrored in the frontend
-  retrieval/           # The grey-literature retrieval tool: CLI, SERP, fetch,
-                       #   WARC archive, extraction, figures, interchange, adoption.
-                       #   Knows nothing about reviews; see docs/retrieval/
+  retrieval/           # Creel — the grey-literature retrieval tool: CLI, SERP,
+                       #   fetch, WARC archive, extraction, figures, interchange,
+                       #   adoption. Knows nothing about reviews; see docs/retrieval/
 ```
 
 ### Frontend structure

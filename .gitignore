@@ -15,6 +15,6 @@ frontend/dist/assets
 !.env.example
 
 # Retrieved data: WARC archives and the retrieval database. Under DATA_DIR in
-# Docker, here for a checkout run without it.
-glr_runs/
+# Docker, here for a checkout run without it — the runs live in DATA_DIR/runs,
+# which for a local checkout is backend/data/runs.
 backend/data/

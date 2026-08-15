@@ -1,4 +1,4 @@
--- ReviQ retrieval — schema for provenance-preserving grey literature retrieval.
+-- Creel — schema for provenance-preserving grey-literature retrieval.
 --
 -- Design rule: observations and entities are separate.
 --   * A `document` is a canonical URL. It exists exactly once, forever.

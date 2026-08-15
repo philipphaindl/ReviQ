@@ -1,4 +1,10 @@
-"""Retrieval of grey literature — SERP query, snapshot, extraction, provenance.
+"""Creel — retrieval of grey literature: SERP query, snapshot, extraction,
+provenance.
+
+A creel is the basket a catch goes into. This one holds what a sweep of the
+open web brought back, bycatch included: the sources that could not be read are
+kept and counted rather than dropped, because a review that cannot say how much
+of its grey literature had rotted is hiding a limitation.
 
 Formerly the standalone tool `glr`. It kept its own repository while a second,
 non-review use was planned; that plan was dropped, so it lives here now and is
@@ -15,7 +21,7 @@ retrieval timestamp, and what a review works with is a unit of evidence. The
 
 Runs as a subprocess rather than inside the API process, deliberately:
 
-    python -m app.retrieval.cli run "AI maturity model" --pages 5
+    python -m app.retrieval run "AI maturity model" --pages 5
 
 An lxml segfault or a 300 MB PDF would otherwise take the API down with it, and
 a retrieval batch runs for tens of minutes.
