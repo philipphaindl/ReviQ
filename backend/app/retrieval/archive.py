@@ -27,6 +27,11 @@ from warcio.warcwriter import WARCWriter
 
 WARC_VERSION = "1.1"  # 1.1 stores WARC-Date with microsecond precision
 
+# The first two bytes of a gzip member. Every record is written as its own
+# member (gzip=True above), so a stored offset points at these two bytes — that
+# is the whole reason an offset is a seek rather than a scan.
+GZIP_MAGIC = b"\x1f\x8b"
+
 
 def sha256_hex(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
@@ -56,6 +61,20 @@ def read_payload(path: Path, offset: int, expected_sha256: str | None = None) ->
 
     try:
         with path.open("rb") as fh:
+            fh.seek(offset)
+            # Check the member boundary here rather than leaving it to warcio.
+            # Handed a stream that does not start one, warcio stops treating
+            # the file as compressed and scans for an uncompressed record
+            # instead — and about one time in twenty it finds something in the
+            # compressed bytes that it reads as a response with an empty body.
+            # `read_payload` then returns b"" for an offset that is simply
+            # wrong, and a re-extraction records an empty document where the
+            # honest answer is that the archive could not be read. Which of the
+            # two happens depends on the deflated bytes, so it varied per run.
+            if fh.read(len(GZIP_MAGIC)) != GZIP_MAGIC:
+                raise ArchiveReadError(
+                    f"{path.name}@{offset} does not start a record"
+                )
             fh.seek(offset)
             for record in ArchiveIterator(fh):
                 if record.rec_type != "response":

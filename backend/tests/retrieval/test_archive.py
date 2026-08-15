@@ -242,6 +242,32 @@ def test_an_offset_that_is_not_a_record_boundary_is_refused(tmp_path):
         read_payload(path, offset + 7)
 
 
+def test_no_offset_inside_a_record_returns_bytes(tmp_path):
+    """The whole neighbourhood, not one offset, because the failure this
+    replaced was intermittent.
+
+    Handed a stream that does not begin a gzip member, warcio stops treating
+    the file as compressed and scans for an uncompressed record instead. About
+    one attempt in twenty it found something in the deflated bytes it read as a
+    response with an empty body, and `read_payload` returned b"" for an offset
+    that was simply wrong — a re-extraction would have recorded an empty
+    document where the archive could not be read. Which of the two happened
+    depended on the compressed bytes, and those vary per record: the record id
+    is a fresh UUID and the date is the current time. So the test that caught
+    it failed roughly one run in twenty and passed on a re-run.
+    """
+    path, _, offset = _write_one(tmp_path)
+    for delta in range(1, 48):
+        with pytest.raises(ArchiveReadError):
+            read_payload(path, offset + delta)
+
+
+def test_an_offset_past_the_end_is_refused(tmp_path):
+    path, _, _ = _write_one(tmp_path)
+    with pytest.raises(ArchiveReadError):
+        read_payload(path, path.stat().st_size + 1)
+
+
 def test_a_binary_payload_reads_back_unchanged(tmp_path):
     payload = b"%PDF-1.7\n\x00\x01\x02\xff\xfe binary body \x00"
     path, _, offset = _write_one(tmp_path, content=payload,
