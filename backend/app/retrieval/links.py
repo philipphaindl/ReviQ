@@ -78,7 +78,7 @@ class Link:
 class _AnchorCollector(HTMLParser):
     """Collects (href, anchor text) pairs. Stdlib rather than lxml: this needs
     no more than <a href> and its text, and it keeps the dependency list short
-    enough that the licence audit in docs/decisions.md stays trivial."""
+    enough that the licence audit in docs/retrieval/decisions.md stays trivial."""
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)

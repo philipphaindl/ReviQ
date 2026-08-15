@@ -14,7 +14,7 @@ returns 200 with a body, the retrieval succeeded; what the last hop answered
 is not observable, so it is not claimed anywhere.
 
 `render_js` defaults to true at the API and costs 5 credits instead of 1. We
-send render_js=false unless asked otherwise; see docs/PLAN.md §5.
+send render_js=false unless asked otherwise; see docs/retrieval/PLAN.md §5.
 """
 
 from __future__ import annotations

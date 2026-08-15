@@ -339,7 +339,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             )
         if empty_text:
             # Surfaced deliberately: silent empty text columns look like a data
-            # problem rather than a retrieval problem. See docs/PLAN.md R4.
+            # problem rather than a retrieval problem. See docs/retrieval/PLAN.md R4.
             print(
                 f"warning: {empty_text} document(s) yielded no text "
                 f"(see extraction_error; --render-js may help)"
@@ -1059,10 +1059,10 @@ def build_parser() -> argparse.ArgumentParser:
                        help="max links followed per document (default 20)")
     p_run.add_argument("--ocr", action="store_true",
                        help="OCR PDFs that have no text layer "
-                            "(needs: uv sync --extra ocr, plus tesseract)")
+                            "(needs: pip install -r requirements-optional.txt, plus tesseract)")
     p_run.add_argument("--describe-figures", action="store_true",
                        help="fetch and describe figures with a vision model "
-                            "(needs: uv sync --extra vision, plus ANTHROPIC_API_KEY)")
+                            "(needs: pip install -r requirements-optional.txt, plus ANTHROPIC_API_KEY)")
     p_run.add_argument("--vision-model", default=vision.DEFAULT_MODEL, metavar="ID",
                        help=f"model for figure descriptions (default: {vision.DEFAULT_MODEL})")
     p_run.add_argument("--max-figures", type=int, default=5, metavar="N",
@@ -1145,7 +1145,7 @@ def build_parser() -> argparse.ArgumentParser:
                         help="restrict to these causes, e.g. --only no_text_layer")
     p_reex.add_argument("--ocr", action="store_true",
                         help="OCR PDFs that have no text layer "
-                             "(needs: uv sync --extra ocr, plus tesseract)")
+                             "(needs: pip install -r requirements-optional.txt, plus tesseract)")
     p_reex.add_argument("--dry-run", action="store_true",
                         help="list what would be re-extracted, change nothing")
     p_reex.set_defaults(func=cmd_reextract)

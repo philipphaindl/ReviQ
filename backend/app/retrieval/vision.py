@@ -81,7 +81,7 @@ def describe_figure(
     except ImportError:
         return Description(
             model=model, prompt=prompt,
-            error="vision extra not installed; uv sync --extra vision",
+            error="anthropic not installed; pip install -r requirements-optional.txt",
         )
 
     if client is None:

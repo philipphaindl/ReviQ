@@ -1,6 +1,9 @@
 # ReviQ
 
-A locally-deployed workbench for conducting Systematic Literature Reviews following Kitchenham & Charters (2007). Runs in Docker, stores everything on your machine.
+A locally-deployed workbench for conducting Systematic Literature Reviews
+following Kitchenham & Charters (2007), and Multivocal Literature Reviews
+following Garousi, Felderer & Mäntylä (2019). Runs in Docker, stores everything
+on your machine.
 
 If you use ReviQ in your research, please cite:
 
@@ -20,20 +23,30 @@ If you use ReviQ in your research, please cite:
 
 ## What it does
 
-ReviQ walks you through the full SLR pipeline in eight phases:
+A project declares itself a **systematic** or a **multivocal** review when it is
+created. Both walk the same eight phases; a multivocal review adds a grey
+stream, counted and reported separately throughout:
 
 | # | Phase | What happens |
 |---|-------|-------------|
 | 1 | **Setup** | Project metadata, up to 5 reviewers, inclusion/exclusion criteria, QA scoring schema, taxonomy categories, database search strings |
-| 2 | **Import** | BibTeX upload per database, cross-database deduplication (DOI + normalised title/venue), duplicate override log; grey literature retrieved by `app/retrieval`, carrying its retrieval provenance |
+| 2 | **Import** | BibTeX upload per database, cross-database deduplication (DOI + normalised title/venue), duplicate override log; in a multivocal review, grey literature imported from a retrieval this project made, carrying its provenance |
 | 3 | **Screening** | Title/abstract decisions (Include / Exclude / Uncertain), per-criterion rationale, automatic conflict detection, Cohen's κ with 95% CI and PABAK |
 | 4 | **Eligibility** | Full-text assessment with the same decision workflow, full-text URL tracking |
 | 5 | **Snowballing** | Iteration-based forward/backward citation chasing (Wohlin 2014), saturation tracking |
 | 6 | **Quality Assessment** | Scoring against project-defined QA criteria (0 / 0.5 / 1), automatic quality-level classification (high/medium/low) |
 | 7 | **Data Extraction** | Configurable extraction schema (text, number, boolean, dropdown), per-paper data entry, taxonomy integration |
-| 8 | **Results** | PRISMA 2020 flow diagram (SVG, with colour and grayscale download), publication charts, venue breakdown, taxonomy distributions, PDF protocol report, BibTeX exports, replication package |
+| 8 | **Results** | PRISMA 2020 flow diagram (SVG, colour and grayscale) with one column per stream that contributed — databases, snowballing, grey literature — publication charts, venue breakdown, taxonomy distributions, PDF protocol report, BibTeX exports, replication package |
 
-Collaboration is file-based: reviewers export decisions as JSON, share them however they like (email, shared drive), and import them on the other end.
+Throughout, the interface counts what PRISMA 2020 counts: **records** while
+screening titles and abstracts, **reports** while assessing full texts,
+**studies** once a review has included them. The database, the API and the
+replication package keep saying `paper`, so existing exports and packages stay
+readable.
+
+Collaboration is file-based: reviewers export decisions as JSON, and a whole
+grey corpus travels the same way — shared however you like, imported on the
+other end.
 
 ## Quick start
 
@@ -46,6 +59,30 @@ docker compose up --build
 - API docs (Swagger): http://localhost:8000/docs
 
 Data lives in a Docker volume (`reviq-db-data`) and persists across restarts.
+Both ports are bound to loopback: ReviQ has no authentication, so anyone who can
+reach the port can read every project and resolve every conflict.
+
+### Configuration
+
+Everything is set through the environment; `.env.example` documents each one and
+`docker-compose.yml` supplies the defaults for the container.
+
+| Variable | Default | What reads it |
+|---|---|---|
+| `BIND_HOST` | `127.0.0.1` | Both containers. Change only for a deployment you have secured some other way |
+| `BACKEND_PORT` / `FRONTEND_PORT` | `8000` / `3000` | Both containers |
+| `REVIQ_ALLOWED_ORIGIN` | `http://localhost:3000` | The backend's CORS allow-list |
+| `BIB_BASE_DIR` | `./bib_data` | Mounted read-only; where `.bib` files are looked for |
+| `DATABASE_URL` | `sqlite:////data/reviq.db` | The API **and** the retrieval CLI — one file holds both halves |
+| `DATA_DIR` | `/data` | Where the WARC archive lives, under `DATA_DIR/runs/` |
+| `SEARCHAPI_API_KEY` | — | The retrieval CLI only, for grey literature |
+| `SCRAPINGBEE_API_KEY` | — | The retrieval CLI only, for grey literature |
+| `ANTHROPIC_API_KEY` | — | `--describe-figures` only, off by default |
+
+Outside Docker, `DATABASE_URL` unset means `DATA_DIR/reviq.db` relative to the
+working directory — which is not the Docker volume. That distinction matters
+most when running a retrieval; the walkthrough below says so again where it
+bites.
 
 ### BibTeX files
 
@@ -62,100 +99,239 @@ bib_data/
       forward_citations.bib
 ```
 
-### Grey literature
+## Grey literature and multivocal reviews
 
-A multivocal literature review covers grey literature as well as peer-reviewed
-work (Garousi, Felizardo & Mäntylä 2019), and the two are reported separately
-throughout. The retrieval lives in `backend/app/retrieval/`: it queries a
-search engine, canonicalises and deduplicates the hits, fetches each source
-through a scraping proxy, and archives the bytes as a WARC snapshot with a
-SHA-256 before a single word is extracted.
+A multivocal literature review covers grey literature — practitioner reports,
+standards, white papers, vendor documentation — alongside peer-reviewed work
+(Garousi, Felderer & Mäntylä 2019). ReviQ screens the two together and counts,
+reports and publishes them apart.
 
-Retrieval writes into the same SQLite file as the review — the path comes from
-`DATABASE_URL`, and `--db` overrides it. That is what lets a replication package
-carry the retrieval it rests on, rather than pointing at a second database
-somebody has to be sent separately.
+### Declaring a review multivocal
+
+A project says which kind it is when it is created, and defaults to a systematic
+review. The declaration is what switches the grey half on; it is never inferred
+from the data, because a review whose PRISMA figure grew a third column halfway
+through would be describing a method nobody chose.
+
+A multivocal project gets three things a systematic one never sees:
+
+- the **grey-literature import** on the Import page, described below;
+- a **third column** in the PRISMA figure — drawn only once grey records exist,
+  exactly as the snowballing column is;
+- the **retrieval provenance** beside each grey record during screening: when it
+  was fetched, the digest of the bytes fetched, and where the archived copy is.
+
+### Running a retrieval
+
+The retrieval lives in `backend/app/retrieval/`: it queries a search engine,
+canonicalises and deduplicates the hits, fetches each source through a scraping
+proxy, and archives the bytes as a WARC snapshot with a SHA-256 before a single
+word is extracted.
+
+It is a command rather than a button, and stays one. A batch of twenty queries
+runs for tens of minutes — one concurrent request, with a delay between fetches
+— and spends API credits that are billed to you. `docs/retrieval/decisions.md`
+records the reasoning, decision by decision.
+
+**1 — Two API keys.** [SearchApi.io](https://www.searchapi.io) issues the search
+queries; [ScrapingBee](https://www.scrapingbee.com) fetches and archives what
+they return. Both have free tiers large enough to try this out.
+
+**2 — Into the environment, never into the browser.**
+
+```bash
+cp .env.example .env      # then fill in the two keys
+set -a && source .env && set +a
+```
+
+They are read from the process environment and nowhere else: never written to
+the database, never returned by the API, never accepted over HTTP, and scrubbed
+out of stored error strings (`app/retrieval/redact.py`). The interface offers no
+field to type them into, deliberately — a tool that accepted a key through a
+browser would also have to store it somewhere. In Docker they are passed through
+from your shell rather than baked into the image; `docker-compose.yml` says how.
+
+`ANTHROPIC_API_KEY` is optional and used by nothing except `--describe-figures`.
+
+**3 — The review's id.** The next command needs it and the interface does not
+show it anywhere:
+
+```bash
+curl -s http://localhost:8000/api/projects | python3 -m json.tool | grep -E '"(id|title)"'
+```
+
+**4 — Write the search protocol down.**
 
 ```bash
 cd backend
-python -m app.retrieval batch queries.toml --project 1          # retrieve
+python -m app.retrieval init-config queries.toml
+```
+
+That writes a starter query set. Edit it — the format is
+[below](#the-query-set) — and keep it: the file *is* the protocol, citable and
+re-runnable, rather than a shell history nobody else can read.
+
+**5 — Retrieve.**
+
+```bash
+python -m app.retrieval batch queries.toml --project 1
+```
+
+`--project 1` records which review the runs belong to, and confines snapshot
+reuse to it: a second project asking for the same URL retrieves it again rather
+than inheriting a snapshot fetched months ago under someone else's protocol.
+Without it the runs belong to no review and stay visible to all of them, which
+is the behaviour that predates the flag.
+
+One query at a time, and a failing query does not abort the batch. The progress
+lines name the run id you will need later; `report` and `export-json` also
+accept the batch id, which covers the whole set at once.
+
+**What it costs, stated plainly.** There is no budget ceiling in the tool. A
+`quota_exhausted` response is recorded per source rather than stopping the run,
+so the guards are the defaults, not a limit you can set:
+
+| Setting — as a flag on `run`/`refetch`, or a key in the query set | Credits per fetch |
+|---|---|
+| the default: neither | 1 |
+| `--render-js` / `render_js = true` | 5 |
+| `--premium-proxy` / `premium_proxy = true` | 10 |
+| both together | 25 |
+| `--stealth-proxy` / `stealth_proxy = true` | 75 |
+
+Already-archived documents are skipped unless `--refetch` is given, duplicate
+queries in one file are a hard error because they silently double the bill, and
+snowballing is off until you turn it on. Actual spend is read back from
+ScrapingBee's own `Spb-Cost` header, stored per snapshot and printed as
+`credits used:` when the run ends. For scale: the pilot corpus behind ReviQ's
+grey-literature support is 20 queries returning 424 documents, for roughly
+2 120 credits and 207 MB of archive.
+
+**Mind which database it writes to.** Without `--db` the target comes from
+`DATABASE_URL`, and without that from `DATA_DIR/reviq.db` — relative to the
+working directory. If ReviQ runs in Docker, its database is inside the volume
+and *not* the same file, so the retrieval belongs in the container:
+
+```bash
+docker compose exec slr-backend \
+  python -m app.retrieval batch /data/queries.toml --project 1
+```
+
+Inside the container `DATABASE_URL` and `DATA_DIR` are already set by
+`docker-compose.yml`, and the keys are forwarded from your shell. Check that
+they arrived before spending anything:
+
+```bash
+docker compose exec slr-backend printenv SEARCHAPI_API_KEY
+```
+
+**6 — Read the retrieval report.**
+
+```bash
 python -m app.retrieval report <run_id|batch_id> --out report.md
 ```
 
-Then `POST /api/projects/1/import/grey/from-retrieval` with
-`{"scope_id": "<run_id|batch_id>"}`. No file changes hands: the package is built
-and applied in one step, and the grey sources come out carrying join keys
-straight into the retrieval tables.
+A per-source access log: what was found, what was read, and what could not be —
+each with its cause. This is the document a methods section cites, and the
+number in its "not retrieved" column is the one the PRISMA figure will show.
 
-`--project` records which review the runs belong to. It also confines snapshot
-reuse to that review: a second project asking for the same URL retrieves it
-again rather than inheriting a snapshot fetched months ago under someone else's
-protocol. Without it the runs belong to no review and stay visible to all of
-them, which is the behaviour that predates it.
+**7 — Import it, in the interface.** Open the review's **Import** page. Under
+*Import Grey Literature* every retrieval this project made is listed with its
+queries, engine, document count and start time, and marked if it is already
+imported or was left incomplete. One button imports it: the package is built
+from the database it is imported into, so nothing passes through disk and no id
+is typed anywhere.
 
-Needs `SEARCHAPI_API_KEY` and `SCRAPINGBEE_API_KEY`; both have free tiers large
-enough to try it out. A batch of twenty queries runs for tens of minutes — one
-concurrent request, with a delay between fetches — so it is a command, not an
-HTTP request, and `docs/retrieval/` explains why in detail.
+The same is available over HTTP, which is what the button calls:
 
-**Handing a corpus to a co-reviewer**, or importing one from them, still goes
-through the interchange format:
+```
+POST /api/projects/1/import/grey/from-retrieval   {"scope_id": "<run_id|batch_id>"}
+```
+
+### The query set
+
+`init-config` writes this; every key in `[defaults]` can be overridden per query.
+
+```toml
+[defaults]
+pages = 10          # 10 results per page, so 10 pages = 100 hits
+gl = "at"           # country; changes the results, so report it
+hl = "en"           # interface language
+render_js = false   # 1 ScrapingBee credit instead of 5
+
+# Snowballing: follow selected outgoing links one level deep.
+# 0 disables it. Start at 0, measure relevance, then decide.
+snowball_depth = 0
+snowball_max_links = 20
+
+[[query]]
+q = "AI maturity assessment model"
+
+[[query]]
+q = "artificial intelligence maturity framework"
+
+[[query]]
+q = "AI readiness assessment organisation"
+pages = 5
+```
+
+The twelve keys it accepts are `q`, `pages`, `engine`, `gl`, `hl`, `location`,
+`render_js`, `premium_proxy`, `stealth_proxy`, `wait_ms`, `snowball_depth` and
+`snowball_max_links`. Anything else — an unknown key, an unknown section, a
+blank query, the same query twice — is refused rather than ignored: a typo that
+is silently dropped from a search protocol is a silently wrong review.
+
+### Repairing what could not be read
+
+The report's causes divide into two kinds: those a second attempt could change
+and those it cannot. A dead link stays dead; a bot challenge often does not.
+
+```bash
+python -m app.retrieval refetch <run_id|batch_id> --dry-run
+python -m app.retrieval refetch <run_id|batch_id> --render-js
+```
+
+`refetch` issues no search. It retries only the documents whose recorded cause a
+retry could change, and the retry is a new run rather than an edit of the old
+one. The dry run prints the candidates and the credits they would cost, so
+escalate deliberately: `--render-js` is five times a plain fetch,
+`--premium-proxy` ten, the two together twenty-five, and `--stealth-proxy`
+seventy-five.
+
+Re-extraction is the free repair — no network, no credits — and it keeps the
+extraction it replaces, so the two stay comparable:
+
+```bash
+python -m app.retrieval reextract <run_id|batch_id> --all
+```
+
+Afterwards, export or import the *original* scope id rather than the retry's.
+The retry is a run of its own; the original is what the protocol describes.
+
+### A corpus from a co-reviewer
+
+Handing a corpus to somebody else, or taking one from them, goes through the
+interchange format:
 
 ```bash
 python -m app.retrieval export-json <run_id|batch_id> --out records.json
 ```
 
-and `POST /api/projects/{id}/import/grey` with that file. The keys into the
-retrieval tables stay empty for such an import — the integer ids in the package
-belonged to the other installation — while the canonical URL and payload digest,
-the identities that do travel, are carried across.
+They import that file with *Choose package file* on the same Import page (or
+`POST /api/projects/{id}/import/grey`). The keys into the retrieval tables stay
+empty for such an import — the integer ids in the package belonged to the other
+installation — while the canonical URL and payload digest, the identities that
+do travel, are carried across.
 
-**Taking over a corpus retrieved before the databases were merged:**
-
-```bash
-python -m app.retrieval adopt data/glr.sqlite3 --project 1 --dry-run
-python -m app.retrieval adopt data/glr.sqlite3 --project 1
-```
-
-Reads the old file read-only, remaps every integer key, reuses documents the
-target already holds under the same URL, and refuses if a WARC file it points
-into is not in place. Running it twice adds nothing twice. The dry run does the
-identical work and rolls it back, so its counts are the outcome rather than a
-prediction of it.
-
-**Mind which database it writes to.** Without `--db` the target comes from
-`DATABASE_URL`, and without that from `DATA_DIR/reviq.db` — relative to the
-working directory. If ReviQ runs in Docker, its database is inside the volume
-and *not* the same file, so the adoption belongs in the container. Rebuild
-first: an image built before the retrieval package moved in has no
-`app.retrieval` to run.
-
-```bash
-docker compose build slr-backend
-
-# 1. the archive goes into the volume, because its path is what the database
-#    stores and every later read resolves that string
-docker compose run --rm -v "$PWD/backend/data:/import:ro" slr-backend \
-  sh -c 'mkdir -p /data/runs && cp -rn /import/runs/. /data/runs/'
-
-# 2. then the corpus, with --runs-dir at its default of /data/runs
-docker compose run --rm -v "$PWD/backend/data:/import:ro" slr-backend \
-  python -m app.retrieval adopt /import/glr.sqlite3 --project 1 --dry-run
-```
-
-`adopt` refuses a target that holds no reviews, or one without the project you
-named, so pointing it at the wrong file fails loudly rather than succeeding into
-a database nobody reads. It also says so when `--runs-dir` is outside
-`DATA_DIR` — those paths are stored, and a directory that only exists for the
-duration of the command leaves every snapshot pointing nowhere.
+### What an import counts
 
 Every record is imported, including the ones that could not be retrieved. That
 is deliberate on both sides: the package reports blocked, failed and empty
 retrievals so a consumer's "records identified" reconciles with the retrieval
 report, and a review that cannot say how much of its grey literature had rotted
 or sat behind a publisher's wall is hiding a limitation rather than not having
-one. Those papers arrive with `full_text_inaccessible` set, still
-screenable on title and snippet, and the response breaks them down by cause:
+one. Those records arrive with `full_text_inaccessible` set, still screenable on
+title and snippet, and the response breaks them down by cause:
 
 ```json
 {
@@ -185,6 +361,8 @@ duplicate *within this package* — a row was written and marked as such.
 written, and it is deliberately not counted as a removed duplicate, because it
 was never newly identified.
 
+### What is kept for each grey source
+
 What a `Paper` has no column for is kept beside it in `GreySource`: the
 retrieval timestamp, the SHA-256 over the bytes retrieved, and the WARC file
 and offset holding them. For a grey source those three *are* the citation —
@@ -196,6 +374,66 @@ title is whatever a page's `<title>` said, so a title test would merge two
 different documents with a generic name, and a false duplicate removes a source
 from a review silently. The consequence, stated rather than hidden: a grey copy
 of a formal paper is not recognised as a duplicate of it.
+
+### Taking over a corpus retrieved before the databases merged
+
+```bash
+python -m app.retrieval adopt data/glr.sqlite3 --project 1 --dry-run
+python -m app.retrieval adopt data/glr.sqlite3 --project 1
+```
+
+Reads the old file read-only, remaps every integer key, reuses documents the
+target already holds under the same URL, and refuses if a WARC file it points
+into is not in place. Running it twice adds nothing twice. The dry run does the
+identical work and rolls it back, so its counts are the outcome rather than a
+prediction of it.
+
+In Docker the archive has to reach the volume first, because its path is what
+the database stores and every later read resolves that string. Rebuild before
+you start: an image built before the retrieval package moved in has no
+`app.retrieval` to run.
+
+```bash
+docker compose build slr-backend
+
+# 1. the archive into the volume
+docker compose run --rm -v "$PWD/backend/data:/import:ro" slr-backend \
+  sh -c 'mkdir -p /data/runs && cp -rn /import/runs/. /data/runs/'
+
+# 2. then the corpus, with --runs-dir at its default of /data/runs
+docker compose run --rm -v "$PWD/backend/data:/import:ro" slr-backend \
+  python -m app.retrieval adopt /import/glr.sqlite3 --project 1 --dry-run
+```
+
+`adopt` refuses a target that holds no reviews, or one without the project you
+named, so pointing it at the wrong file fails loudly rather than succeeding into
+a database nobody reads. It also says so when `--runs-dir` is outside
+`DATA_DIR` — those paths are stored, and a directory that only exists for the
+duration of the command leaves every snapshot pointing nowhere.
+
+### Command reference
+
+```bash
+python -m app.retrieval [--db PATH] <command> [options]
+```
+
+| Command | Does | Costs credits |
+|---|---|---|
+| `init` | Creates the database. Rarely needed: every command brings the schema up to date when it opens one | no |
+| `run QUERY` | The whole pipeline for a single query, for trying something out | yes |
+| `batch CONFIG` | The same, for a whole query set — one run per query, grouped under one batch id | yes |
+| `refetch ID` | Retries only the documents whose recorded cause a second attempt could change. Issues no search; the retry is a new run | yes |
+| `reextract ID` | Re-runs text extraction against the archived bytes. No network, and the extraction it replaces is kept | no |
+| `init-config [PATH]` | Writes a starter query set. Refuses to overwrite one | no |
+| `report ID` | Markdown retrieval report for a run or a batch | no |
+| `adopt SOURCE` | Takes a corpus from a separate retrieval database into this one | no |
+| `export RUN_ID` | Re-exports an earlier run as CSV | no |
+| `export-json ID` | Writes the `reviq-grey-v1` package for a run or a batch | no |
+
+`--project` is accepted by `run`, `batch` and `adopt` — the three that record
+new runs. The others derive the review from the runs they are pointed at, so
+passing it there would be a flag that quietly does nothing; they refuse it
+instead. `--db` is global and overrides `DATABASE_URL`.
 
 ## Development
 
@@ -252,9 +490,8 @@ npm run test:watch           # interactive watch mode
 npm run test:coverage        # coverage report under coverage/
 ```
 
-The two layers are independent and parallelisable — neither talks to the
-other in tests. Both can also be invoked through `make test` if you prefer
-one entry point.
+The two layers are independent and parallelisable — neither talks to the other
+in tests. As of the current commit: 719 backend tests, 209 frontend.
 
 #### Unit-level coverage
 
@@ -270,7 +507,13 @@ one entry point.
 | Synthesis-chart helpers (backend) | `backend/tests/test_report_charts.py` | Binning, threshold-band assignment with custom thresholds, taxonomy aggregation including empty categories, extraction-field aggregation, first-`select`-field selection |
 | Synthesis-chart helpers (frontend) | `frontend/src/utils/charts.test.ts` | Same surface as the backend helpers — keeps the web charts and the PDF report numerically in lock-step |
 | Chart component render | `frontend/src/components/charts/charts.test.tsx` | RTL+jsdom render of QA distribution, taxonomy bars, κ cards, extraction-field chart; pins the muted-status palette via inline snapshot |
-| PDF report — synthesis charts | `backend/tests/test_report_pdf_smoke.py` | End-to-end: builds a populated fixture, generates the PDF, parses it with `pypdf`, and asserts the *Figure 1 / 2 / 3* captions are present |
+| PDF report — charts and vocabulary | `backend/tests/test_report_pdf_smoke.py` | End-to-end: builds a populated fixture, generates the PDF, parses it with `pypdf`, asserts the *Figure 1 / 2 / 3* captions, and that the headings count records, reports and studies rather than "papers" |
+| Which stream a record belongs to | `backend/tests/test_streams.py`, `frontend/src/components/streams.test.ts` | The two implementations of the same rule, kept in lock-step: formal vs grey, search vs snowball, and the pre-migration fallback to the source prefix |
+| PRISMA per-stream counts (frontend) | `frontend/src/utils/prisma.test.ts` | One definition per quantity across all three streams — the drift this replaced had "full texts assessed" meaning two different things in one figure — and which streams the diagram may draw |
+| The PRISMA figure itself | `frontend/src/pages/PrismaFlowDiagram.test.tsx` | A column per contributing stream and none for an empty one; geometry derived from their number; the same nouns the pages use |
+| Review type and its gating | `backend/tests/test_review_type.py`, `frontend/src/pages/Search.test.tsx` | `slr`/`mlr` validated and backfilled; the grey import appears for a multivocal review only, and an absent or misspelled value degrades to `slr` |
+| Display vocabulary | `frontend/src/utils/vocabulary.test.ts`, `sourceLabel.test.ts`, `retrievalReasons.test.ts` | Which noun each phase counts; source keys named for readers; the retrieval-cause map kept complete against `outcome.LABELS` |
+| Retrieval, end to end offline | `backend/tests/retrieval/` (21 files) | The query-set parser, SERP parsing, URL canonicalisation, extraction, WARC round-trip, idempotency, the failure classifier against the pilot corpus's distribution, refetch/re-extract candidate selection, the interchange package, adoption, project scoping, schema upgrade, credential scrubbing, and the CLI's own argument surface |
 
 #### Integration coverage
 
@@ -322,11 +565,12 @@ Both containers are defined in `docker-compose.yml`. The frontend Dockerfile run
 ```
 backend/app/
   main.py              # FastAPI app, CORS, lifespan, router registration
-  models.py            # SQLModel table definitions (16 tables)
-  database.py          # SQLite engine, session factory, schema migrations
+  models.py            # SQLModel table definitions (21 tables)
+  database.py          # SQLite engine, session factory, migrations; the one file
+                       #   both halves open, review side and retrieval side
   routers/
-    projects.py        # Project CRUD, criteria, taxonomies, search strings
-    import_.py         # BibTeX import, deduplication, reviewer decision import
+    projects.py        # Project CRUD, review type, criteria, taxonomies, search strings
+    import_.py         # BibTeX and grey import, deduplication, retrieval listing
     papers.py          # Paper listing with decision enrichment
     decisions.py       # Reviewer decisions, conflict detection/resolution
     kappa.py           # Cohen's κ, PABAK, confidence intervals
@@ -334,11 +578,18 @@ backend/app/
     qa.py              # Quality assessment scores and summaries
     snowballing.py     # Iteration management, saturation tracking
     extraction.py      # Extraction schema and per-paper records
-    replication.py     # ZIP-based replication package import/export
-    report.py          # PDF report generation (fpdf2 + ReportLab for Section 10)
+    replication.py     # ZIP replication package, retrieval rows included
+    report.py          # PDF report (fpdf2 + ReportLab for the included-studies section)
   services/
-    bibtex_service.py  # BibTeX parsing, deduplication logic, language detection
-    kappa_service.py   # Cohen's κ calculation, PABAK, Landis-Koch interpretation
+    bibtex_service.py  # BibTeX parsing, deduplication, language detection
+    decision_service.py# Decision state, conflicts
+    grey_service.py    # A retrieval package mapped into the grey stream
+    kappa_service.py   # Cohen's κ, PABAK, Landis-Koch interpretation
+    paper_import.py    # The one import loop both BibTeX paths use
+    streams.py         # Formal vs grey, search vs snowball — mirrored in the frontend
+  retrieval/           # The grey-literature retrieval tool: CLI, SERP, fetch,
+                       #   WARC archive, extraction, figures, interchange, adoption.
+                       #   Knows nothing about reviews; see docs/retrieval/
 ```
 
 ### Frontend structure
@@ -348,41 +599,71 @@ frontend/src/
   main.tsx                  # Entry point, React Query client
   App.tsx                   # Router, project/reviewer context
   api/
-    client.ts               # Axios wrapper (43 API functions)
+    client.ts               # Axios wrapper, one function per endpoint
     types.ts                # TypeScript interfaces for all domain objects
   components/
-    ui/index.tsx             # Shared primitives (Card, Modal, Badge, Form)
-    databases.tsx            # Database branding, key normalisation, badges
-    layout/
-      NavBar.tsx             # Top bar with project title + reviewer selector
-      Sidebar.tsx            # Phase navigation (9 phases)
+    ui/index.tsx            # Shared primitives (Card, Modal, Badge, Form)
+    databases.tsx           # Database branding, key normalisation, badges
+    streams.ts              # Mirror of services/streams.py
+    GreyImportPanel.tsx     # Retrieval listing and grey import (multivocal only)
+    GreyRecordPanel.tsx     # Provenance, archived text and figures for one source
+    charts/                 # Recharts panels, palette, export settings
+    layout/                 # NavBar, Sidebar
+  utils/
+    prisma.ts               # Per-stream PRISMA counts, one definition each
+    vocabulary.ts           # Records, reports, studies — which phase counts what
+    reviewType.ts           # slr / mlr, read through isMlr and never compared raw
+    sourceLabel.ts          # What a source key is called on screen
+    retrievalReasons.ts     # Why a source could not be read, in a reader's words
+    charts.ts               # Chart aggregation, mirrored in the PDF report
   pages/
-    Overview.tsx             # Project list, create/import/delete
-    Settings.tsx             # Phase 0 — full project configuration
-    Search.tsx               # Phase 1 — BibTeX import + dedup management
-    Screening.tsx            # Phase 2 — title/abstract screening + kappa
-    Eligibility.tsx          # Phase 3 — full-text eligibility
-    Snowballing.tsx          # Phase 4 — citation snowballing iterations
-    Quality.tsx              # Phase 5 — QA scoring
-    Extraction.tsx           # Phase 6 — data extraction
-    Results.tsx              # Phase 7 — PRISMA, charts, exports, PDF report
+    Overview.tsx            # Project list, create (with review type), import, delete
+    Settings.tsx            # Phase 1 — project configuration and protocol
+    Search.tsx              # Phase 2 — BibTeX import, dedup, grey import
+    Screening.tsx           # Phase 3 — title/abstract screening + κ
+    Eligibility.tsx         # Phase 4 — full-text eligibility
+    Snowballing.tsx         # Phase 5 — citation snowballing iterations
+    Quality.tsx             # Phase 6 — QA scoring
+    Extraction.tsx          # Phase 7 — data extraction
+    Results.tsx             # Phase 8 — PRISMA, charts, exports, PDF report
 ```
 
 ## Replication packages
 
-ReviQ can export and import full project snapshots as ZIP archives (schema version `reviq-replication-v1`). A replication package contains:
+ReviQ can export and import full project snapshots as ZIP archives (schema
+version `reviq-replication-v2`). A replication package contains:
 
-- `project.json` — all project data, reviewers, criteria, decisions, scores, extraction records
+- `project.json` — all project data, reviewers, criteria, decisions, scores,
+  extraction records, and for a multivocal review the grey provenance and the
+  retrieval rows behind it, scoped to this project's own runs
 - `bibtex/` — the original `.bib` files, preserving the database names
+- `archives/<run_id>/` — the WARC files, only when exported with the archive
+
+A package carries the retrieval its grey half rests on, rather than pointing at
+a second database somebody has to be sent separately. A `v1` package still
+imports; its papers simply arrive without that provenance.
 
 Useful for archiving with a publication or handing a review to another team.
 
 ## References
 
-- Kitchenham, B. & Charters, S. (2007). *Guidelines for performing Systematic Literature Reviews in Software Engineering.* EBSE Technical Report.
-- Wohlin, C. (2014). Guidelines for snowballing in systematic literature studies. *EASE '14.*
+**Conducting the review**
+
+- Kitchenham, B. & Charters, S. (2007). *Guidelines for performing Systematic Literature Reviews in Software Engineering.* EBSE Technical Report EBSE-2007-01.
+- Wohlin, C. (2014). Guidelines for snowballing in systematic literature studies in software engineering. *EASE '14*, 1–10.
+- Page, M. J., McKenzie, J. E., Bossuyt, P. M. et al. (2021). The PRISMA 2020 statement: an updated guideline for reporting systematic reviews. *BMJ, 372*, n71.
+
+**Multivocal reviews and grey literature**
+
+- Ogawa, R. T. & Malen, B. (1991). Towards rigor in reviews of multivocal literatures: applying the exploratory case study method. *Review of Educational Research, 61*(3), 265–286.
+- Garousi, V., Felderer, M. & Mäntylä, M. V. (2016). The need for multivocal literature reviews in software engineering: complementing systematic literature reviews with grey literature. *EASE '16*, article 26.
+- Adams, R. J., Smart, P. & Huff, A. S. (2017). Shades of grey: guidelines for working with the grey literature in systematic reviews for management and organizational studies. *International Journal of Management Reviews, 19*(4), 432–454.
+- Garousi, V., Felderer, M. & Mäntylä, M. V. (2019). Guidelines for including grey literature and conducting multivocal literature reviews in software engineering. *Information and Software Technology, 106*, 101–121.
+
+**Agreement statistics**
+
 - Landis, J. R. & Koch, G. G. (1977). The measurement of observer agreement for categorical data. *Biometrics, 33*(1), 159–174.
-- Byrt, T., Bishop, J. & Carlin, J. B. (1993). Bias, prevalence and kappa. *J. Clinical Epidemiology, 46*(5), 423–429.
+- Byrt, T., Bishop, J. & Carlin, J. B. (1993). Bias, prevalence and kappa. *Journal of Clinical Epidemiology, 46*(5), 423–429.
 
 ## License
 

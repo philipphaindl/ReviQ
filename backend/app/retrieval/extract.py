@@ -7,7 +7,7 @@ section. It removes boilerplate and returns metadata in the same call.
 
 PDF goes through pdfminer.six (MIT). PyMuPDF would be 10-50x faster but is
 AGPL-3.0, which would force this tool to AGPL or a commercial licence — see
-docs/decisions.md.
+docs/retrieval/decisions.md.
 """
 
 from __future__ import annotations
@@ -244,7 +244,7 @@ def extract_pdf_ocr(content: bytes, dpi: int = 200, max_pages: int = 40) -> Extr
         return Extraction(
             extractor="ocr-unavailable",
             error=(f"OCR requested but not installed ({exc.name}); "
-                   f"uv sync --extra ocr, and install tesseract "
+                   f"pip install -r requirements-optional.txt, and install tesseract "
                    f"(macOS: brew install tesseract)"),
         )
 
