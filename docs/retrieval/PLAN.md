@@ -1,7 +1,7 @@
 # Walking Skeleton — Implementierungsplan
 
 Werkzeug zur Unterstützung von Grey-Literature- und Multivocal-Literature-Reviews
-nach Garousi, Felizardo & Mäntylä (IST, 2019).
+nach Garousi, Felderer & Mäntylä (IST, 2019).
 
 Stand: 2026-08-11 · Status: umgesetzt; historisches Dokument
 

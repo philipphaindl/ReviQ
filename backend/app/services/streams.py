@@ -3,7 +3,7 @@
 Two independent axes:
 
   * `stream`    — formal (peer-reviewed databases) vs. grey (web sources).
-    A multivocal literature review (Garousi, Felizardo & Mäntylä 2019) covers
+    A multivocal literature review (Garousi, Felderer & Mäntylä 2019) covers
     both and must report them separately.
   * `discovery` — search (a database or engine query) vs. snowball (reached
     from another included source, Wohlin 2014).

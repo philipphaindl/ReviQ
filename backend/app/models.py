@@ -31,7 +31,7 @@ class Project(SQLModel, table=True):
     methodology: str = "Kitchenham & Charters (2007)"
     # "slr" or "mlr". Declared when the project is created rather than inferred
     # from whether grey literature happens to have been imported: a multivocal
-    # review is designed as one in its protocol (Garousi, Felizardo & Mäntylä
+    # review is designed as one in its protocol (Garousi, Felderer & Mäntylä
     # 2019), and the choice decides what the PRISMA figure has to show and what
     # the report has to say. Inferring it would also mean the third stream
     # appears mid-review, changing a published figure without anyone deciding.

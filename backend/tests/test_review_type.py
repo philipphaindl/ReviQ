@@ -109,10 +109,10 @@ def test_the_methodology_can_finally_be_set(instance):
     every project claimed Kitchenham & Charters — including multivocal ones,
     which cite Garousi et al. instead."""
     create(instance, title="MLR", review_type="mlr",
-           methodology="Garousi, Felizardo & Mäntylä (2019)").raise_for_status()
+           methodology="Garousi, Felderer & Mäntylä (2019)").raise_for_status()
     [p] = [p for p in instance.client.get("/api/projects").json()
            if p["title"] == "MLR"]
-    assert p["methodology"] == "Garousi, Felizardo & Mäntylä (2019)"
+    assert p["methodology"] == "Garousi, Felderer & Mäntylä (2019)"
 
 
 def test_omitting_the_methodology_keeps_the_default(instance):

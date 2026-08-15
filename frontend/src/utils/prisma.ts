@@ -1,7 +1,7 @@
 /** Per-stream PRISMA counts, derived once for every stream.
  *
  * A multivocal review has three streams, not two: database search, snowballing,
- * and grey literature (Garousi, Felizardo & Mäntylä 2019). Each needs the same
+ * and grey literature (Garousi, Felderer & Mäntylä 2019). Each needs the same
  * eight numbers, and until now each was derived inline in `Results.tsx` with
  * its own copy of the filter chain — two copies, about to become three.
  *

@@ -6,7 +6,7 @@
  * later means editing one file rather than every page that gates on one.
  *
  * A multivocal review is declared in its protocol rather than discovered from
- * the data (Garousi, Felizardo & Mäntylä 2019). Inferring it from "does this
+ * the data (Garousi, Felderer & Mäntylä 2019). Inferring it from "does this
  * project contain grey literature" would hide the retrieval features until
  * after they had been used, and would make the PRISMA figure grow a third
  * column partway through a review.
@@ -50,6 +50,6 @@ export const REVIEW_TYPES = [
     value: MLR,
     label: 'Multivocal literature review',
     hint: 'Adds grey literature from the open web, screened alongside and reported separately.',
-    defaultMethodology: 'Garousi, Felizardo & Mäntylä (2019)',
+    defaultMethodology: 'Garousi, Felderer & Mäntylä (2019)',
   },
 ]
