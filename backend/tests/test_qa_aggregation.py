@@ -1,6 +1,7 @@
 """Quality-score aggregation tests against the qa-summary endpoint.
 
-Covers the SLR-correctness invariants called out in CLAUDE.md:
+Three invariants a quality assessment has to hold, because a review reports
+them as if they were arithmetic:
 - per-paper percentage = sum(scores) / max_total * 100
 - threshold-band assignment respects project-level thresholds
 - average across the included study set

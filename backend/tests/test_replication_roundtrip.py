@@ -1,7 +1,9 @@
 """Replication-package round-trip test.
 
-Per CLAUDE.md: export → ZIP → re-import → deep-equal on the resulting
-project state (modulo timestamps and auto-increment IDs).
+The property a replication package exists to have: export → ZIP → re-import →
+deep-equal on the resulting project state (modulo timestamps and
+auto-increment IDs). A package that does not round-trip is a package whose
+reader gets a different review than the one that was published.
 """
 import io
 import zipfile
