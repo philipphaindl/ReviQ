@@ -50,7 +50,7 @@ _CW = 170.0  # content width mm (A4 - 20mm margins)
 _DB_DISPLAY = {
     "acm": "ACM Digital Library", "dblp": "DBLP", "ieee": "IEEE Xplore",
     "scopus": "Elsevier Scopus", "springerlink": "SpringerLink",
-    "wiley": "Wiley Online Library",
+    "wiley": "Wiley Online Library", "sciencedirect": "ScienceDirect",
 }
 _DB_ALIASES = {
     "springer": "springerlink", "springer link": "springerlink", "springerlink": "springerlink",
@@ -59,6 +59,7 @@ _DB_ALIASES = {
     "acm": "acm", "acm digital library": "acm",
     "wiley": "wiley", "wiley online library": "wiley",
     "dblp": "dblp", "dblp library": "dblp",
+    "sciencedirect": "sciencedirect", "science direct": "sciencedirect",
 }
 
 

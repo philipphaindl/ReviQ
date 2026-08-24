@@ -202,6 +202,8 @@ _DB_ALIASES: dict[str, str] = {
     "wiley online library": "wiley",
     "dblp": "dblp",
     "dblp library": "dblp",
+    "sciencedirect": "sciencedirect",
+    "science direct": "sciencedirect",
 }
 
 

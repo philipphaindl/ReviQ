@@ -10,6 +10,7 @@ export const DATABASES = [
   { key: 'acm',          label: 'ACM Digital Library'  },
   { key: 'wiley',        label: 'Wiley Online Library' },
   { key: 'dblp',         label: 'DBLP Library'         },
+  { key: 'sciencedirect', label: 'ScienceDirect'       },
 ] as const
 
 export type DatabaseKey = (typeof DATABASES)[number]['key']
@@ -26,6 +27,7 @@ const DB_COLORS: Record<string, { bg: string; text: string }> = {
   acm:          { bg: '#B71C1C', text: '#fff' },  // ACM vivid crimson
   wiley:        { bg: '#003057', text: '#fff' },  // Wiley dark navy
   dblp:         { bg: '#00695C', text: '#fff' },  // DBLP teal (distinct from IEEE blue)
+  sciencedirect: { bg: '#2E7D32', text: '#fff' }, // ScienceDirect green
 }
 
 // Normalise raw source strings (from legacy free-text imports) → canonical key
@@ -45,6 +47,8 @@ const KEY_ALIASES: Record<string, string> = {
   'wiley online library': 'wiley',
   'dblp': 'dblp',
   'dblp library': 'dblp',
+  'sciencedirect': 'sciencedirect',
+  'science direct': 'sciencedirect',
 }
 
 export function normalizeDbKey(raw: string): string {
