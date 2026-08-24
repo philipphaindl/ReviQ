@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"
+      xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/"
+      xmlns:arxiv="http://arxiv.org/schemas/atom">
+  <title>ArXiv Query: search_query=all:AI maturity assessment model</title>
+  <id>http://arxiv.org/api/query</id>
+  <opensearch:totalResults>3</opensearch:totalResults>
+  <opensearch:startIndex>0</opensearch:startIndex>
+  <opensearch:itemsPerPage>10</opensearch:itemsPerPage>
+  <entry>
+    <id>http://arxiv.org/abs/2301.00001v2</id>
+    <updated>2023-01-05T00:00:00Z</updated>
+    <published>2023-01-01T00:00:00Z</published>
+    <title>An AI Maturity Model for Organisations</title>
+    <summary>
+      We propose a maturity model for assessing organisational readiness for
+      artificial intelligence adoption.
+    </summary>
+    <author><name>A. Researcher</name></author>
+    <link href="http://arxiv.org/abs/2301.00001v2" rel="alternate" type="text/html"/>
+    <link title="pdf" href="http://arxiv.org/pdf/2301.00001v2" rel="related" type="application/pdf"/>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2301.00002v1</id>
+    <updated>2023-01-06T00:00:00Z</updated>
+    <published>2023-01-02T00:00:00Z</published>
+    <title>Artificial Intelligence Maturity Framework for Practice</title>
+    <summary>A framework for practitioners without an available PDF mirror.</summary>
+    <author><name>B. Researcher</name></author>
+    <link href="http://arxiv.org/abs/2301.00002v1" rel="alternate" type="text/html"/>
+  </entry>
+  <entry>
+    <title>Entry with no id, which should be skipped</title>
+    <summary>No id and no pdf link.</summary>
+  </entry>
+</feed>

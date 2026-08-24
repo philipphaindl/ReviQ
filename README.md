@@ -75,8 +75,8 @@ Everything is set through the environment; `.env.example` documents each one and
 | `BIB_BASE_DIR` | `./bib_data` | Mounted read-only; where `.bib` files are looked for |
 | `DATABASE_URL` | `sqlite:////data/reviq.db` | The API **and** the retrieval CLI — one file holds both halves |
 | `DATA_DIR` | `/data` | Where the WARC archive lives, under `DATA_DIR/runs/` |
-| `SEARCHAPI_API_KEY` | — | The retrieval CLI only, for grey literature |
-| `SCRAPINGBEE_API_KEY` | — | The retrieval CLI only, for grey literature |
+| `SEARCHAPI_API_KEY` | — | The retrieval CLI only, for SearchApi.io-backed engines (e.g. `google`); not needed for `--engine arxiv` |
+| `SCRAPINGBEE_API_KEY` | — | The retrieval CLI only, for grey literature — every engine needs it to fetch and archive what it finds |
 | `ANTHROPIC_API_KEY` | — | `--describe-figures` only, off by default |
 
 Outside Docker, `DATABASE_URL` unset means `DATA_DIR/reviq.db` relative to the
@@ -144,9 +144,29 @@ written as a `metadata` record beside every response, so the archive alone
 documents how the retrieval happened. `creel report` generates that note rather
 than leaving it to be remembered.
 
-**1 — Two API keys.** [SearchApi.io](https://www.searchapi.io) issues the search
-queries; [ScrapingBee](https://www.scrapingbee.com) fetches and archives what
-they return. Both have free tiers large enough to try this out.
+### Choosing a search engine
+
+`--engine` (or `engine = "..."` in a query set) selects where the search
+half of a retrieval comes from:
+
+| Engine | Source | Needs `SEARCHAPI_API_KEY` |
+|---|---|---|
+| `google` (default) | SearchApi.io's Google results | yes |
+| any other SearchApi.io engine | SearchApi.io | yes |
+| `arxiv` | arXiv's own API — free, keyless, structured metadata | no |
+
+Whichever engine finds a hit, `SCRAPINGBEE_API_KEY` still does the same job
+downstream: fetching and archiving the document as a WARC snapshot before
+extraction. For `arxiv`, that document is the paper's PDF when arXiv links
+one (preferred, for full text) and its abstract page otherwise — the rest of
+the pipeline (extraction, snowballing, dedup, the interchange package) does
+not know or care which engine found it.
+
+**1 — Two API keys, one of them conditional.**
+[SearchApi.io](https://www.searchapi.io) issues the search queries for
+SearchApi-backed engines; [ScrapingBee](https://www.scrapingbee.com) fetches
+and archives what any engine returns. Both have free tiers large enough to
+try this out.
 
 **2 — Into the environment, never into the browser.**
 
@@ -291,6 +311,12 @@ The twelve keys it accepts are `q`, `pages`, `engine`, `gl`, `hl`, `location`,
 `snowball_max_links`. Anything else — an unknown key, an unknown section, a
 blank query, the same query twice — is refused rather than ignored: a typo that
 is silently dropped from a search protocol is a silently wrong review.
+
+`engine` defaults to `"google"`; set it to `"arxiv"` per query, or once in
+`[defaults]`, to search arXiv instead — see
+[Choosing a search engine](#choosing-a-search-engine). `gl`, `hl` and
+`location` are SearchApi/Google-specific and are simply unused when `engine`
+is `"arxiv"`.
 
 ### Repairing what could not be read
 

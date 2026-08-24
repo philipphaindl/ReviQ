@@ -25,6 +25,10 @@ describe('source labels', () => {
     expect(sourceLabel('grey:bing')).toBe('Bing')
   })
 
+  it('spells arXiv the way arXiv spells itself, not title-cased', () => {
+    expect(sourceLabel('grey:arxiv')).toBe('arXiv')
+  })
+
   it('marks grey literature reached by snowballing as such', () => {
     // Grey literature has its own snowballing, and the two are different rows
     // in the same column of the figure.

@@ -19,7 +19,7 @@ from pathlib import Path
 
 import httpx
 
-from . import (__version__, adopt, batch, db, export, extract, figures,
+from . import (__version__, adopt, arxiv, batch, db, export, extract, figures,
                interchange, links, redact, refetch, report, serp, urls, vision)
 from .archive import ArchiveReadError, SnapshotArchive, sha256_hex
 from .archive import read_payload as archive_read_payload
@@ -90,7 +90,8 @@ def cmd_init(args: argparse.Namespace) -> int:
 
 
 def cmd_run(args: argparse.Namespace) -> int:
-    searchapi_key = _require_key("SEARCHAPI_API_KEY")
+    is_arxiv = args.engine == "arxiv"
+    searchapi_key = None if is_arxiv else _require_key("SEARCHAPI_API_KEY")
     scrapingbee_key = _require_key("SCRAPINGBEE_API_KEY")
 
     conn = db.connect(args.db)
@@ -133,14 +134,19 @@ def cmd_run(args: argparse.Namespace) -> int:
 
         with httpx.Client(timeout=serp.TIMEOUT) as client:
             for page in range(1, args.pages + 1):
-                payload = serp.fetch_page(
-                    searchapi_key, args.query, page,
-                    engine=args.engine, gl=args.gl, hl=args.hl,
-                    location=args.location, client=client,
-                )
+                if is_arxiv:
+                    xml_text = arxiv.fetch_page(args.query, page, client=client)
+                    search_id = None
+                    hits = arxiv.parse_entries(xml_text, page)
+                else:
+                    payload = serp.fetch_page(
+                        searchapi_key, args.query, page,
+                        engine=args.engine, gl=args.gl, hl=args.hl,
+                        location=args.location, client=client,
+                    )
+                    search_id = serp.search_id_of(payload)
+                    hits = serp.parse_organic(payload, page)
                 retrieved_at = db.utc_now()
-                search_id = serp.search_id_of(payload)
-                hits = serp.parse_organic(payload, page)
                 print(f"  page {page}: {len(hits)} organic results")
                 if not hits:
                     break
@@ -1041,7 +1047,10 @@ def build_parser() -> argparse.ArgumentParser:
                        help=_PROJECT_HELP)
     p_run.add_argument("--pages", type=int, default=5,
                        help="SERP pages to retrieve; 10 results each (default: 5)")
-    p_run.add_argument("--engine", default="google")
+    p_run.add_argument("--engine", default="google",
+                       help="'google' (or any SearchApi.io engine, needs "
+                            "SEARCHAPI_API_KEY) or 'arxiv' (arXiv's own API, "
+                            "free and keyless)")
     p_run.add_argument("--gl", default=None, help="country code, e.g. at, de, us")
     p_run.add_argument("--hl", default=None, help="interface language, e.g. en, de")
     p_run.add_argument("--location", default=None, help="canonical location string")

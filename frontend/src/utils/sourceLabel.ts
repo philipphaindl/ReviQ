@@ -17,6 +17,9 @@ import { dbByKey, normalizeDbKey } from '../components/databases'
 const GREY = /^grey(-snowball)?:(.*)$/
 const SNOWBALL = /^snowballing:(\d+)$/
 
+// Engines whose display name a generic title-case would get wrong.
+const ENGINE_LABELS: Record<string, string> = { arxiv: 'arXiv' }
+
 export function sourceLabel(source: string): string {
   const grey = GREY.exec(source)
   if (grey) {
@@ -25,7 +28,7 @@ export function sourceLabel(source: string): string {
     // one engine; it is not the name of an engine and must not read like one.
     const name = engine === 'mixed'
       ? 'Several engines'
-      : engine.charAt(0).toUpperCase() + engine.slice(1)
+      : ENGINE_LABELS[engine] ?? engine.charAt(0).toUpperCase() + engine.slice(1)
     return grey[1] ? `${name} (snowballed)` : name
   }
 
