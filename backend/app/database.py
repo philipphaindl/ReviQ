@@ -125,6 +125,10 @@ MIGRATIONS = [
     "UPDATE paper SET discovery = 'snowball' "
     "WHERE discovery IS NULL AND source LIKE 'snowballing:%'",
     "UPDATE paper SET discovery = 'search' WHERE discovery IS NULL",
+    "UPDATE paper SET discovery = 'snowball' "
+    "WHERE source LIKE 'snowballing:%' AND discovery != 'snowball'",
+    "UPDATE paper SET discovery = 'snowball' "
+    "WHERE source LIKE 'grey-snowball:%' AND discovery != 'snowball'",
     # The two grey-import counts that were missing, so a stored import row adds
     # up to its package the way the response does. Defaulted rather than
     # backfilled: for an import made before these existed the honest value is

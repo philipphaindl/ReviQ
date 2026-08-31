@@ -232,3 +232,94 @@ class TestMethodologyCorrection:
         """If these drift into two unrelated strings the guard stops matching
         and the correction quietly becomes a no-op."""
         assert WRONG_MLR_METHODOLOGY.replace("Felizardo", "Felderer") == MLR_METHODOLOGY
+
+
+DISCOVERY_SCHEMA = """
+CREATE TABLE paper (
+    id INTEGER PRIMARY KEY,
+    project_id INTEGER NOT NULL,
+    citekey VARCHAR NOT NULL,
+    title VARCHAR NOT NULL,
+    source VARCHAR NOT NULL,
+    dedup_status VARCHAR NOT NULL DEFAULT 'original',
+    stream VARCHAR NOT NULL DEFAULT 'formal',
+    discovery VARCHAR NOT NULL DEFAULT 'search'
+);
+CREATE TABLE inclusioncriterion (
+    id INTEGER PRIMARY KEY, project_id INTEGER, label VARCHAR, description VARCHAR, phase VARCHAR
+);
+CREATE TABLE exclusioncriterion (
+    id INTEGER PRIMARY KEY, project_id INTEGER, label VARCHAR, description VARCHAR, phase VARCHAR
+);
+"""
+
+DISCOVERY_ROWS = [
+    # The bug: a snowballed paper mistagged as search-discovered.
+    (1, 1, "smith2020", "A mistagged snowball hit", "snowballing:1", "original", "formal", "search"),
+    # Grey literature's own snowballing arm, mistagged the same way.
+    (2, 1, "jones2021", "A mistagged grey-snowball hit", "grey-snowball:1", "original", "formal", "search"),
+    # A normal database hit: source and discovery already agree.
+    (3, 1, "doe2019", "An ordinary database hit", "ieee", "original", "formal", "search"),
+    # A snowballed paper already correctly tagged — must stay untouched.
+    (4, 1, "roe2022", "An already-correct snowball hit", "snowballing:2", "original", "formal", "snowball"),
+    # A reviewer's deliberate override: a database-sourced paper hand-marked as
+    # snowball-discovered. Not a reserved source prefix, so must be left alone.
+    (5, 1, "lee2023", "A hand-marked database hit", "scopus", "original", "formal", "snowball"),
+]
+
+
+@pytest.fixture
+def discovery_db(tmp_path):
+    path = tmp_path / "discovery.db"
+    conn = sqlite3.connect(path)
+    conn.executescript(DISCOVERY_SCHEMA)
+    conn.executemany(
+        "INSERT INTO paper VALUES (?, ?, ?, ?, ?, ?, ?, ?)", DISCOVERY_ROWS
+    )
+    conn.commit()
+    conn.close()
+    return path
+
+
+def discoveries(path) -> dict[str, str]:
+    conn = sqlite3.connect(path)
+    try:
+        return {r[0]: r[1] for r in conn.execute("SELECT citekey, discovery FROM paper")}
+    finally:
+        conn.close()
+
+
+class TestDiscoveryCorrection:
+    """Rows whose `discovery` disagreed with a reserved snowball source prefix
+    were invisible to the IS NULL-guarded backfill, which is how a stream's
+    dedup count could exceed its own retrieved count — see PRISMA diagram bug."""
+
+    def test_a_mistagged_snowball_hit_is_corrected(self, discovery_db):
+        run_migrations(create_engine(f"sqlite:///{discovery_db}"))
+        assert discoveries(discovery_db)["smith2020"] == "snowball"
+
+    def test_a_mistagged_grey_snowball_hit_is_corrected(self, discovery_db):
+        run_migrations(create_engine(f"sqlite:///{discovery_db}"))
+        assert discoveries(discovery_db)["jones2021"] == "snowball"
+
+    def test_an_ordinary_database_hit_is_untouched(self, discovery_db):
+        run_migrations(create_engine(f"sqlite:///{discovery_db}"))
+        assert discoveries(discovery_db)["doe2019"] == "search"
+
+    def test_an_already_correct_snowball_hit_is_untouched(self, discovery_db):
+        run_migrations(create_engine(f"sqlite:///{discovery_db}"))
+        assert discoveries(discovery_db)["roe2022"] == "snowball"
+
+    def test_a_reviewers_deliberate_override_is_left_alone(self, discovery_db):
+        """Guarded by the reserved source prefix, not by the discovery value
+        alone — a database-sourced paper a reviewer hand-marked as snowball
+        must not be touched, since its source is not one ReviQ reserves."""
+        run_migrations(create_engine(f"sqlite:///{discovery_db}"))
+        assert discoveries(discovery_db)["lee2023"] == "snowball"
+
+    def test_running_twice_changes_nothing(self, discovery_db):
+        engine = create_engine(f"sqlite:///{discovery_db}")
+        run_migrations(engine)
+        once = discoveries(discovery_db)
+        run_migrations(engine)
+        assert discoveries(discovery_db) == once
