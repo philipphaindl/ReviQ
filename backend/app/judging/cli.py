@@ -4,6 +4,9 @@
     python -m app.judging init-study
     python -m app.judging estimate --records 7000
     python -m app.judging prompts [--freeze NAME ...]
+    python -m app.judging qgs import|export|accept|split|status
+    python -m app.judging search render [--source NAME] [--creel-toml]
+    python -m app.judging search evaluate [--count]
 
 Every command that will cost money gets `--dry-run` when it is added; the
 commands so far cost nothing.
@@ -110,6 +113,89 @@ def cmd_prompts(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_qgs(args: argparse.Namespace) -> int:
+    from .search import qgs
+    from .search.openalex import OpenAlex
+
+    study = config.load(args.config)
+    with _session(args.db) as session:
+        if args.action == "import":
+            report = qgs.import_seeds(session, study.name, OpenAlex(), expand=not args.no_expand)
+            print(f"added {report.added}, already present {report.already_present}, "
+                  f"unresolved {len(report.unresolved)}")
+            for citation in report.unresolved:
+                print(f"  unresolved: {citation}")
+        elif args.action == "export":
+            if not args.file:
+                raise config.ConfigError("qgs export needs --file")
+            n = qgs.export_for_review(session, study.name, args.file)
+            print(f"wrote {n} candidates to {args.file}; set accept to y or n")
+        elif args.action == "accept":
+            if not args.file:
+                raise config.ConfigError("qgs accept needs --file")
+            print(f"recorded {qgs.apply_review(session, study.name, args.file)} verdicts")
+        elif args.action == "split":
+            sizes = qgs.split(session, study.name, study.seed)
+            print(f"dev {sizes['dev']}, holdout {sizes['holdout']} (seed {study.seed})")
+        else:
+            from sqlmodel import select
+            from .models import AiqmQgs
+            rows = session.exec(select(AiqmQgs).where(AiqmQgs.study == study.name)).all()
+            open_ = sum(r.accepted is None for r in rows)
+            print(f"{len(rows)} candidates, {sum(bool(r.accepted) for r in rows)} accepted, "
+                  f"{open_} unchecked, dev {sum(r.split == 'dev' for r in rows)}, "
+                  f"holdout {sum(r.split == 'holdout' for r in rows)}")
+    return 0
+
+
+def cmd_search(args: argparse.Namespace) -> int:
+    from .search import candidates, concepts, translate
+
+    strings = concepts.load()
+    chosen = [strings[args.string]] if args.string else list(strings.values())
+    if args.action == "render":
+        sources = [args.source] if args.source else list(translate.SOURCES)
+        for string in chosen:
+            print(f"# {string.name}: {string.label()}")
+            for source in sources:
+                for query in translate.SOURCES[source](string):
+                    if args.creel_toml and source == "google_scholar":
+                        print(f'[[query]]\nq = {query!r}\nengine = "google_scholar"\n'
+                              f"pages = {args.pages}\n")
+                    else:
+                        print(f"{source}: {query}")
+        return 0
+
+    study = config.load(args.config)
+    from .models import AiqmSearchCandidate
+    from .search import qgs
+    from .search.openalex import OpenAlex
+
+    client = OpenAlex() if args.count else None
+    with _session(args.db) as session:
+        dev = qgs.dev_set(session, study.name)
+        if not dev:
+            raise config.ConfigError("no QGS-dev yet: import, check and split the QGS first")
+        for string in chosen:
+            for candidate in candidates.variants(string):
+                m = candidates.measure(candidate, dev)
+                hits = None
+                if client is not None:
+                    filters = (f"title_and_abstract.search:{translate.openalex(candidate.string)},"
+                               f"publication_year:{translate.YEARS[0]}-{translate.YEARS[1]}")
+                    hits = client.count(filters)
+                session.add(AiqmSearchCandidate(
+                    study=study.name, name=candidate.string.name, base=candidate.base,
+                    variant=candidate.variant, label=candidate.string.label(),
+                    terms=candidate.string.term_count(), dev_matched=m.dev_matched,
+                    dev_total=m.dev_total, hits_openalex=hits))
+                print(f"{candidate.string.name:16} sens {m.sensitivity:.2f} "
+                      f"({m.dev_matched}/{m.dev_total}) hits {hits if hits is not None else '-'}"
+                      f"  {candidate.variant}")
+        session.commit()
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m app.judging")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -132,6 +218,25 @@ def build_parser() -> argparse.ArgumentParser:
     p_prompts = sub.add_parser("prompts", help="list prompts, or freeze some")
     p_prompts.add_argument("--freeze", nargs="+", metavar="NAME", default=None)
     p_prompts.add_argument("--prompt-dir", type=Path, default=prompts.PROMPT_DIR)
+
+    p_qgs = sub.add_parser("qgs", help="quasi-gold standard: import, check, split")
+    p_qgs.add_argument("action", choices=("import", "export", "accept", "split", "status"))
+    p_qgs.add_argument("--file", type=Path, default=None, help="CSV for export and accept")
+    p_qgs.add_argument("--no-expand", action="store_true",
+                       help="do not add the references of seeds and reviews")
+    p_qgs.add_argument("--db", default=None, metavar="URL")
+
+    p_search = sub.add_parser("search", help="render or evaluate search strings")
+    p_search.add_argument("action", choices=("render", "evaluate"))
+    p_search.add_argument("--string", default=None, help="S1 or S2 (default: both)")
+    p_search.add_argument("--source", default=None,
+                          choices=("openalex", "semantic_scholar", "arxiv", "google_scholar"))
+    p_search.add_argument("--creel-toml", action="store_true",
+                          help="print Google Scholar queries as a creel query set")
+    p_search.add_argument("--pages", type=int, default=10)
+    p_search.add_argument("--count", action="store_true",
+                          help="ask OpenAlex for the hit count of every candidate (network)")
+    p_search.add_argument("--db", default=None, metavar="URL")
     return parser
 
 
@@ -140,6 +245,8 @@ COMMANDS = {
     "init-study": cmd_init_study,
     "estimate": cmd_estimate,
     "prompts": cmd_prompts,
+    "qgs": cmd_qgs,
+    "search": cmd_search,
 }
 
 
@@ -147,6 +254,6 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         return COMMANDS[args.command](args)
-    except (config.ConfigError, prompts.PromptError) as exc:
+    except (config.ConfigError, prompts.PromptError, RuntimeError, ValueError) as exc:
         print(f"error: {exc}")
         return 2

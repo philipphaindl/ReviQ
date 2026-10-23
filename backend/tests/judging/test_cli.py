@@ -33,3 +33,31 @@ def test_a_broken_configuration_is_reported_not_raised(tmp_path, capsys):
     broken.write_text("[study]\nname = 1\n", encoding="utf-8")
     assert main(["--config", str(broken), "check-config"]) == 2
     assert "error:" in capsys.readouterr().out
+
+
+def test_search_render_prints_every_source_for_both_strings(capsys):
+    assert main(["search", "render"]) == 0
+    out = capsys.readouterr().out
+    assert "# S1:" in out and "# S2:" in out
+    for source in ("openalex:", "semantic_scholar:", "arxiv:", "google_scholar:"):
+        assert source in out
+
+
+def test_scholar_queries_can_be_written_as_a_creel_query_set(capsys, tmp_path):
+    from app.retrieval.batch import parse_config
+    import tomllib
+
+    assert main(["search", "render", "--source", "google_scholar", "--creel-toml"]) == 0
+    body = "\n".join(line for line in capsys.readouterr().out.splitlines()
+                     if not line.startswith("#"))
+    specs = parse_config(tomllib.loads(body))
+    assert specs and all(s.params["engine"] == "google_scholar" for s in specs)
+    assert all(s.params["pages"] == 10 for s in specs)
+
+
+def test_evaluate_without_a_split_qgs_says_what_is_missing(tmp_path, capsys):
+    url = f"sqlite:///{tmp_path / 'reviq.db'}"
+    assert main(["search", "evaluate", "--db", url]) == 2
+    assert "QGS" in capsys.readouterr().out
+    assert main(["qgs", "status", "--db", url]) == 0
+    assert "0 candidates" in capsys.readouterr().out

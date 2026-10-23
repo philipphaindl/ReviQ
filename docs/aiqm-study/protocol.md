@@ -133,7 +133,13 @@ queries. No premium or stealth proxy; a source that blocks plain retrieval count
 its recorded cause. Stopping: effort-bounded (pages) and theoretical saturation (last page without
 a new relevant hit by jury preview → no further pages in a later run).
 
-Google Scholar queries: `[derived from S1 and S2 as plain English queries, set at G1]`, 10 pages each.
+Google Scholar queries, derived from S1 and S2 by a fixed rule (`judging/search/translate.py`): one
+query per singular term of the string's most specific block (M for S1, E for S2), each with the first
+two terms of the AI block and the first term of every block in between, for example
+`("artificial intelligence" OR "machine learning") adoption organization "success factor"`;
+12 queries for S1 and 10 for S2, 10 pages each. Scholar ranks by relevance and is read to a fixed
+depth, so short precise queries replace one exhaustive Boolean string. `[Confirmed or changed at G1,
+together with the final S1 and S2]`
 
 ### 5.5 Syntax verification
 

@@ -1,0 +1,37 @@
+# Canonical search concepts (protocol.md, section 5.2). Every executed search
+# string is translated from this file, so a term is changed in one place and
+# every source follows. Singular and plural are spelled out rather than written
+# as wildcards: several sources drop wildcards silently or allow them only in
+# unstemmed search, and an explicit form behaves the same everywhere.
+
+[blocks]
+A = ["artificial intelligence", "machine learning", "generative AI", "GenAI",
+     "large language model", "large language models", "AI system", "AI systems"]
+O = ["adoption", "implementation", "deployment", "integration", "governance",
+     "readiness", "maturity", "capability", "capabilities", "transformation"]
+# The adoption terms of S2: the subset of O the brief's S2 strings use (C.2).
+O2 = ["adoption", "implementation", "deployment", "integration", "governance"]
+M = ["maturity model", "readiness model", "maturity assessment", "readiness assessment",
+     "capability model", "quality model", "assessment framework", "assessment model",
+     "maturity framework", "readiness framework", "adoption framework",
+     "governance framework"]
+E = ["success factor", "success factors", "critical factor", "critical factors",
+     "barrier", "barriers", "enabler", "enablers", "best practice", "best practices",
+     "lessons learned", "metric", "metrics", "key performance indicator",
+     "key performance indicators", "KPI", "KPIs", "measurement"]
+# "organization" first: the first term of a block is its head term where a source
+# takes only one (Google Scholar, translate.py), and the US spelling is the
+# more frequent one in the literature.
+K = ["organization", "organizations", "organisation", "organisations", "enterprise",
+     "enterprises", "firm", "firms", "company", "companies", "public sector", "SME",
+     "SMEs", "business", "businesses"]
+
+# A string is a conjunction of clauses. A clause is either one block or two
+# blocks within `near` words of each other.
+[[string]]
+name = "S1"
+clauses = [{ near = ["A", "O"], distance = 5 }, { block = "M" }]
+
+[[string]]
+name = "S2"
+clauses = [{ near = ["A", "O2"], distance = 3 }, { block = "K" }, { block = "E" }]

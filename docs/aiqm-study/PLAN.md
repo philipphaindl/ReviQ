@@ -406,7 +406,44 @@ ungestemmt). Daraus folgt eine G1-Frage: Bleibt OpenAlex beim gestemmten Suchen 
 3. WP1 erledigt (siehe unten). **G0 erteilt am 23.10.2026:** Protokoll freigegeben, ohne
    öffentliche Registrierung (Zeitstempel ist der Commit); Seed-Liste wie vorgeschlagen ohne
    Gartner; QA-Level high ≥ 75 %, medium ≥ 50 % je Strom.
-4. Danach WP2: QGS, `concepts.toml`, Translator und Suchstring-Judge.
+4. WP2 läuft (Stand unten). Für die Online-Schritte braucht die Arbeitsumgebung Zugriff auf
+   OpenAlex und die Dokumentationsseiten (Abschnitt 8); bis dahin führt Philipp sie lokal aus.
+
+### Stand WP2 (23.10.2026)
+
+Gebaut und getestet (offline):
+- `search/concepts.toml` und `concepts.py`: kanonische Blöcke A, O, O2, M, E, K und die Strings S1
+  und S2 als Klauseln (Block oder Block W/n Block).
+- `search/boolean.py`: lokale Boolesche Auswertung über Titel, Abstract und Keywords, mit W/n wie
+  bei Scopus, ohne Stemming (untere Schranke gegenüber stemmenden Quellen), Feldgrenzen werden
+  nicht überbrückt.
+- `search/translate.py`: Übersetzung für OpenAlex, Semantic Scholar, arXiv und Google Scholar;
+  Proximity wird zu AND (keine dieser Quellen kann Gruppen-Proximity), Golden Files unter
+  `tests/judging/golden/`. Google Scholar: feste Regel mit 22 kurzen Queries, als creel-Query-Set
+  ausgebbar (`search render --source google_scholar --creel-toml`).
+- `search/openalex.py`: Client für Werke (DOI, ID, Titel) und Trefferzahlen (`meta.count`), Parser
+  gegen ein aus dem dokumentierten Schema gebautes Fixture; beim ersten Lauf mit Netz durch eine
+  aufgezeichnete Antwort zu ersetzen.
+- `search/qgs_seeds.toml` und `qgs.py`: 22 Startwerke aus Teil B.4, D und F (Seeds, Reviews,
+  verwandte Arbeiten), Import mit Referenzen der Seeds und Reviews, Prüfliste als CSV für beide
+  Autoren, deterministischer Split 60/40, der genau einmal läuft.
+- `search/candidates.py` und `harvest.py`: Varianten (Ablation, W/3/5/10, AND, verbreiterte Blöcke),
+  Sensitivität auf QGS-dev, Auswahlregel nach C.4; TF-IDF-Begriffsernte.
+- CLI: `qgs import|export|accept|split|status`, `search render|evaluate [--count]`.
+- 40 neue Tests, Suite 833 grün.
+
+Offen bis G1:
+- **Netz:** `qgs import` und `search evaluate --count` brauchen api.openalex.org. Die
+  Syntaxprüfung braucht die Dokumentationsseiten (developers.openalex.org, help.openalex.org,
+  api.semanticscholar.org, info.arxiv.org, searchapi.io).
+- **Menschen:** Die QGS-Kandidatenliste prüfen (`qgs export --file qgs.csv`, Spalte `accept`
+  mit y/n, dann `qgs accept --file qgs.csv`), etwa 1 Stunde.
+- **Jury-Präzision:** Die Schätzung der Präzision je Kandidat (50 Treffer, Mehrheitsentscheid)
+  braucht die Judge-Backends. Sie werden für G1 vorgezogen (eigentlich WP4); bis dahin wählt die
+  Regel nicht aus.
+- **WP3-Hinweis:** creel ruft jeden Treffer über ScrapingBee ab. Für Google Scholar reicht die
+  Trefferliste, weil die Treffer gegen OpenAlex aufgelöst werden. Ein Abruf nur der Trefferliste
+  spart Credits und wird in WP3 geprüft.
 
 ### Stand WP1 (23.10.2026)
 
