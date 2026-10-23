@@ -403,8 +403,9 @@ ungestemmt). Daraus folgt eine G1-Frage: Bleibt OpenAlex beim gestemmten Suchen 
 1. Erledigt: Plan freigegeben am 23.10.2026.
 2. Die Syntax-Tabelle (Abschnitt 8) wird für OpenAlex, Semantic Scholar und arXiv an den
    Originalseiten geprüft; Scopus und WoS sind nur noch Referenz.
-3. WP1 erledigt (siehe unten); **G0** liegt bei Philipp: Protokoll freigeben, Seed-Liste und
-   QA-Level-Grenzen festlegen, auf OSF oder Zenodo registrieren.
+3. WP1 erledigt (siehe unten). **G0 erteilt am 23.10.2026:** Protokoll freigegeben, ohne
+   öffentliche Registrierung (Zeitstempel ist der Commit); Seed-Liste wie vorgeschlagen ohne
+   Gartner; QA-Level high ≥ 75 %, medium ≥ 50 % je Strom.
 4. Danach WP2: QGS, `concepts.toml`, Translator und Suchstring-Judge.
 
 ### Stand WP1 (23.10.2026)

@@ -1,7 +1,8 @@
 # Review protocol: an LLM-jury-assisted, validated derivation of a quality model for AI adoption in organisations
 
-Status: **draft for G0** (2026-10-23) · Authors: Philipp Haindl, Oliver Eigner ·
-Model name: `<MODELNAME>` (set after trademark check) · Registration: `[OSF/Zenodo DOI, set at G0]`
+Status: **approved at G0** (2026-10-23, Philipp Haindl) · Authors: Philipp Haindl, Oliver Eigner ·
+Model name: `<MODELNAME>` (set after trademark check) · Registration: internal; the timestamp is the
+commit that fixed this version in the ReviQ repository (no public registration for now)
 
 This protocol is fixed before any search is run. Every value marked **a priori** is binding; a later
 change is reported as a deviation (section 12). Values that can only be set after calibration are
@@ -60,7 +61,9 @@ CAF-AI (2024); NIST AI RMF 1.0; ISO/IEC 42001:2023. Gartner's AI Maturity Model 
 described in sufficient detail, otherwise excluded with that reason. ISO/IEC 25059 and Siebert et
 al. 2022 serve as system-quality references for delimitation, not as seeds.
 
-`[Final seed list, set at G0]`
+Final seed list (G0): the candidates above. Gartner's AI Maturity Model is excluded, because no
+public description with an explicit structure was identified; this is reconsidered only if one is
+found during the search, and then reported as a deviation.
 
 ## 5. Search strategy
 
@@ -229,7 +232,8 @@ novelty, evidence or sources given, outlet type (QA-G1–G7). Each source is sco
 stream; the jury proposes scores, humans check a sample, agreement is reported. The QA level steers
 the evidence rule (10), not the inclusion.
 
-`[QA level boundaries per stream, set at G0]`
+QA level per stream (G0): the share of the attainable score on the stream's list; **high** ≥ 75 %,
+**medium** ≥ 50 %, **low** below (ReviQ's default thresholds).
 
 ## 9. Data extraction
 
@@ -297,8 +301,9 @@ the restriction to open sources and to English.
 
 ## 14. Data availability and competing interests
 
-Replication package on Zenodo: ReviQ export, LLM cache, prompts, configuration, WARC manifest
-(without full texts of copyrighted sources), scripts; tagged. Protocol on `[OSF or Zenodo, set at G0]`.
+Replication package (to be published with the paper): ReviQ export, LLM cache, prompts,
+configuration, WARC manifest (without full texts of copyrighted sources), scripts; tagged. The
+protocol is kept in the repository; its approved version is fixed by commit.
 
 Competing interests: "The authors intend to commercially apply the proposed model through a company
 they are in the process of founding." (company name after registration and trademark check)
