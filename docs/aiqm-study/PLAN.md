@@ -165,6 +165,28 @@ Hinweise:
   ihn sind es drei kommerzielle Familien, was A.3.3 (open-weight verlangt) nicht erfüllt. Für
   `review` ist er optional.
 
+### E7 – Judges über Claude Code statt über die API (Philipp, 23.10.2026)
+
+Philipp: „Es soll mit Claude laufen, aber ohne API Call.“ Das ändert A.3.10 des Auftrags (dort ist
+`claude -p` als Judge-Backend ausgeschlossen) und berührt Abschnitt 7.1 des Protokolls.
+
+- **Backend:** `app/judging/claude_cli.py` startet die Claude-Code-CLI je Anfrage im Print-Modus:
+  exaktes Modell (`--model`), der eingefrorene Prompt als einziger System-Prompt
+  (`--system-prompt`), keine Tools (`--tools ""`), Ausgabe nach JSON-Schema (`--json-schema`),
+  JSON mit Token-Zählung (`--output-format json`), kein Transkript (`--no-session-persistence`).
+  Läuft auf dem Rechner, dessen Claude-Code-Login es nutzt; jede Antwort landet im selben Cache
+  und ist ohne CLI wiederholbar.
+- **Grenzen gegenüber der API:** keine Sampling-Parameter, kein Batch-Rabatt, Durchsatz durch die
+  Nutzungsgrenzen des Abos begrenzt.
+- **Offen (Philipp):** (1) Nur Claude-Modelle (Haiku, Sonnet, Opus) als Judges, oder zusätzlich ein
+  lokales offenes Modell für die Familienvielfalt? Mit nur einer Familie sind die Fehler der Judges
+  korreliert; das Klassenmodell (Dawid-Skene) setzt bedingte Unabhängigkeit voraus und würde die
+  Reliabilität dann überschätzen. In `studie` wäre das eine Abweichung von 7.1 mit dem
+  menschlichen Gold-Standard als eigentlicher Prüfung; in `review` ist es vertretbar.
+  (2) Die aktuellen Nutzungsbedingungen des Abos für automatisierte Massenläufe prüfen.
+  (3) Das tatsächliche JSON-Format der CLI an einem echten Aufruf festhalten; aus der
+  Arbeitsumgebung durfte die CLI nicht gestartet werden.
+
 ### E3 – Nur offene Quellen (entschieden)
 
 Keine Lizenzzugänge, daher **nur offene Quellen**: OpenAlex (Hauptquelle), Semantic Scholar Bulk,
