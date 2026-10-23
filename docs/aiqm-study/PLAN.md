@@ -392,6 +392,9 @@ ungestemmt). Daraus folgt eine G1-Frage: Bleibt OpenAlex beim gestemmten Suchen 
 | M5 | Phase „Eligibility“ = ReviQ-Phase `full-text` | Vorhandenes Vokabular. |
 | M6 | Lauf-zu-Lauf-Daten und Konfidenzen nur in `aiqm_judge_decision`; nach ReviQ geht je Judge und Phase genau der maßgebliche Lauf | Der Import macht Upserts; mehrere Läufe würden sich überschreiben. |
 | M7 | Studien-Artefakte unter `docs/aiqm-study/` (Prompt, Plan, Protokoll, Related Work), Konfiguration unter `backend/app/judging/` | Wie im Prompt vorgesehen. |
+| M8 | Reviewer-Rollen: J1–J3 als R3–R5 (wie im Auftrag), J4 als R6, „Jury“ als R7, „Arbiter“ als R8 | ReviQ und die Oberfläche behandeln Rollen als freien Text; so nennt jede Entscheidung ihre Quelle. |
+| M9 | Akademische und Grey-QA-Kriterien liegen beide im Projekt (QA-A1–A5, QA-G1–G7); das Judging-Modul bewertet jede Quelle nur nach der Liste ihres Stroms und berechnet das QA-Level selbst | ReviQ kennt eine QA-Liste je Projekt und unterscheidet die Ströme dabei nicht. ReviQs eigene QA-Zusammenfassung ist für diese Projekte deshalb nicht aussagekräftig. |
+| M10 | Prompt-Freeze je Prompt (`prompts/freeze.json`) statt eines globalen Freeze | Die Phasen erreichen ihren Freeze zu verschiedenen Zeitpunkten (Screening bei G2, Extraktion später). |
 
 ---
 
@@ -400,5 +403,22 @@ ungestemmt). Daraus folgt eine G1-Frage: Bleibt OpenAlex beim gestemmten Suchen 
 1. Erledigt: Plan freigegeben am 23.10.2026.
 2. Die Syntax-Tabelle (Abschnitt 8) wird für OpenAlex, Semantic Scholar und arXiv an den
    Originalseiten geprüft; Scopus und WoS sind nur noch Referenz.
-3. Danach WP1: `protocol.md`, ReviQ-Projekte und Reviewer, Skelett von `backend/app/judging/` mit
-   Konfiguration, Cache, Prompt-Lader, Anbieter-Schnittstelle und `--dry-run` samt Tests.
+3. WP1 erledigt (siehe unten); **G0** liegt bei Philipp: Protokoll freigeben, Seed-Liste und
+   QA-Level-Grenzen festlegen, auf OSF oder Zenodo registrieren.
+4. Danach WP2: QGS, `concepts.toml`, Translator und Suchstring-Judge.
+
+### Stand WP1 (23.10.2026)
+
+- `docs/aiqm-study/protocol.md`: Protokoll für G0, englisch (Registrierung und Paper), mit allen
+  a-priori-Werten aus E1 bis E6 und markierten Platzhaltern `[set at Gx]`.
+- `backend/app/judging/`: `study.toml` (Konfiguration), `criteria.toml` (IC/EC/QA, Reviewer),
+  `config.py` (strenge Prüfung, Alias-Sperre, Pinning-Pflicht beim Freeze), `cache.py`
+  (Schlüssel über alles, was die Antwort bestimmt; Offline-Replay; Schwärzung), `prompts.py`
+  (Front Matter, Hash, Freeze), `costs.py` (Schätzung inkl. adaptiver Stimmenzahl), `setup.py`
+  (`init-study`: drei Projekte, idempotent, ändert nie bestehende Kriterien), `providers.py`
+  (Schnittstelle; Backends folgen in WP4), `cli.py`.
+- `app/retrieval/redact.py`: neue Schlüssel ergänzt (M3).
+- Tests: 39 neue unter `backend/tests/judging/`, gesamte Suite 793 grün.
+- Beispiel: `python -m app.judging estimate --records 7000` schätzt das Screening auf etwa
+  15.900 Stimmen und rund $48 im Batch für die drei kommerziellen Judges (Mittelklasse,
+  Richtpreise).

@@ -21,11 +21,17 @@ import os
 
 REDACTED = "[REDACTED]"
 
-# Environment variables holding credentials this tool sends anywhere.
+# Environment variables holding credentials this tool sends anywhere. The last
+# four belong to the judging module (app/judging), which stores model responses
+# and so has the same reason to scrub them before they are written.
 SECRET_ENV_VARS: tuple[str, ...] = (
     "SEARCHAPI_API_KEY",
     "SCRAPINGBEE_API_KEY",
     "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "GEMINI_API_KEY",
+    "GOOGLE_API_KEY",
+    "SEMANTIC_SCHOLAR_API_KEY",
 )
 
 # Below this length a "secret" is more likely to be an accident (an empty or
