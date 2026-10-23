@@ -1,6 +1,6 @@
 # Implementierungsplan: LLM-gestützte Herleitung eines Qualitätsmodells (WP0)
 
-Stand: 23.10.2026 · Grundlage: `docs/aiqm-study/PROMPT.md` (Teil A bis F) · Repo-Stand `2a687c5`
+Stand: 23.10.2026 · **Plan freigegeben (Philipp, 23.10.2026)** · Grundlage: `docs/aiqm-study/PROMPT.md` (Teil A bis F) · Repo-Stand `2a687c5`
 
 Dieses Dokument ist das Ergebnis von WP0. Es hält fest, was ReviQ heute kann, wo der Prompt und das
 Repo auseinanderliegen, wie die Entscheidungen E1 bis E6 ausgefallen sind (Abschnitt 3) und wie WP1
@@ -134,7 +134,7 @@ menschlichen Gold-Standard und zusätzlich die modellbasierte Recall-Schätzung.
 ist selbst ein Ergebnis: Er zeigt, wie gut sich das System ohne Menschen einschätzt. Das ist der
 Teil, der `review` rechtfertigt.
 
-### E2 – Judges (Vorschlag)
+### E2 – Judges (bestätigt als Vorschlag; Pinning der IDs beim Freeze)
 
 Philipp: „Wenn Sonnet reicht, ist das gut, aber die Qualität muss passen.“ Deshalb entscheidet die
 Kalibrierung, nicht die Annahme: eine **Modell-Leiter je Familie** mit einer festen Regel.
@@ -183,7 +183,21 @@ Folgen:
 - Die Translator-Arbeit aus C.2 und C.3 schrumpft auf OpenAlex, Semantic Scholar und arXiv. Die
   Strings für Scopus und WoS bleiben im Protokoll als Referenz, werden aber nicht ausgeführt.
 
-### E4 – Suchsprache (Empfehlung: nur Englisch)
+**Google (Philipp, 23.10.: „sehr, sehr wichtig“).** Google bleibt zentral und kommt zweimal vor:
+
+- *Google-Websuche für Grey-Literatur* über creel (SearchApi.io, Engine `google`), Query-Set C.5
+  ohne die deutschen Queries: 15 Queries à 5 Seiten, dazu 2 arXiv-Queries.
+- *Google Scholar als zusätzlicher akademischer Kanal* über creel mit der Engine `google_scholar`,
+  die creel unverändert an SearchApi.io durchreicht (`retrieval/serp.fetch_page`). Er gleicht
+  einen Teil der fehlenden Lizenzdatenbanken aus. Vorgehen: die Konzeptblöcke aus C.1 als
+  vereinfachte englische Queries (Scholar kennt weder Proximity noch Feldsuche), feste Seitentiefe
+  als Stoppkriterium (Vorschlag 10 Seiten, also die ersten 100 Treffer je Query), jeder Treffer
+  über DOI bzw. Titel gegen OpenAlex aufgelöst und als formaler Record mit Quelle „Google Scholar“
+  importiert; nicht auflösbare Treffer gehen in den Grey-Strom. Ob `retrieval/serp.parse_organic`
+  die Scholar-Antwort von SearchApi ohne Anpassung liest, wird in WP3 an einer aufgezeichneten
+  Antwort geprüft, bevor Credits fließen.
+
+### E4 – Suchsprache (bestätigt: nur Englisch)
 
 E4 fragte, ob die Studie zusätzlich deutschsprachige Grey-Literatur sucht (die zwei deutschen
 Queries in C.5) und ob deutsche Quellen dann zugelassen sind (EC4). Empfehlung: **Suche und
@@ -194,7 +208,7 @@ Modell und die Empfehlungen; das deckt sich mit Sherlock (ADR-0014 dort: Begriff
 Ausgabe in sechs Sprachen). Grenze: DACH-spezifische Praxisquellen fehlen; das steht als Threat
 im Bericht. Die beiden deutschen Queries fallen aus C.5 heraus.
 
-### E5 – Proxy-Optionen von creel (Empfehlung)
+### E5 – Proxy-Optionen von creel (bestätigt)
 
 creel kann Seiten über die Premium- oder Stealth-Proxys von ScrapingBee holen, wenn eine Seite den
 normalen Abruf blockiert. Empfehlung: **ohne Premium- und Stealth-Proxy**, nur normaler Abruf und
@@ -202,7 +216,7 @@ bei Bedarf `render_js`. Blockierte Quellen fallen unter EC3 und werden mit Grund
 (`retrieval_reason`). Gründe: Zugriffssperren der Anbieter werden respektiert, die Methode ist
 reproduzierbar und im Methodenteil einfach zu beschreiben, die Kosten bleiben niedrig.
 
-### E6 – Schwellwerte (Vorschlag)
+### E6 – Schwellwerte (bestätigt)
 
 Die Werte aus B.6 werden übernommen. Für die zwei offenen Punkte:
 
@@ -277,7 +291,7 @@ keine Claude-Code-CLI und kein Agent SDK als Judge-Backend (A.3.10).
 |---|---|---|---|
 | WP1 | `protocol.md` aus B und C mit Platzhaltern und den Werten aus E6; ReviQ-Projekt (`mlr`), IC/EC mit `short_label`, QA-Kriterien (akademisch und Garousi), Reviewer R1/R2, Judges und „Jury“; Kalibrierungs- und Validierungsprojekt (E1); Skelett `judging/` mit Konfiguration, Cache, Prompt-Lader, Anbieter-Schnittstelle und `--dry-run` | Projekte idempotent; Cache-Roundtrip; Prompt-Freeze; Schlüssel nie in Cache oder Logs | **G0** |
 | WP2 | QGS-Import (B.4, D, F), Anreicherung über OpenAlex, Split 60/40 mit Seed; `concepts.toml`; Translator für OpenAlex, Semantic Scholar und arXiv mit Golden Files (Scopus und WoS nur als Referenztext im Protokoll); Suchstring-Judge nach C.4 | Golden Files, Boolesche Auswertung, Split-Determinismus | **G1** |
-| WP3 | OpenAlex (Cursor-Paging), Semantic Scholar Bulk und arXiv als BibTeX; OA-Volltexte über OpenAlex und Unpaywall; creel-Lauf mit C.5 ohne die deutschen Queries und ohne Premium-/Stealth-Proxy; Dedup über ReviQ; Retrieval-Report mit Anteil fehlender Abstracts und fehlender OA-Volltexte | Paging und BibTeX gegen aufgezeichnete Antworten | – |
+| WP3 | OpenAlex (Cursor-Paging), Semantic Scholar Bulk, arXiv und Google Scholar (creel, Auflösung gegen OpenAlex) als BibTeX; OA-Volltexte über OpenAlex und Unpaywall; creel-Lauf mit C.5 ohne die deutschen Queries und ohne Premium-/Stealth-Proxy; Dedup über ReviQ; Retrieval-Report mit Anteil fehlender Abstracts und fehlender OA-Volltexte | Paging und BibTeX gegen aufgezeichnete Antworten | – |
 | WP4 | Adaptive Jury (E1): Ankerstichprobe, Modell-Leiter (E2), Kalibrierung (3 Läufe je Judge), Freeze, Hauptlauf mit Stopp-Regel, Gate, Audit, Validierung gegen Gold; Nicht-LLM-Baseline (TF-IDF + logistische Regression, B.7) | Dawid-Skene gegen den Referenzdatensatz von Dawid & Skene (1979); Stopp-Regel und Rundenzahl auf simulierten Judges mit bekannten Fehlerraten (Recall-Schätzung trifft den Sollwert); Export-JSON gegen den Import-Endpunkt (wie `test_integration_decision_exchange`); `resolve` über den Konflikt-Endpunkt; Cache-Roundtrip | **G2** |
 | WP5 | Volltext-Jury (dieselbe adaptive Jury, Phase `full-text`), QA-Vorschläge, Agreement auf Stichprobe | QA-Aggregation gegen ReviQs `qa`-Logik | – |
 | WP6 | Extraktion durch zwei Judges, Span-Verifikation (Normalisierung wie in einem Test festgelegt), IoU ≥ 0,5, Halluzinationsrate | Span-Suche mit positiven und negativen Fällen, IoU | – |
@@ -317,7 +331,7 @@ Grob also **20–25M Eingabe- und 2–6M Ausgabe-Tokens je kommerziellem Judge**
 | Arbiter (z. B. Opus 5.5) | ~$20–60 |
 | **LLM gesamt** | **etwa $150–400** (Batch, Mittelklasse besteht die Kalibrierung); deutlich mehr, wenn Stufe 2 für alle Judges nötig wird |
 | Lokaler Judge (Ollama) | keine API-Kosten; Laufzeit auf Philipps Rechner (Stunden bis Tage für 9.000 Screenings, je nach Hardware) |
-| SearchApi.io (C.5 ohne deutsche Queries: 75 Anfragen, plus Wiederholungen) | ~100–200 Suchen |
+| SearchApi.io (C.5 ohne deutsche Queries: 75 Anfragen; Google Scholar etwa 6–10 Queries à 10 Seiten; plus Wiederholungen) | ~200–300 Suchen |
 | ScrapingBee (bis ~750 Abrufe, ohne Premium-/Stealth-Proxy nach E5) | ~1.000–4.000 Credits je nach Anteil `render_js` |
 | OpenAlex, Semantic Scholar, Unpaywall | ohne Kosten; Bedingungen (Kontaktadresse bzw. Schlüssel) vor WP2 prüfen |
 
@@ -383,8 +397,7 @@ ungestemmt). Daraus folgt eine G1-Frage: Bleibt OpenAlex beim gestemmten Suchen 
 
 ## 10. Nächster Schritt
 
-1. Philipp bestätigt den Entwurf der adaptiven Jury (E1), die Judge-Auswahl (E2) und die
-   Vorschläge zu E4 bis E6.
+1. Erledigt: Plan freigegeben am 23.10.2026.
 2. Die Syntax-Tabelle (Abschnitt 8) wird für OpenAlex, Semantic Scholar und arXiv an den
    Originalseiten geprüft; Scopus und WoS sind nur noch Referenz.
 3. Danach WP1: `protocol.md`, ReviQ-Projekte und Reviewer, Skelett von `backend/app/judging/` mit
