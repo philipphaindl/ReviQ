@@ -1,0 +1,131 @@
+# Starting points of the quasi-gold standard (protocol.md, section 5.3), taken
+# from PROMPT.md parts B.4, D and F. `role` says why a work is here:
+#   seed      an academic seed model (B.4)
+#   review    a known review of AI maturity or readiness models (D.1, cluster 1)
+#   related   other topical work from the reference list (D.1, clusters 2 and 6)
+# `expand = true` adds the work's own references from OpenAlex as candidates
+# ("the sources of the seed models and of the known reviews").
+# Works without a DOI are resolved by title. Every candidate is checked by both
+# authors before the split ("QGS-Liste gegenlesen").
+
+[[work]]
+role = "seed"
+citation = "Jöhnk, Weißert, Wyrtki (2021). Ready or not, AI comes. BISE 63(1)"
+doi = "10.1007/s12599-020-00676-7"
+expand = true
+
+[[work]]
+role = "seed"
+citation = "Hansen, Lillesund, Mikalef, Altwaijry (2024). AI capability maturity model. ISF 26(6)"
+doi = "10.1007/s10796-024-10528-4"
+expand = true
+
+[[work]]
+role = "seed"
+citation = "Fukas, Rebstadt, Remark, Thomas (2021). Developing an artificial intelligence maturity model for auditing. ECIS 2021"
+title = "Developing an artificial intelligence maturity model for auditing"
+expand = true
+
+[[work]]
+role = "seed"
+citation = "Akbarighatar (2022). Maturity and readiness models for responsible AI: a systematic literature review. MCIS 2022"
+title = "Maturity and readiness models for responsible AI: a systematic literature review"
+expand = true
+
+[[work]]
+role = "seed"
+citation = "Holmström (2022). From AI to digital transformation: the AI readiness framework. Business Horizons 65(3)"
+doi = "10.1016/j.bushor.2021.03.006"
+expand = true
+
+[[work]]
+role = "seed"
+citation = "Heger et al. (2025). Towards a responsible AI organizational maturity model. PACM HCI 9(7)"
+doi = "10.1145/3757514"
+expand = true
+
+[[work]]
+role = "seed"
+citation = "Dreyling, Lemmik, Tammet, Pappel (2024). An artificial intelligence maturity model for the public sector. TalTech J. of European Studies 14(2)"
+doi = "10.2478/bjes-2024-0023"
+expand = true
+
+[[work]]
+role = "review"
+citation = "Sadiq, Safie, Abd Rahman, Goudarzi (2021). Artificial intelligence maturity model: a systematic literature review. PeerJ CS 7"
+doi = "10.7717/peerj-cs.661"
+expand = true
+
+[[work]]
+role = "review"
+citation = "Akbarighatar, Pappas, Vassilakopoulou (2023). A sociotechnical perspective for responsible AI maturity models. IJIM Data Insights 3(2)"
+doi = "10.1016/j.jjimei.2023.100193"
+expand = true
+
+[[work]]
+role = "review"
+citation = "Sun (2026). Are organizations ready for human-AI collaboration? A systematic review of AI maturity models. HHAI 2026"
+doi = "10.3233/FAIA260546"
+expand = true
+
+[[work]]
+role = "review"
+citation = "Reichl, Gruenbichler (2023). Named in PROMPT.md D.1 without full reference"
+title = "Reichl Gruenbichler 2023 AI maturity"
+expand = true
+needs_reference = true
+
+[[work]]
+role = "related"
+citation = "Mikalef, Gupta (2021). Artificial intelligence capability. Information & Management 58(3)"
+doi = "10.1016/j.im.2021.103434"
+
+[[work]]
+role = "related"
+citation = "Reuel et al. (2024). Responsible AI in the global context: maturity model and survey. arXiv:2410.09985"
+arxiv = "2410.09985"
+
+[[work]]
+role = "related"
+citation = "Tehrani et al. (2024). Decoding AI readiness. Technovation 131"
+doi = "10.1016/j.technovation.2023.102948"
+
+[[work]]
+role = "related"
+citation = "Uren, Edwards (2023). Technology readiness and the organizational journey towards AI adoption. IJIM 68"
+doi = "10.1016/j.ijinfomgt.2022.102588"
+
+[[work]]
+role = "related"
+citation = "Ferreira, Grilo, Maia (2025). Piloting a maturity model for responsible artificial intelligence. J. Responsible Technology 22"
+doi = "10.1016/j.jrt.2025.100117"
+
+[[work]]
+role = "related"
+citation = "Witkowski, Wodecki (2026). A prescriptive generative AI maturity model for new product development processes. JMTM 37(9)"
+doi = "10.1108/JMTM-09-2025-0884"
+
+[[work]]
+role = "related"
+citation = "Papagiannidis, Mikalef, Conboy (2025). Responsible artificial intelligence governance: a review and research framework. JSIS 34(2)"
+doi = "10.1016/j.jsis.2024.101885"
+
+[[work]]
+role = "related"
+citation = "Batool, Zowghi, Bano (2025). AI governance: a systematic literature review. AI and Ethics"
+doi = "10.1007/s43681-024-00653-w"
+
+[[work]]
+role = "related"
+citation = "Birkstedt, Minkkinen, Tandon, Mäntymäki (2023). AI governance: themes, knowledge gaps and future agendas. Internet Research 33(7)"
+doi = "10.1108/INTR-01-2022-0042"
+
+[[work]]
+role = "related"
+citation = "Mäntymäki, Minkkinen, Birkstedt, Viljanen (2022). Defining organizational AI governance. AI and Ethics 2(4)"
+doi = "10.1007/s43681-022-00143-x"
+
+[[work]]
+role = "related"
+citation = "Schneider, Abraham, Meske, vom Brocke (2023). Artificial intelligence governance for businesses. ISM 40(3)"
+doi = "10.1080/10580530.2022.2085825"

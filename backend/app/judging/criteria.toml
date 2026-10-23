@@ -1,0 +1,140 @@
+# Eligibility and quality criteria of the study (PROMPT.md C.6 and C.7, with the
+# decisions of PLAN.md: English only (E4), open access only (E3)). The judges'
+# prompts and the ReviQ projects are built from this file, so there is one
+# wording of each criterion, not one per place it is used.
+
+[[inclusion]]
+label = "IC1"
+short_label = "org AI adoption"
+phase = "screening"
+description = "Addresses the adoption, use, governance or maturity of AI in organisations."
+
+[[inclusion]]
+label = "IC2"
+short_label = "model or factors"
+phase = "screening"
+description = "Contains a model or framework, or statements on factors, criteria, practices or measures."
+
+[[inclusion]]
+label = "IC3"
+short_label = "period"
+phase = "screening"
+description = "Published 2018-2026."
+
+[[exclusion]]
+label = "EC1"
+short_label = "system-only"
+phase = "screening"
+description = "Only technical properties of individual AI systems, without reference to the organisation."
+
+[[exclusion]]
+label = "EC2"
+short_label = "domain application"
+phase = "screening"
+description = "AI only as a tool within an application domain, without statements on its adoption."
+
+[[exclusion]]
+label = "EC3"
+short_label = "no full text"
+phase = "full-text"
+description = "No open-access full text available, or a grey source without content (creel causes)."
+
+[[exclusion]]
+label = "EC4"
+short_label = "language"
+phase = "screening"
+description = "Not in English."
+
+[[exclusion]]
+label = "EC5"
+short_label = "duplicate"
+phase = "screening"
+description = "Duplicate or earlier version of the same work."
+
+[[exclusion]]
+label = "EC6"
+short_label = "marketing"
+phase = "screening"
+description = "Pure advertising or product description without substantive statements (grey)."
+
+# Quality assessment, 0 / 0.5 / 1. ReviQ keeps one QA list per project and does
+# not tell academic from grey sources, so both lists live in the project with
+# their stream in the label; the judging module scores each source only on the
+# list of its stream and computes the QA level itself.
+[[qa]]
+label = "QA-A1"
+stream = "formal"
+description = "Is the aim clearly stated?"
+
+[[qa]]
+label = "QA-A2"
+stream = "formal"
+description = "Is the method described?"
+
+[[qa]]
+label = "QA-A3"
+stream = "formal"
+description = "Is the model or are the factors derived rather than asserted?"
+
+[[qa]]
+label = "QA-A4"
+stream = "formal"
+description = "Is there a validation?"
+
+[[qa]]
+label = "QA-A5"
+stream = "formal"
+description = "Are limitations stated?"
+
+[[qa]]
+label = "QA-G1"
+stream = "grey"
+description = "Authority of the producer (Garousi et al. 2019)."
+
+[[qa]]
+label = "QA-G2"
+stream = "grey"
+description = "Methodology recognisable."
+
+[[qa]]
+label = "QA-G3"
+stream = "grey"
+description = "Objectivity (not pure product marketing)."
+
+[[qa]]
+label = "QA-G4"
+stream = "grey"
+description = "Date present and recent."
+
+[[qa]]
+label = "QA-G5"
+stream = "grey"
+description = "Novelty."
+
+[[qa]]
+label = "QA-G6"
+stream = "grey"
+description = "Evidence or sources given."
+
+[[qa]]
+label = "QA-G7"
+stream = "grey"
+description = "Outlet type (1st, 2nd or 3rd tier)."
+
+# Reviewers besides the judges of study.toml. The jury and the arbiter are
+# reviewers of their own so that every decision they settle names its source.
+[[reviewer]]
+name = "Philipp Haindl"
+role = "R1"
+
+[[reviewer]]
+name = "Oliver Eigner"
+role = "R2"
+
+[[reviewer]]
+name = "Jury"
+role = "R7"
+
+[[reviewer]]
+name = "Arbiter"
+role = "R8"

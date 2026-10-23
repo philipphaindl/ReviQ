@@ -1,0 +1,13 @@
+{
+  "_note": "SYNTHETIC. Shaped after OpenAlex's documented work object (fields used by app/judging/search/openalex.py). Replace with a recorded response on the first run with network access.",
+  "id": "https://openalex.org/W1000000001",
+  "doi": "https://doi.org/10.1000/EXAMPLE.1",
+  "title": "An AI maturity model for organisations",
+  "display_name": "An AI maturity model for organisations",
+  "publication_year": 2024,
+  "type": "article",
+  "abstract_inverted_index": {"We": [0], "propose": [1], "an": [2], "AI": [3], "maturity": [4], "model": [5], "for": [6], "the": [7], "adoption": [8], "of": [9], "artificial": [10], "intelligence": [11], "in": [12], "organisations.": [13]},
+  "keywords": [{"display_name": "AI maturity"}, {"display_name": "Readiness"}],
+  "referenced_works": ["https://openalex.org/W1000000002", "https://openalex.org/W1000000003"],
+  "open_access": {"is_oa": true, "oa_url": "https://example.org/paper.pdf"}
+}

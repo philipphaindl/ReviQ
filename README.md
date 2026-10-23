@@ -472,6 +472,22 @@ new runs. The others derive the review from the runs they are pointed at, so
 passing it there would be a flag that quietly does nothing; they refuse it
 instead. `--db` is global and overrides `DATABASE_URL`.
 
+### LLM judging (study tooling, in progress)
+
+`python -m app.judging` is the command line tool for LLM-assisted reviews: an
+adaptive jury of judges from several model families whose reliability is
+measured rather than assumed. The design is in `docs/aiqm-study/PLAN.md`, the
+protocol of the first study in `docs/aiqm-study/protocol.md`. The judges are
+ordinary reviewers to ReviQ and reach it through the decision import and the
+conflict endpoint, so nothing in ReviQ's own behaviour changes.
+
+| Command | Does | Costs credits |
+|---|---|---|
+| `check-config` | Validates and prints `app/judging/study.toml` | no |
+| `init-study` | Creates the study's ReviQ projects, criteria and reviewers; idempotent | no |
+| `estimate --records N` | Cost estimate of a jury phase; calls nothing | no |
+| `prompts [--freeze NAME ...]` | Lists prompt versions and hashes, or freezes prompts | no |
+
 ## Development
 
 ### Backend (FastAPI + SQLModel + SQLite)
