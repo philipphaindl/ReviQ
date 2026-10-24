@@ -1,0 +1,7 @@
+# A host checkout's node_modules holds binaries for the host platform (e.g.
+# rollup's darwin build); `COPY . .` would lay them over the ones `npm ci`
+# installed for Alpine and the build would fail on a missing native module.
+node_modules
+dist
+test-results
+playwright-report

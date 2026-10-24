@@ -1,7 +1,11 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
-COPY package.json ./
-RUN npm install
+# Install from the committed lockfile. With package.json alone npm resolved
+# every range afresh on each build, so the image depended on the day it was
+# built; in October 2026 that resolution crashed npm itself
+# ("Cannot read properties of null (reading 'edgesOut')").
+COPY package.json package-lock.json ./
+RUN npm ci
 COPY . .
 RUN npm run build
 
