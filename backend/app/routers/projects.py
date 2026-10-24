@@ -71,6 +71,9 @@ def create_project(body: ProjectCreate, session: Session = Depends(get_session))
     r1 = Reviewer(project_id=project.id, name=body.lead_researcher, role='R1')
     session.add(r1)
     session.commit()
+    # The second commit expires `project`; without a refresh it serialises as
+    # {} and the caller never learns the id of what it just created.
+    session.refresh(project)
     return project
 
 
