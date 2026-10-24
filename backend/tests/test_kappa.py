@@ -64,13 +64,38 @@ class TestKappaCalculation:
         assert -1.0 <= result.kappa <= 1.0
 
     def test_pabak_formula(self):
-        """PABAK = 2*Po - 1."""
+        """PABAK = 2*Po - 1 when only I and E occur."""
         r1 = {'p1': 'I', 'p2': 'I', 'p3': 'E', 'p4': 'E', 'p5': 'I'}
         r2 = {'p1': 'I', 'p2': 'E', 'p3': 'E', 'p4': 'I', 'p5': 'I'}
         result = calculate_kappa(r1, r2)
         assert result is not None
         expected_pabak = 2 * result.observed_agreement - 1
         assert result.pabak == pytest.approx(expected_pabak, abs=0.001)
+
+    def test_pabak_three_categories(self):
+        """With U in use, PABAK = (3*Po - 1) / 2, not 2*Po - 1."""
+        r1 = {'p1': 'I', 'p2': 'E', 'p3': 'U', 'p4': 'I', 'p5': 'E'}
+        r2 = {'p1': 'I', 'p2': 'E', 'p3': 'U', 'p4': 'E', 'p5': 'I'}
+        result = calculate_kappa(r1, r2)
+        assert result is not None
+        assert result.observed_agreement == pytest.approx(0.6, abs=1e-4)
+        assert result.pabak == pytest.approx(0.4, abs=1e-4)
+
+    def test_pabak_counts_u_used_by_one_reviewer(self):
+        """A category counts once either reviewer used it."""
+        r1 = {'p1': 'I', 'p2': 'E', 'p3': 'U', 'p4': 'E'}
+        r2 = {'p1': 'I', 'p2': 'E', 'p3': 'E', 'p4': 'E'}
+        result = calculate_kappa(r1, r2)
+        assert result is not None
+        assert result.pabak == pytest.approx((3 * 0.75 - 1) / 2, abs=1e-4)
+
+    def test_pabak_total_disagreement_three_categories(self):
+        """Total disagreement over three categories gives -1/2, the k-category floor."""
+        r1 = {'p1': 'I', 'p2': 'E', 'p3': 'U'}
+        r2 = {'p1': 'E', 'p2': 'U', 'p3': 'I'}
+        result = calculate_kappa(r1, r2)
+        assert result is not None
+        assert result.pabak == pytest.approx(-0.5, abs=1e-4)
 
     def test_ci_lower_le_upper(self):
         r1 = {'p1': 'I', 'p2': 'E', 'p3': 'I', 'p4': 'E', 'p5': 'I', 'p6': 'E'}

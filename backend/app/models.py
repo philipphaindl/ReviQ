@@ -135,7 +135,7 @@ class ReviewerDecision(SQLModel, table=True):
     paper_id: int = Field(foreign_key="paper.id", index=True)
     reviewer_id: int = Field(foreign_key="reviewer.id", index=True)
     phase: str  # screening, full-text
-    decision: str  # I (Include), E (Exclude), U (Uncertain — treated as abstention in kappa)
+    decision: str  # I (Include), E (Exclude), U (Uncertain — a distinct category in kappa)
     criterion_label: Optional[str] = None  # e.g. "E3" — which criterion motivated the decision
     rationale: Optional[str] = None
     timestamp: datetime = Field(default_factory=datetime.utcnow)

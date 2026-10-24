@@ -534,7 +534,7 @@ in tests. As of the current commit: 719 backend tests, 209 frontend.
 
 | Area | Test file | Coverage |
 |------|-----------|----------|
-| Cohen's κ — formula, CI, edge cases | `backend/tests/test_kappa.py` | Perfect/zero/partial agreement, `U` as a distinct category, CI ordering, PABAK = 2·Pₒ − 1, range invariants |
+| Cohen's κ — formula, CI, edge cases | `backend/tests/test_kappa.py` | Perfect/zero/partial agreement, `U` as a distinct category, CI ordering, PABAK = (k·Pₒ − 1)/(k − 1) over the categories used, range invariants |
 | Cohen's κ — published examples | `backend/tests/test_kappa_pabak_examples.py` | Byrt, Bishop & Carlin (1993) PABAK = 0.60 worked example; full Landis & Koch (1977) cut-points; all-agree / all-disagree / single-category edge cases |
 | Quality-score aggregation | `backend/tests/test_qa_aggregation.py` | Per-paper percentage = ∑scores / max\_total · 100; band assignment under default and project-custom thresholds (high ≥ 75 %, medium ≥ 50 %) |
 | PRISMA flow counts | `backend/tests/test_prisma_counts.py` | Deduplication invariant, screening/full-text partitioning, DB and snowballing streams stay disjoint and non-additive |

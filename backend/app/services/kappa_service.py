@@ -84,8 +84,11 @@ def calculate_kappa(
     else:
         kappa = (po - pe) / (1 - pe)
 
-    # PABAK (Prevalence- and Bias-Adjusted Kappa)
-    pabak = 2 * po - 1
+    # PABAK (Prevalence- and Bias-Adjusted Kappa), Byrt et al. (1993) for k categories:
+    # (k·Po − 1) / (k − 1). k counts the categories either reviewer used, so a screening
+    # without U stays at the familiar 2·Po − 1 — the same way an unused category drops out of Pe.
+    k = max(2, sum(1 for c in categories if row_totals[c] + col_totals[c] > 0))
+    pabak = (k * po - 1) / (k - 1)
 
     # Asymptotic 95% CI for kappa (Fleiss et al.)
     se = _kappa_se(matrix, n, po, pe, categories)

@@ -36,7 +36,7 @@ class TestByrtPABAKExample:
         assert result.pabak == pytest.approx(0.60, abs=1e-4)
 
     def test_pabak_equals_2po_minus_1_invariant(self):
-        # PABAK is defined as 2*Po - 1 regardless of category distribution.
+        # With two categories PABAK is 2*Po - 1 regardless of how they are distributed.
         r1 = {f"p{i}": ("I" if i < 70 else "E") for i in range(100)}
         r2 = {f"p{i}": ("I" if i < 60 else "E") for i in range(100)}
         result = calculate_kappa(r1, r2)
