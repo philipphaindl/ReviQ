@@ -179,8 +179,8 @@ export default function Search() {
         <CardHeader title="Import BibTeX File" />
         <div className="space-y-4 max-w-lg">
           <div>
-            <label className="block text-xs font-semibold text-ink-muted uppercase tracking-label mb-1.5">
-              Database <span className="text-exclude normal-case font-normal">* required</span>
+            <label className="block text-2xs font-semibold text-ink-muted uppercase tracking-label mb-1.5">
+              Database<span className="text-exclude normal-case font-normal ml-1">*</span>
             </label>
             <select
               className={`select ${dbNameError ? 'border-exclude ring-1 ring-exclude' : ''}`}
@@ -194,7 +194,7 @@ export default function Search() {
             )}
           </div>
           <div>
-            <label className="block text-xs font-semibold text-ink-muted uppercase tracking-label mb-1.5">
+            <label className="block text-2xs font-semibold text-ink-muted uppercase tracking-label mb-1.5">
               BibTeX File
             </label>
             <input

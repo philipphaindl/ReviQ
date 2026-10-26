@@ -7,8 +7,36 @@ import type {
   SnowballingIteration, QASummary, ExtractionField, ExtractionSummary,
   GreyRecord, GreyImportResult, Retrieval,
 } from './types'
+import { decodeEntities } from '../utils'
 
 const api = axios.create({ baseURL: '/api' })
+
+// Publisher exports leave HTML entities in bibliographic text ("of&#xa0;the").
+// Decoding them once here keeps every page from showing them verbatim.
+const BIB_TEXT_FIELDS = new Set([
+  'title', 'paper_title', 'authors', 'paper_authors', 'abstract', 'keywords', 'venue',
+])
+
+function decodeBibText(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(decodeBibText)
+  if (value === null || typeof value !== 'object') return value
+  const record = value as Record<string, unknown>
+  for (const [key, field] of Object.entries(record)) {
+    if (typeof field === 'string') {
+      if (BIB_TEXT_FIELDS.has(key)) record[key] = decodeEntities(field)
+    } else if (field !== null && typeof field === 'object') {
+      decodeBibText(field)
+    }
+  }
+  return record
+}
+
+api.interceptors.response.use(response => {
+  if (response.headers?.['content-type']?.toString().includes('application/json')) {
+    decodeBibText(response.data)
+  }
+  return response
+})
 
 // ── Projects ──────────────────────────────────────────────────────────────────
 

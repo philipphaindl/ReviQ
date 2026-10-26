@@ -13,6 +13,7 @@ import {
 import {
   Card, CardHeader, StatBar, StatCell, Modal, FormField,
   DecisionBadge, EmptyState, Badge,
+  TabBar, LoadingState,
 } from '../components/ui'
 import GreyRecordPanel from '../components/GreyRecordPanel'
 import { isGrey } from '../components/streams'
@@ -40,20 +41,14 @@ export default function Screening() {
         <p className="text-sm text-ink-muted">Phase 3 — Title and Abstract Screening</p>
       </div>
 
-      <div className="flex gap-0 border-b border-rule">
-        {/* The tab is keyed on 'papers' — the identifier the code has always
-            used — and labelled with what a reader is looking at. */}
-        {(['papers', 'conflicts', 'kappa'] as ScreeningView[]).map(v => (
-          <button key={v} onClick={() => setView(v)}
-            className={`px-4 py-2.5 text-xs font-semibold uppercase tracking-label transition-colors relative capitalize ${
-              view === v
-                ? 'text-info after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-info'
-                : 'text-ink-muted hover:text-ink'
-            }`}>
-            {v === 'papers' ? RECORDS.many : v}
-          </button>
-        ))}
-      </div>
+      <TabBar
+        tabs={[
+          { id: 'papers', label: RECORDS.Many },
+          { id: 'conflicts', label: 'Conflicts' },
+          { id: 'kappa', label: 'Kappa' },
+        ]}
+        active={view} onChange={setView}
+      />
 
       {view === 'papers'    && <PapersView pid={projectId} />}
       {view === 'conflicts' && <ConflictsView pid={projectId} />}
@@ -70,7 +65,7 @@ function PapersView({ pid }: { pid: number }) {
   const [filter, setFilter] = useState<'all' | 'undecided' | 'I' | 'E' | 'U'>('all')
   const [selectedPaper, setSelectedPaper] = useState<Paper | null>(null)
 
-  const { data: papers = [] } = useQuery({
+  const { data: papers = [], isLoading } = useQuery({
     queryKey: ['papers', pid, 'screening'],
     queryFn: () => getPapers(pid, { phase: 'screening' }),
   })
@@ -119,17 +114,18 @@ function PapersView({ pid }: { pid: number }) {
     consensus: originalPapers.filter(p => consensusDecision(p) !== null).length,
   }
   const youSub = activeReviewer ? `by ${activeReviewer.name}` : undefined
+  const shown = (n: number) => (isLoading ? null : n)
 
   return (
     <div className="space-y-4">
       {/* Stats */}
       <StatBar>
-        <StatCell label="Total" value={counts.total} sub="After deduplication" />
-        <StatCell label="Undecided" value={counts.undecided} color="uncertain" sub={youSub} />
-        <StatCell label="Included" value={counts.I} color="include" sub={youSub} />
-        <StatCell label="Excluded" value={counts.E} color="exclude" sub={youSub} />
-        <StatCell label="Uncertain" value={counts.U} color="uncertain" sub={youSub} />
-        <StatCell label="Consensus" value={counts.consensus} sub="Final → Phase 4 (Eligibility)" />
+        <StatCell label="Total" value={shown(counts.total)} sub="After deduplication" />
+        <StatCell label="Undecided" value={shown(counts.undecided)} color="uncertain" sub={youSub} />
+        <StatCell label="Included" value={shown(counts.I)} color="include" sub={youSub} />
+        <StatCell label="Excluded" value={shown(counts.E)} color="exclude" sub={youSub} />
+        <StatCell label="Uncertain" value={shown(counts.U)} color="uncertain" sub={youSub} />
+        <StatCell label="Consensus" value={shown(counts.consensus)} sub="Final → Phase 4 (Eligibility)" />
       </StatBar>
 
       {/* Toolbar */}
@@ -138,11 +134,11 @@ function PapersView({ pid }: { pid: number }) {
         <div className="flex gap-1 ml-auto">
           {(['all', 'undecided', 'I', 'E', 'U'] as const).map(f => (
             <button key={f} onClick={() => setFilter(f)}
-              className={`px-2.5 py-1.5 text-xs rounded-md border transition-colors ${
+              className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
                 filter === f ? 'bg-accent text-white border-accent' : 'bg-surface text-ink-muted border-rule hover:border-ink-muted'
               }`}>
               {f === 'all' ? 'All' : f === 'undecided' ? 'Undecided' : f === 'I' ? 'Include' : f === 'E' ? 'Exclude' : 'Uncertain'}
-              {' '}({f === 'all' ? counts.total : f === 'undecided' ? counts.undecided : counts[f]})
+              {!isLoading && <> ({f === 'all' ? counts.total : f === 'undecided' ? counts.undecided : counts[f]})</>}
             </button>
           ))}
         </div>
@@ -157,7 +153,9 @@ function PapersView({ pid }: { pid: number }) {
       </div>
 
       {/* Paper list */}
-      {filteredPapers.length === 0 ? (
+      {isLoading ? (
+        <LoadingState />
+      ) : filteredPapers.length === 0 ? (
         <EmptyState icon="—"
           message={`No ${RECORDS.many} match the current filter. Import BibTeX files first.`} />
       ) : (
@@ -328,7 +326,7 @@ function DecisionModal({
         )}
         {paper.keywords && (
           <p className="text-xs text-ink-muted mt-2 border-t border-rule pt-2">
-            <span className="font-medium">Keywords:</span> {paper.keywords}
+            <span className="font-medium">Keywords:</span> {paper.keywords.split(/\s*;\s*/).filter(Boolean).join('; ')}
           </p>
         )}
 
@@ -386,6 +384,7 @@ function DecisionModal({
           label={decision === 'I' || uncertainDir === 'I' ? 'Inclusion Criterion' : 'Exclusion Criterion'}
           required
           error={submitted && criteriaRequired && !criterion ? 'Select a criterion' : undefined}
+          hint={criteria.find(c => c.label === criterion)?.description}
         >
           <select
             className={`select ${submitted && criteriaRequired && !criterion ? 'border-exclude ring-1 ring-exclude' : ''}`}
@@ -585,11 +584,14 @@ function ConflictCard({ conflict, reviewers, resolved, onResolve }: {
             {conflict.r2_decision && <DecisionBadge decision={conflict.r2_decision} />}
           </div>
           {resolved && conflict.resolution && (
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-xs text-ink-muted">Resolved:</span>
-              <DecisionBadge decision={conflict.resolution} />
+            <div className="flex items-baseline gap-2 mt-1">
+              <span className="text-xs text-ink-muted shrink-0">Resolved:</span>
+              {/* Imported logs sometimes carry the discussion note here instead of I/E/U. */}
+              {['I', 'E', 'U'].includes(conflict.resolution)
+                ? <DecisionBadge decision={conflict.resolution} />
+                : <span className="text-xs text-ink-light min-w-0">{conflict.resolution}</span>}
               {conflict.resolution_method && (
-                <span className="text-xs text-ink-muted italic">
+                <span className="text-xs text-ink-muted italic shrink-0">
                   {({ discussion: 'via discussion', arbitration: 'by arbitration', agreement: 'by agreement' } as Record<string, string>)[conflict.resolution_method] ?? conflict.resolution_method}
                 </span>
               )}
@@ -616,7 +618,7 @@ function KappaView({ pid }: { pid: number }) {
     k >= 0.81 ? 'include' : k >= 0.61 ? 'info' : k >= 0.41 ? 'uncertain' : 'exclude'
 
   return (
-    <div className="max-w-xl space-y-4">
+    <div className="grid gap-4 items-start lg:grid-cols-[3fr_2fr]">
       <Card>
         <CardHeader title="Inter-Rater Agreement — Screening" />
 

@@ -14,7 +14,7 @@ import {
   getTaxonomyTypes, getTaxonomy, addTaxonomyEntry, deleteTaxonomyEntry, renameTaxonomyType, deleteTaxonomyType,
   getSearchStrings, addSearchString, updateSearchString, deleteSearchString,
 } from '../api/client'
-import { Card, CardHeader, Modal, FormField, EmptyState, ConfirmDialog } from '../components/ui'
+import { Card, CardHeader, Modal, FormField, EmptyState, ConfirmDialog, TabBar, LoadingState } from '../components/ui'
 import { DATABASES, DatabaseBadge } from '../components/databases'
 
 type Tab = 'project' | 'reviewers' | 'criteria' | 'qa' | 'taxonomies' | 'search'
@@ -50,21 +50,7 @@ export default function Settings() {
         <p className="text-sm text-ink-muted">Phase 1 — Project Configuration and Protocol Setup</p>
       </div>
 
-      <div className="flex gap-0 border-b border-rule">
-        {TABS.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`px-4 py-2.5 text-xs font-semibold uppercase tracking-label transition-colors relative ${
-              tab === t.id
-                ? 'text-info after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-info'
-                : 'text-ink-muted hover:text-ink'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <TabBar tabs={TABS} active={tab} onChange={setTab} />
 
       {tab === 'project'    && <ProjectTab pid={projectId} />}
       {tab === 'reviewers'  && <ReviewersTab pid={projectId} />}
@@ -111,7 +97,7 @@ function ProjectTab({ pid }: { pid: number }) {
   }
 
   return (
-    <div className="max-w-xl space-y-4">
+    <div className="space-y-4">
       <Card>
         <CardHeader title="Project Details" />
         <FormField label="Title" required error={submitted && !currentTitle?.trim() ? 'Title is required' : undefined}>
@@ -126,14 +112,14 @@ function ProjectTab({ pid }: { pid: number }) {
             onKeyDown={e => e.key === 'Enter' && save()} />
         </FormField>
         <FormField label="Description">
-          <textarea className="textarea" rows={3} value={val('description') as string ?? ''}
+          <textarea className="textarea" rows={6} value={val('description') as string ?? ''}
             onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
         </FormField>
       </Card>
 
       <Card>
         <CardHeader title="Quality Score Thresholds" />
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-4 max-w-md">
           <FormField label="High Quality ≥ (%)">
             <input type="number" className="input" min={0} max={100} value={val('qa_high_threshold') as number}
               onChange={e => setForm(f => ({ ...f, qa_high_threshold: parseFloat(e.target.value) }))}
@@ -217,7 +203,7 @@ function ReviewersTab({ pid }: { pid: number }) {
   }
 
   return (
-    <div className="max-w-xl">
+    <div>
       <Card>
         <CardHeader
           title="Reviewers (max 5)"
@@ -308,8 +294,8 @@ type CriterionModalState = {
 
 function CriteriaTab({ pid }: { pid: number }) {
   const qc = useQueryClient()
-  const { data: inclusions = [] } = useQuery({ queryKey: ['inclusion', pid], queryFn: () => getInclusionCriteria(pid) })
-  const { data: exclusions = [] } = useQuery({ queryKey: ['exclusion', pid], queryFn: () => getExclusionCriteria(pid) })
+  const { data: inclusions = [], isLoading: inclusionsLoading } = useQuery({ queryKey: ['inclusion', pid], queryFn: () => getInclusionCriteria(pid) })
+  const { data: exclusions = [], isLoading: exclusionsLoading } = useQuery({ queryKey: ['exclusion', pid], queryFn: () => getExclusionCriteria(pid) })
 
   const [modal, setModal] = useState<CriterionModalState>(null)
   const [form, setForm] = useState({ label: '', description: '', phase: 'screening', short_label: '' })
@@ -360,7 +346,8 @@ function CriteriaTab({ pid }: { pid: number }) {
       <Card>
         <CardHeader title="Inclusion Criteria"
           action={<button className="btn-secondary" onClick={() => openAdd('add-i')}>+ Add</button>} />
-        {inclusions.length === 0
+        {inclusionsLoading ? <LoadingState />
+          : inclusions.length === 0
           ? <EmptyState icon="—" message="No inclusion criteria defined." />
           : inclusions.map(c => (
             <CriterionRow key={c.id} label={c.label} description={c.description} badge={`Phase: ${c.phase}`}
@@ -372,7 +359,8 @@ function CriteriaTab({ pid }: { pid: number }) {
       <Card>
         <CardHeader title="Exclusion Criteria"
           action={<button className="btn-secondary" onClick={() => openAdd('add-e')}>+ Add</button>} />
-        {exclusions.length === 0
+        {exclusionsLoading ? <LoadingState />
+          : exclusions.length === 0
           ? <EmptyState icon="—" message="No exclusion criteria defined." />
           : exclusions.map(c => (
             <CriterionRow key={c.id} label={c.label} description={c.description} badge={`Phase: ${c.phase}`}
@@ -464,7 +452,7 @@ type QAModalState = { mode: 'add' | 'edit'; id?: number } | null
 
 function QATab({ pid }: { pid: number }) {
   const qc = useQueryClient()
-  const { data: criteria = [] } = useQuery({ queryKey: ['qa', pid], queryFn: () => getQACriteria(pid) })
+  const { data: criteria = [], isLoading } = useQuery({ queryKey: ['qa', pid], queryFn: () => getQACriteria(pid) })
   const [modal, setModal] = useState<QAModalState>(null)
   const [form, setForm] = useState({ label: '', description: '', max_score: 1.0 })
   const [submitted, setSubmitted] = useState(false)
@@ -504,7 +492,7 @@ function QATab({ pid }: { pid: number }) {
           action={<button className="btn-secondary" onClick={openAdd}>+ Add</button>}
         />
         {criteria.length === 0
-          ? <EmptyState icon="—" message="No QA criteria defined." />
+          ? (isLoading ? <LoadingState /> : <EmptyState icon="—" message="No QA criteria defined." />)
           : criteria.map(c => (
             <div key={c.id} className="py-3 border-b border-rule last:border-0 flex items-start gap-3">
               <span className="bg-accent text-white text-xs font-bold rounded-full px-3 py-1 shrink-0 mt-0.5 min-w-[3rem] truncate text-center inline-block" title={c.label}>{c.label}</span>
@@ -692,7 +680,7 @@ function TaxonomiesTab({ pid }: { pid: number }) {
   }
 
   return (
-    <div className="max-w-xl space-y-3">
+    <div className="grid gap-4 items-start lg:grid-cols-2">
       {/* Category selector + management */}
       <Card>
         <CardHeader
@@ -705,20 +693,23 @@ function TaxonomiesTab({ pid }: { pid: number }) {
         />
         <div className="divide-y divide-rule">
           {allTypes.map(t => (
-            <div key={t.key} className={`flex items-center justify-between py-2 px-1 rounded cursor-pointer transition-colors ${activeKey === t.key ? 'bg-blue-50' : 'hover:bg-paper'}`}
+            <div key={t.key} className={`flex items-center justify-between py-2 px-2 rounded cursor-pointer transition-colors ${activeKey === t.key ? 'bg-accent-faint' : 'hover:bg-paper'}`}
               onClick={() => setActiveKey(t.key)}>
               <span className={`text-sm font-medium ${activeKey === t.key ? 'text-info' : 'text-ink'}`}>{t.label}</span>
-              <div className="flex gap-1" onClick={e => e.stopPropagation()}>
-                <button className="btn-secondary btn-sm"
+              <div className="flex gap-2" onClick={e => e.stopPropagation()}>
+                <button className="btn-secondary"
                   onClick={() => { setCatForm({ label: t.label }); setCatSubmitted(false); setModal({ kind: 'edit-category', key: t.key, label: t.label }) }}>
                   Edit
                 </button>
-                {!PROTECTED_TAXONOMY_KEYS.has(t.key) && (
-                  <button className="btn-danger btn-sm"
-                    onClick={() => setModal({ kind: 'confirm-delete-category', key: t.key })}>
-                    Delete
-                  </button>
-                )}
+                {/* Built-in categories cannot be removed; the hidden button keeps Edit in one column. */}
+                {PROTECTED_TAXONOMY_KEYS.has(t.key)
+                  ? <span aria-hidden className="btn-danger invisible">Remove</span>
+                  : (
+                    <button className="btn-danger"
+                      onClick={() => setModal({ kind: 'confirm-delete-category', key: t.key })}>
+                      Remove
+                    </button>
+                  )}
               </div>
             </div>
           ))}

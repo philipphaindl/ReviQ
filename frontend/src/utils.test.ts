@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { ownDecision, consensusDecision, hasOpenConflict, formatAuthors } from './utils'
+import { ownDecision, consensusDecision, hasOpenConflict, formatAuthors, splitAuthors, decodeEntities } from './utils'
 import type { Paper, ReviewerDecision, FinalDecision } from './api/types'
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -108,5 +108,37 @@ describe('formatAuthors', () => {
   })
   it('handles empty input', () => {
     expect(formatAuthors(undefined)).toBe('')
+  })
+})
+
+describe('splitAuthors', () => {
+  it('splits BibTeX author lists on " and "', () => {
+    expect(splitAuthors('Doe, Jane and Roe, Max')).toEqual(['Doe, Jane', 'Roe, Max'])
+  })
+  it('separates names the SpringerLink export glued together', () => {
+    expect(splitAuthors('Guillaume BourAnniken Wium LieJakob Stenersen Kok'))
+      .toEqual(['Guillaume Bour', 'Anniken Wium Lie', 'Jakob Stenersen Kok'])
+  })
+  it('keeps surname prefixes and single names intact', () => {
+    expect(splitAuthors('Patrick McDaniel')).toEqual(['Patrick McDaniel'])
+    expect(splitAuthors('Tom DeMarco')).toEqual(['Tom DeMarco'])
+    expect(splitAuthors('Riccardo Lazzeretti')).toEqual(['Riccardo Lazzeretti'])
+  })
+  it('abbreviates a glued list like any other', () => {
+    expect(formatAuthors('Guillaume BourAnniken Wium LieJakob Stenersen KokBendik Markussen'))
+      .toBe('Guillaume Bour et al.')
+  })
+})
+
+describe('decodeEntities', () => {
+  it('turns non-breaking space entities into plain spaces', () => {
+    expect(decodeEntities('Internet of&#xa0;Medical Things')).toBe('Internet of Medical Things')
+  })
+  it('decodes numeric and common named entities', () => {
+    expect(decodeEntities('R&amp;D &#8211; &quot;AI&quot;')).toBe('R&D – "AI"')
+  })
+  it('leaves unknown entities and plain text unchanged', () => {
+    expect(decodeEntities('&foo; stays')).toBe('&foo; stays')
+    expect(decodeEntities('no entities')).toBe('no entities')
   })
 })

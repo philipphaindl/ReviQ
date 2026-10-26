@@ -709,7 +709,8 @@ function SnowDecisionModal({
       {criteria.length > 0 && (
         <FormField
           label={decision === 'I' || uncertainDir === 'I' ? 'Inclusion Criterion' : 'Exclusion Criterion'}
-          required error={submitted && criteriaRequired && !criterion ? 'Select a criterion' : undefined}>
+          required error={submitted && criteriaRequired && !criterion ? 'Select a criterion' : undefined}
+          hint={criteria.find(c => c.label === criterion)?.description}>
           <select
             className={`select ${submitted && criteriaRequired && !criterion ? 'border-exclude ring-1 ring-exclude' : ''}`}
             value={criterion} onChange={e => setCriterion(e.target.value)}>

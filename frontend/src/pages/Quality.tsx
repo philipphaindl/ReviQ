@@ -5,6 +5,7 @@ import { useProject } from '../App'
 import { getQASummary, upsertQAScore, getReviewers } from '../api/client'
 import {
   Card, CardHeader, StatBar, StatCell, Modal, FormField, EmptyState,
+  TabBar,
 } from '../components/ui'
 import type { QAPaperResult, QAScoreEntry } from '../api/types'
 import { formatAuthors } from '../utils'
@@ -30,18 +31,13 @@ export default function Quality() {
         <p className="text-sm text-ink-muted">Phase 6 — Quality Assessment of Included Studies</p>
       </div>
 
-      <div className="flex gap-0 border-b border-rule">
-        {(['scoring', 'summary'] as const).map(v => (
-          <button key={v} onClick={() => setView(v)}
-            className={`px-4 py-2.5 text-xs font-semibold uppercase tracking-label transition-colors relative capitalize ${
-              view === v
-                ? 'text-info after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-info'
-                : 'text-ink-muted hover:text-ink'
-            }`}>
-            {v === 'scoring' ? `Score ${STUDIES.Many}` : 'Summary'}
-          </button>
-        ))}
-      </div>
+      <TabBar
+        tabs={[
+          { id: 'scoring', label: `Score ${STUDIES.Many}` },
+          { id: 'summary', label: 'Summary' },
+        ]}
+        active={view} onChange={setView}
+      />
 
       {view === 'scoring' && <ScoringView pid={projectId} />}
       {view === 'summary' && <SummaryView pid={projectId} />}
