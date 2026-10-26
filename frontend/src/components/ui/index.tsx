@@ -1,5 +1,5 @@
 /** Shared UI primitives: Card, StatBar, Modal, FormField, Badge, ConfirmDialog, etc. */
-import { ReactNode } from 'react'
+import { ReactNode, useEffect } from 'react'
 
 // ── Card ──────────────────────────────────────────────────────────────────────
 
@@ -12,6 +12,39 @@ export function CardHeader({ title, action }: { title: string; action?: ReactNod
     <div className="flex items-center justify-between mb-4">
       <h2 className="section-title mb-0">{title}</h2>
       {action}
+    </div>
+  )
+}
+
+// ── TabBar — sub-tabs below a page header ─────────────────────────────────────
+
+export function TabBar<T extends string>({
+  tabs,
+  active,
+  onChange,
+}: {
+  tabs: { id: T; label: string }[]
+  active: T
+  onChange: (id: T) => void
+}) {
+  return (
+    <div role="tablist" className="flex gap-0 border-b border-rule">
+      {tabs.map(t => (
+        <button
+          key={t.id}
+          role="tab"
+          aria-selected={active === t.id}
+          onClick={() => onChange(t.id)}
+          className={`px-4 py-2.5 text-xs font-semibold uppercase tracking-label transition-colors relative
+            focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/40 ${
+            active === t.id
+              ? 'text-info after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-info'
+              : 'text-ink-muted hover:text-ink'
+          }`}
+        >
+          {t.label}
+        </button>
+      ))}
     </div>
   )
 }
@@ -59,7 +92,8 @@ export function StatCell({
   color = 'navy',
 }: {
   label: ReactNode
-  value: string | number
+  /** null while the figure is still loading — shown as a dash, never as a misleading 0. */
+  value: string | number | null
   sub?: string
   color?: 'navy' | 'include' | 'exclude' | 'uncertain' | 'info'
 }) {
@@ -71,10 +105,13 @@ export function StatCell({
     info: 'text-accent',
   }[color]
 
+  // A zero carries no status, so it stays neutral instead of alarming red or amber.
+  const muted = value === null || value === 0
+
   return (
     <div className="stat-cell">
       <p className="stat-label">{label}</p>
-      <p className={`stat-value mt-1 ${colorClass}`}>{value}</p>
+      <p className={`stat-value mt-1 ${muted ? 'text-ink-muted/60' : colorClass}`}>{value ?? '—'}</p>
       {sub && <p className="text-2xs text-ink-muted mt-0.5 leading-normal">{sub}</p>}
     </div>
   )
@@ -120,6 +157,13 @@ export function Modal({
   children: ReactNode
   width?: string
 }) {
+  // The page behind the dialog must not scroll along with the dialog's content.
+  useEffect(() => {
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = previous }
+  }, [])
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center"
@@ -173,7 +217,11 @@ export function FormField({
   )
 }
 
-// ── Empty state ───────────────────────────────────────────────────────────────
+// ── Loading and empty state ───────────────────────────────────────────────────
+
+export function LoadingState({ message = 'Loading…' }: { message?: string }) {
+  return <p className="py-12 text-center text-sm text-ink-muted">{message}</p>
+}
 
 export function EmptyState({ icon, message, action }: { icon: string; message: string; action?: ReactNode }) {
   return (

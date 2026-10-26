@@ -93,7 +93,7 @@ export default function Sidebar() {
   const navigate = useNavigate()
 
   return (
-    <aside className="w-52 shrink-0 border-r border-rule bg-[#F5F2EE] sticky top-14 h-[calc(100vh-3.5rem)] overflow-y-auto">
+    <aside className="w-52 shrink-0 border-r border-rule bg-[#F5F2EE] sticky top-14 h-[calc(100vh-5.25rem)] overflow-y-auto">
       <nav className="py-3 px-2">
         {PHASES.map(item => {
           const isActive = item.path === '/'

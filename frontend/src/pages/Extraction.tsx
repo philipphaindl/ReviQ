@@ -13,6 +13,7 @@ import {
 } from '../api/client'
 import {
   Card, CardHeader, StatBar, StatCell, Modal, FormField, EmptyState,
+  TabBar,
 } from '../components/ui'
 import type { ExtractionField, ExtractionPaperRow } from '../api/types'
 import { formatAuthors } from '../utils'
@@ -57,18 +58,14 @@ export default function Extraction() {
         <p className="text-sm text-ink-muted">Phase 7 — Structured Data Extraction</p>
       </div>
 
-      <div className="flex gap-0 border-b border-rule">
-        {(['schema', 'extract', 'table'] as ExtView[]).map(v => (
-          <button key={v} onClick={() => setView(v)}
-            className={`px-4 py-2.5 text-xs font-semibold uppercase tracking-label transition-colors relative capitalize ${
-              view === v
-                ? 'text-info after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-info'
-                : 'text-ink-muted hover:text-ink'
-            }`}>
-            {v === 'schema' ? 'Field Schema' : v === 'extract' ? 'Extract' : 'Table View'}
-          </button>
-        ))}
-      </div>
+      <TabBar
+        tabs={[
+          { id: 'schema', label: 'Field Schema' },
+          { id: 'extract', label: 'Extract' },
+          { id: 'table', label: 'Table View' },
+        ]}
+        active={view} onChange={setView}
+      />
 
       {view === 'schema'  && <SchemaView pid={projectId} />}
       {view === 'extract' && <ExtractView pid={projectId} />}
@@ -441,10 +438,8 @@ function ExtractionPaperCard({ paper, onExtract }: { paper: ExtractionPaperRow; 
     <div className={`card pl-4 ${accentClass} cursor-pointer hover:shadow-card-hover transition-shadow`} onClick={onExtract}>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className={`text-xs font-bold px-2 py-0.5 rounded border ${
-            done ? 'bg-green-100 text-green-800 border-green-200' :
-            paper.filled > 0 ? 'bg-amber-100 text-amber-800 border-amber-200' :
-            'bg-rule/30 text-ink-light border-rule'
+          <span className={`phase-badge ${
+            done ? 'decision-I' : paper.filled > 0 ? 'decision-U' : 'bg-rule/50 text-ink-muted border border-rule'
           }`}>
             {done ? 'Complete' : `${paper.filled}/${paper.total_fields} filled`}
           </span>
@@ -632,89 +627,52 @@ function TableView({ pid }: { pid: number }) {
     return <EmptyState icon="—" message={`No included ${STUDIES.many} yet.`} />
   }
 
-  const fieldCount = summary.fields.length
+  // Fixed-width columns with clamped, top-aligned cells: one long value no longer
+  // stretches its row, and the full text stays available as a tooltip.
+  const headCell = 'pb-2 px-2 text-left align-bottom text-2xs font-semibold text-ink-muted uppercase tracking-label'
 
   return (
     <Card>
       <CardHeader title="Extraction Overview" />
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm border-collapse">
+      <div className="overflow-x-auto -mx-5 px-5">
+        <table className="min-w-full text-sm border-collapse table-fixed"
+          style={{ width: 240 + summary.fields.length * 150 + 80 }}>
           <thead>
             <tr className="border-b border-rule">
-              <th className="text-left pb-2 font-semibold pr-3 text-xs text-ink-muted uppercase tracking-label align-bottom" style={{ width: 160, minWidth: 120 }}>
+              <th className={`${headCell} pl-0 sticky left-0 bg-white z-10`} style={{ width: 240 }}>
                 {STUDIES.One}
               </th>
               {summary.fields.map(f => (
-                <th key={f.field_name} className="align-bottom p-0" style={{ width: fieldCount > 4 ? 44 : 100 }} title={f.field_label}>
-                  <div className="relative" style={{ height: fieldCount > 4 ? 120 : 'auto', width: fieldCount > 4 ? 44 : 'auto' }}>
-                    {fieldCount > 4 ? (
-                      <span
-                        className="absolute bottom-1 left-1/2 text-2xs font-semibold text-ink-muted uppercase tracking-label whitespace-nowrap origin-bottom-left"
-                        style={{
-                          transform: 'rotate(-50deg)',
-                          transformOrigin: 'bottom left',
-                          maxWidth: 140,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                        }}
-                      >
-                        {f.field_label}
-                      </span>
-                    ) : (
-                      <span className="text-xs font-semibold text-ink-muted uppercase tracking-label leading-snug line-clamp-2 block text-center pb-2 px-1">
-                        {f.field_label}
-                      </span>
-                    )}
-                  </div>
+                <th key={f.field_name} className={headCell} style={{ width: 150 }} title={f.field_label}>
+                  <span className="line-clamp-3 leading-snug">{f.field_label}</span>
                 </th>
               ))}
-              <th className="align-bottom p-0" style={{ width: fieldCount > 4 ? 44 : 70 }} title="Progress">
-                <div className="relative" style={{ height: fieldCount > 4 ? 120 : 'auto', width: fieldCount > 4 ? 44 : 'auto' }}>
-                  {fieldCount > 4 ? (
-                    <span
-                      className="absolute bottom-1 left-1/2 text-2xs font-semibold text-ink-muted uppercase tracking-label whitespace-nowrap origin-bottom-left"
-                      style={{
-                        transform: 'rotate(-50deg)',
-                        transformOrigin: 'bottom left',
-                        maxWidth: 140,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                      }}
-                    >
-                      Progress
-                    </span>
-                  ) : (
-                    <span className="text-xs font-semibold text-ink-muted uppercase tracking-label leading-snug block text-center pb-2 px-1">
-                      Progress
-                    </span>
-                  )}
-                </div>
-              </th>
+              <th className={`${headCell} text-right pr-0`} style={{ width: 80 }}>Progress</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-rule">
             {summary.papers.map(paper => (
-              <tr key={paper.paper_id} className="hover:bg-paper transition-colors">
-                <td className="py-2 pr-3">
-                  <p className="text-sm font-medium text-ink leading-snug line-clamp-2">{paper.title}</p>
-                  <p className="text-xs text-ink-muted">{formatAuthors(paper.authors)} · {paper.year}</p>
+              <tr key={paper.paper_id} className="group">
+                <td className="py-2 pr-3 align-top sticky left-0 bg-white group-hover:bg-paper z-10">
+                  <p className="text-sm font-medium text-ink leading-snug line-clamp-2" title={paper.title}>{paper.title}</p>
+                  <p className="text-xs text-ink-muted truncate">{formatAuthors(paper.authors)} · {paper.year}</p>
                 </td>
                 {summary.fields.map(f => {
                   const val = paper.values[f.field_name]
                   return (
-                    <td key={f.field_name} className="py-2 text-center align-middle px-0.5">
+                    <td key={f.field_name} className="py-2 px-2 align-top group-hover:bg-paper">
                       {val == null || val === '' ? (
                         <span className="text-ink-muted/30 text-xs">—</span>
                       ) : (
-                        <span className="text-2xs text-ink leading-tight line-clamp-2 block" title={val}>{val}</span>
+                        <span className="text-xs text-ink leading-snug line-clamp-3" title={val}>{val}</span>
                       )}
                     </td>
                   )
                 })}
-                <td className="py-2 text-center align-middle whitespace-nowrap">
+                <td className="py-2 align-top text-right whitespace-nowrap group-hover:bg-paper">
                   <span className={`text-xs font-semibold ${
-                    paper.filled === paper.total_fields ? 'text-green-600' :
-                    paper.filled > 0 ? 'text-amber-600' : 'text-ink-muted'
+                    paper.filled === paper.total_fields ? 'text-include' :
+                    paper.filled > 0 ? 'text-uncertain' : 'text-ink-muted'
                   }`}>
                     {paper.filled}/{paper.total_fields}
                   </span>

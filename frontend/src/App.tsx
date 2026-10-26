@@ -91,7 +91,8 @@ export default function App() {
               </Routes>
             </main>
           </div>
-          <footer className="sticky bottom-0 z-40 border-t border-rule bg-surface/95 backdrop-blur-sm px-8 py-1.5 flex items-center gap-2 shrink-0">
+          {/* Fixed height: the sidebar subtracts it, otherwise every page scrolls by the footer's height. */}
+          <footer className="sticky bottom-0 z-40 h-7 border-t border-rule bg-surface/95 backdrop-blur-sm px-8 flex items-center gap-2 shrink-0 whitespace-nowrap overflow-hidden">
             <span className="text-2xs text-ink-muted">
               If you use ReviQ in your research, please cite:
             </span>

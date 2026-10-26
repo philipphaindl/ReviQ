@@ -12,7 +12,7 @@ import { useMemo, useState, useRef, useCallback, useEffect, type ReactNode } fro
 import { createRoot } from 'react-dom/client'
 import { useProject } from '../App'
 import { getExportStats, getQASummary, getExtractionSummary, exportBibtexUrl, getImportStats, getPapers, getTaxonomyTypes, getTaxonomy, getKappa, getReviewers, getProject, exportReplicationPackageUrl, getSearchMetrics, getExclusionCriteria } from '../api/client'
-import { Card, CardHeader, StatBar, StatCell, EmptyState } from '../components/ui'
+import { Card, CardHeader, StatBar, StatCell, EmptyState, TabBar } from '../components/ui'
 import { sourceLabel } from '../utils/sourceLabel'
 import { counted, PHASE_NOUN } from '../utils/vocabulary'
 import {
@@ -65,18 +65,14 @@ export default function Results() {
         <p className="text-sm text-ink-muted">Phase 8 — Results Synthesis and Visualization</p>
       </div>
 
-      <div className="flex gap-0 border-b border-rule">
-        {(['prisma', 'charts', 'export'] as ResView[]).map(v => (
-          <button key={v} onClick={() => setView(v)}
-            className={`px-4 py-2.5 text-xs font-semibold uppercase tracking-label transition-colors relative ${
-              view === v
-                ? 'text-info after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-info'
-                : 'text-ink-muted hover:text-ink'
-            }`}>
-            {v === 'prisma' ? 'PRISMA Flow' : v === 'charts' ? 'Charts' : 'Export'}
-          </button>
-        ))}
-      </div>
+      <TabBar
+        tabs={[
+          { id: 'prisma', label: 'PRISMA Flow' },
+          { id: 'charts', label: 'Charts' },
+          { id: 'export', label: 'Export' },
+        ]}
+        active={view} onChange={setView}
+      />
 
       {view === 'prisma' && <PrismaView pid={projectId} />}
 
